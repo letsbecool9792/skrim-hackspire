@@ -129,6 +129,24 @@ describe("runAgentTask", () => {
     assert.equal(requests[2]?.history.at(-1)?.note, "the page did not change");
   });
 
+  test("stops when the page keeps coming back to the same state", async () => {
+    await page(`<button aria-label="Toggle panel" aria-expanded="false">Show Panel</button>`);
+    const toggle = document.querySelector("button")!;
+    toggle.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") !== "true";
+      toggle.setAttribute("aria-expanded", String(open));
+      toggle.textContent = open ? "Hide Panel" : "Show Panel";
+    });
+    const { planner, requests } = scripted((request) => ({ type: "click", target: idOf(request, "Toggle panel") }));
+
+    const { finished } = await run("Click show panel", planner);
+
+    assert.equal(finished.errorCode, "NO_PROGRESS");
+    assert.match(finished.message ?? "", /going in circles/);
+    // Closed, open, closed, open, closed: the third arrival at "closed" stops it.
+    assert.equal(requests.length, 4);
+  });
+
   test("reports a planner failure with its message", async () => {
     await page(`<button>Go</button>`);
     const planner: ActionPlanner = async () => { throw new Error("Could not reach the Skrim server"); };
