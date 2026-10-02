@@ -49,6 +49,12 @@ pnpm dev              # chrome
 pnpm dev:firefox
 ```
 
+## Tests
+
+Put tests next to the code as `lib/**/*.test.ts`, using Node's built-in `node:test` and
+`node:assert/strict`. No Vitest, no Jest: CI runs `node --import tsx --test "lib/**/*.test.ts"`,
+so a test written for another runner, or placed outside `lib/`, silently never runs.
+
 ## Before you open a PR
 
 ```powershell

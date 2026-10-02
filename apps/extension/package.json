@@ -12,6 +12,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
+    "test": "node --import tsx --test \"lib/**/*.test.ts\"",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@wxt-dev/module-react": "^1.1.5",
+    "tsx": "^4.23.13",
     "typescript": "^6.0.3",
     "web-ext": "^10.5.0",
     "wxt": "^0.21.3"
