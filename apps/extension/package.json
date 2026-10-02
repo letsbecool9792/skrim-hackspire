@@ -17,16 +17,17 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
-    "@skrim/schema": "workspace:*",
-    "@skrim/shared": "workspace:*",
     "@huggingface/transformers": "^4.2.0",
     "@mediapipe/tasks-vision": "^1.0.1",
+    "@skrim/schema": "workspace:*",
+    "@skrim/shared": "workspace:*",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "tesseract.js": "^7.0.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^20.14.5",
     "@types/chrome": "^0.2.7",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
