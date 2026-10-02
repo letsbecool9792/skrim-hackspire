@@ -16,6 +16,7 @@ import {
   tokeniseGlinerEntities,
   detectUpiIds,
 } from "./detector.js";
+import { normalizeOcrText } from "./regex.js";
 
 describe("email detection", () => {
   test("detects an email and creates a vault token", () => {
@@ -517,8 +518,6 @@ describe("GLiNER entity tokenisation", () => {
   });
 });
 
-import { normalizeOcrText } from "./regex.js";
-
 describe("normalizeOcrText — OCR artefact repair", () => {
   test("collapses a space after a period inside an email local-part", () => {
     // Tesseract OCR sometimes splits "karan.mehta@example.com" into
@@ -542,6 +541,16 @@ describe("normalizeOcrText — OCR artefact repair", () => {
       normalizeOcrText("Dr. Sharma visited the clinic."),
       "Dr. Sharma visited the clinic.",
     );
+  });
+
+  test("joins the dot OCR read as a space, as Tesseract read the iframe fixture in Chromium", () => {
+    assert.equal(normalizeOcrText("Email: karan mehta@example.com"), "Email: karan.mehta@example.com");
+    assert.equal(normalizeOcrText("karan, mehta@example.com"), "karan.mehta@example.com");
+  });
+
+  test("does not join a word that leads into an address", () => {
+    assert.equal(normalizeOcrText("write to us at help@example.com"), "write to us at help@example.com");
+    assert.equal(normalizeOcrText("Email karan@example.com"), "Email karan@example.com");
   });
 
   test("collapses multiple artefacts in one string", () => {

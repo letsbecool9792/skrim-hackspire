@@ -42,17 +42,30 @@ const DOB_CONTEXT = /date of birth|birth ?date|\bd\.?o\.?b\b|\bborn\b/i;
 const CONTEXT_WINDOW = 48;
 
 /**
- * Repairs OCR artefacts that break structured PII patterns. Tesseract sometimes
- * inserts a space after a period inside an email local-part, splitting
- * "karan.mehta@example.com" into "karan. mehta@example.com". This pass collapses
- * those gaps before the regex detectors run.
+ * Words that lead into an email address rather than being part of one: "write
+ * to us at help@...", "email: ...". Never joined to the address.
+ */
+const LEADS_INTO_ADDRESS = new Set(["at", "to", "or", "and", "is", "via", "email", "e-mail", "mail", "contact", "me", "us"]);
+
+/**
+ * Repairs OCR artefacts that break structured PII patterns, so an address is
+ * hidden whole. Tesseract reads the dot inside an email's local part as a
+ * space, or spaces it out: "karan.mehta@example.com" came back as "karan
+ * mehta@example.com" from the iframe fixture in Chromium, and the email
+ * detector then hid "mehta@example.com" and left "karan" readable.
  *
- * Only collapses when the fragment after the space leads to an "@" with no
- * intervening whitespace, so ordinary sentence endings ("See you. Call me.")
- * are not affected.
+ * Only a word directly before the part with "@" is joined, and not one that
+ * leads into an address ("at", "email"). Joining a word that was not part of
+ * the address hides one word too many, of text read from pixels only: privacy
+ * over context.
  */
 export function normalizeOcrText(text: string): string {
-  return text.replace(/(\w)\. (\w[^\s]*@)/g, "$1.$2");
+  return text
+    // "karan. mehta@", "karan, mehta@": the dot spaced out, or read as a comma.
+    .replace(/(\w)[.,] (\w[^\s]*@)/g, "$1.$2")
+    // "karan mehta@": the dot read as a space.
+    .replace(/(^|[\s:(<])([A-Za-z0-9._%+-]+) ([A-Za-z0-9._%+-]+@)/g, (whole, lead: string, fragment: string, local: string) =>
+      LEADS_INTO_ADDRESS.has(fragment.toLowerCase()) ? whole : `${lead}${fragment}.${local}`);
 }
 
 function passesLuhn(value: string): boolean {
