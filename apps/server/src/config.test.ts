@@ -23,7 +23,7 @@ describe('getConfig', () => {
 
   test('takes a fallback for when the main provider says to come back later', () => {
     set({ GROQ_API_KEY: 'test-key', FALLBACK_PROVIDER: 'ollama' });
-    assert.equal(getConfig().fallbackConfig?.model, 'qwen3-vl:4b-instruct');
+    assert.equal(getConfig().fallbackConfig?.model, 'skrim-planner');
   });
 
   test("NVIDIA's default is the model that finished tasks, not Llama 3.2 11B", () => {

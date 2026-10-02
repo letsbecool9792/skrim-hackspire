@@ -46,7 +46,7 @@ reached. Some models ignore that; measure with `pnpm test:agent` before choosing
 step, so a shorter prompt is fewer of Groq's 8,000 tokens a minute. But Qwen3-VL 4B, the
 offline planner, is sensitive to it: a tightened system prompt, a rule on answering
 questions, a rule on finding search boxes and element positions cut to the corner (or
-dropped) each cost it tasks it had passed every time. `pnpm study -- ollama:qwen3-vl:4b-instruct`
+dropped) each cost it tasks it had passed every time. `pnpm study -- ollama:skrim-planner`
 runs the 16 tasks on the local model for free.
 
 ## Handling model output

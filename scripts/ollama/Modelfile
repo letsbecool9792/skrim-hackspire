@@ -1,0 +1,12 @@
+# The local planner: Qwen3-VL 4B (instruct) with a bigger context window.
+#
+# Ollama's default context is 4096 tokens, and over the OpenAI-compatible API
+# (the only API the server speaks) it cannot be raised per request. A real
+# page's request is 3,000 to 12,000 tokens, so Ollama silently cut it from the
+# front: the system prompt went first and the model answered a different
+# question. Measured: a 14,000-token request kept 2,050 tokens and ignored its
+# system message; the same request through this file arrived whole and obeyed.
+#
+# Make it once:  pnpm ollama:setup   (needs `ollama pull qwen3-vl:4b-instruct` first)
+FROM qwen3-vl:4b-instruct
+PARAMETER num_ctx 16384

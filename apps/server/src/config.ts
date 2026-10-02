@@ -56,10 +56,12 @@ function profile(provider: ProviderName, setting: string): ProviderConfig {
     return {
       provider,
       baseURL: process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1',
-      // Must match .env.example. The instruct build: plain "qwen3-vl:4b" is the
-      // thinking build, 10-80x slower a step, and it cannot be told not to think
-      // through the OpenAI-compatible API.
-      model: process.env.OLLAMA_MODEL || 'qwen3-vl:4b-instruct',
+      // Must match .env.example. "skrim-planner" is qwen3-vl:4b-instruct with a
+      // 16k context (scripts/ollama/Modelfile; make it with `pnpm ollama:setup`):
+      // at Ollama's default 4k a real page's request is cut from the front. The
+      // instruct build: plain "qwen3-vl:4b" is the thinking build, 10-80x slower
+      // a step, and it cannot be told not to think through the OpenAI-compatible API.
+      model: process.env.OLLAMA_MODEL || 'skrim-planner',
     };
   }
   throw new Error(`Unsupported ${setting}: ${String(provider)}. Use groq, ollama or nvidia.`);
