@@ -22,7 +22,7 @@ export function extractScreenElements(): ScreenElement[] {
       continue;
     }
 
-    if (element.getAttribute("aria-hidden") === "true") {
+    if (isAriaHidden(element)) {
       continue;
     }
 
@@ -50,10 +50,6 @@ function createElementId(index: number): string {
 }
 
 function isVisible(element: Element): boolean {
-  if (!(element instanceof HTMLElement)) {
-    return false;
-  }
-
   const style = window.getComputedStyle(element);
   const rect = element.getBoundingClientRect();
 
@@ -74,29 +70,158 @@ const INTERACTIVE_TAGS = new Set([
   "OPTION",
 ]);
 
-const CONTENT_TAGS = new Set([
+const STRUCTURAL_TAGS = new Set([
   "H1",
   "H2",
   "H3",
   "H4",
   "H5",
   "H6",
-  "IMG",
+  "TABLE",
+  "TR",
+  "TD",
+  "TH",
+  "UL",
+  "OL",
+  "LI",
+  "FORM",
+  "DIALOG",
+  "SECTION",
+  "MAIN",
+  "NAV",
+  "ASIDE",
+]);
+
+const VISION_TARGET_TAGS = new Set(["IMG", "CANVAS", "IFRAME", "VIDEO"]);
+
+const READABLE_TEXT_TAGS = new Set([
+  "P",
+  "SPAN",
+  "DIV",
+  "LABEL",
+  "SMALL",
+  "STRONG",
+  "EM",
+  "B",
+  "I",
+  "BLOCKQUOTE",
+  "PRE",
+  "CODE",
+  "FIGCAPTION",
+  "CAPTION",
+  "DT",
+  "DD",
+]);
+
+const SUPPORTED_ROLES = new Set<ScreenElement["role"]>([
+  "button",
+  "link",
+  "textbox",
+  "searchbox",
+  "checkbox",
+  "radio",
+  "combobox",
+  "listbox",
+  "option",
+  "slider",
+  "tab",
+  "menuitem",
+  "heading",
+  "text",
+  "image",
+  "table",
+  "row",
+  "cell",
+  "list",
+  "listitem",
+  "form",
+  "dialog",
+  "region",
+  "canvas",
+  "iframe",
+  "video",
 ]);
 
 function isRelevantElement(element: Element): boolean {
   const tag = element.tagName;
 
-  if (
-    INTERACTIVE_TAGS.has(tag) ||
-    CONTENT_TAGS.has(tag)
-  ) {
+  if (INTERACTIVE_TAGS.has(tag) || STRUCTURAL_TAGS.has(tag) || VISION_TARGET_TAGS.has(tag)) {
     return true;
   }
 
-  const role = element.getAttribute("role");
+  if (hasSupportedExplicitRole(element)) {
+    return true;
+  }
 
-  return role !== null;
+  if (!(element instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (hasFocusableTabIndex(element) || element.isContentEditable) {
+    return true;
+  }
+
+  return (
+    READABLE_TEXT_TAGS.has(tag) &&
+    hasMeaningfulDirectText(element) &&
+    !hasTextContainerAncestor(element)
+  );
+}
+
+function hasSupportedExplicitRole(element: Element): boolean {
+  const role = element.getAttribute("role")?.trim();
+  return role !== undefined && SUPPORTED_ROLES.has(role as ScreenElement["role"]);
+}
+
+function hasFocusableTabIndex(element: HTMLElement): boolean {
+  const tabindex = element.getAttribute("tabindex");
+
+  if (tabindex === null || !/^-?\d+$/.test(tabindex)) {
+    return false;
+  }
+
+  return Number(tabindex) >= -1;
+}
+
+function isAriaHidden(element: Element): boolean {
+  for (
+    let current: Element | null = element;
+    current;
+    current = current.parentElement
+  ) {
+    if (current.getAttribute("aria-hidden") === "true") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasMeaningfulDirectText(element: HTMLElement): boolean {
+  return Array.from(element.childNodes).some(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+  );
+}
+
+/**
+ * A text container's accessible text already includes its descendants. Keeping
+ * descendant spans/divs in that case would repeatedly serialize the same copy.
+ */
+function hasTextContainerAncestor(element: HTMLElement): boolean {
+  let ancestor = element.parentElement;
+
+  while (ancestor) {
+    if (
+      (READABLE_TEXT_TAGS.has(ancestor.tagName) || INTERACTIVE_TAGS.has(ancestor.tagName)) &&
+      hasMeaningfulDirectText(ancestor)
+    ) {
+      return true;
+    }
+
+    ancestor = ancestor.parentElement;
+  }
+
+  return false;
 }
 
 function getAccessibleName(element: Element): string | undefined {
@@ -171,37 +296,7 @@ function getAccessibleName(element: Element): string | undefined {
 function getRole(element: Element): ScreenElement["role"] {
   const explicitRole = element.getAttribute("role")?.trim();
 
-  const validRoles = new Set<ScreenElement["role"]>([
-    "button",
-    "link",
-    "textbox",
-    "searchbox",
-    "checkbox",
-    "radio",
-    "combobox",
-    "listbox",
-    "option",
-    "slider",
-    "tab",
-    "menuitem",
-    "heading",
-    "text",
-    "image",
-    "table",
-    "row",
-    "cell",
-    "list",
-    "listitem",
-    "form",
-    "dialog",
-    "region",
-    "canvas",
-    "iframe",
-    "video",
-    "other",
-  ]);
-
-  if (explicitRole && validRoles.has(explicitRole as ScreenElement["role"])) {
+  if (explicitRole && SUPPORTED_ROLES.has(explicitRole as ScreenElement["role"])) {
     return explicitRole as ScreenElement["role"];
   }
 
@@ -224,6 +319,15 @@ function getRole(element: Element): ScreenElement["role"] {
     case "IMG":
       return "image";
 
+    case "CANVAS":
+      return "canvas";
+
+    case "IFRAME":
+      return "iframe";
+
+    case "VIDEO":
+      return "video";
+
     case "H1":
     case "H2":
     case "H3":
@@ -231,6 +335,53 @@ function getRole(element: Element): ScreenElement["role"] {
     case "H5":
     case "H6":
       return "heading";
+
+    case "P":
+    case "SPAN":
+    case "DIV":
+    case "LABEL":
+    case "SMALL":
+    case "STRONG":
+    case "EM":
+    case "B":
+    case "I":
+    case "BLOCKQUOTE":
+    case "PRE":
+    case "CODE":
+    case "FIGCAPTION":
+    case "CAPTION":
+    case "DT":
+    case "DD":
+      return "text";
+
+    case "TABLE":
+      return "table";
+
+    case "TR":
+      return "row";
+
+    case "TD":
+    case "TH":
+      return "cell";
+
+    case "UL":
+    case "OL":
+      return "list";
+
+    case "LI":
+      return "listitem";
+
+    case "FORM":
+      return "form";
+
+    case "DIALOG":
+      return "dialog";
+
+    case "SECTION":
+    case "MAIN":
+    case "NAV":
+    case "ASIDE":
+      return "region";
 
     case "INPUT": {
       const type = (element as HTMLInputElement).type;
