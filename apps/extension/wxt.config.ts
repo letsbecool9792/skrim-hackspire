@@ -42,6 +42,15 @@ export default defineConfig({
       ...(browser === "chrome" ? ["offscreen"] : []),
     ],
 
+    // Every on-device model (Tesseract, and later GLiNER, BlazeFace and the
+    // icon detector) is WebAssembly. The default MV3 policy is
+    // "script-src 'self'", which blocks compiling it, and Tesseract then hung
+    // without an error. 'wasm-unsafe-eval' allows WebAssembly only; it does
+    // not allow eval() or remote code.
+    content_security_policy: {
+      extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+    },
+
     browser_specific_settings: {
       gecko: {
         id: "skrim@tropical-crush",
