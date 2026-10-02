@@ -48,7 +48,10 @@ export function getConfig(): { port: number, providerConfig: ProviderConfig } {
     providerConfig = {
       provider,
       baseURL: process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1',
-      model: process.env.OLLAMA_MODEL || 'qwen3-vl:4b',
+      // Must match .env.example. The instruct build: plain "qwen3-vl:4b" is the
+      // thinking build, 10-80x slower a step, and it cannot be told not to think
+      // through the OpenAI-compatible API.
+      model: process.env.OLLAMA_MODEL || 'qwen3-vl:4b-instruct',
     };
   } else {
     throw new Error(`Unsupported MODEL_PROVIDER: ${provider}. Use nvidia, groq or ollama.`);
