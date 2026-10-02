@@ -9,45 +9,51 @@ export interface ProviderConfig {
   extraBody?: Record<string, unknown>;
 }
 
-function requireKey(name: string, provider: ProviderName): string {
+export interface ServerConfig {
+  port: number;
+  providerConfig: ProviderConfig;
+  /**
+   * Plans a step when the main provider says to come back later: Groq's free
+   * tier has a daily cap, and a day of testing reaches it. Same adapter, other
+   * settings. Unset: such a step fails with the rate-limit message.
+   */
+  fallbackConfig?: ProviderConfig;
+}
+
+function requireKey(name: string, setting: string, provider: ProviderName): string {
   const key = process.env[name];
   if (!key) {
-    throw new Error(`${name} is required when MODEL_PROVIDER=${provider}. Add it to the .env at the repo root.`);
+    throw new Error(`${name} is required when ${setting}=${provider}. Add it to the .env at the repo root.`);
   }
   return key;
 }
 
-export function getConfig(): { port: number, providerConfig: ProviderConfig } {
-  const port = parseInt(process.env.PORT || '3000', 10);
-  // Must match .env.example. Groq's Qwen did all 42 runs of the provider study
-  // (docs/provider-study.md); NVIDIA's Llama 3.2 11B did none.
-  const provider = (process.env.MODEL_PROVIDER || 'groq') as ProviderName;
-
-  let providerConfig: ProviderConfig;
-
+function profile(provider: ProviderName, setting: string): ProviderConfig {
   if (provider === 'nvidia') {
-    providerConfig = {
+    return {
       provider,
       baseURL: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
-      // Must match .env.example. The only vision model that answered on a free
-      // NVIDIA account when checked; Qwen is not hosted there.
-      model: process.env.NVIDIA_MODEL || 'meta/llama-3.2-11b-vision-instruct',
-      apiKey: requireKey('NVIDIA_API_KEY', provider),
+      // Must match .env.example. NVIDIA hosts no Qwen. Nemotron 3 Super did 37
+      // of 42 in the provider study; Llama 3.2 11B, the old default, none.
+      model: process.env.NVIDIA_MODEL || 'nvidia/nemotron-3-super-120b-a12b',
+      apiKey: requireKey('NVIDIA_API_KEY', setting, provider),
     };
-  } else if (provider === 'groq') {
-    providerConfig = {
+  }
+  if (provider === 'groq') {
+    return {
       provider,
       baseURL: process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1',
       // Must match .env.example. Open-weight Qwen, free without a card.
       model: process.env.GROQ_MODEL || 'qwen/qwen3.8-27b',
-      apiKey: requireKey('GROQ_API_KEY', provider),
+      apiKey: requireKey('GROQ_API_KEY', setting, provider),
       // Qwen 3.x thinks before answering unless told not to. The planner wants
       // one JSON action, and the free tier counts thinking against its
       // 8,000 tokens a minute.
       extraBody: { reasoning_effort: process.env.GROQ_REASONING_EFFORT || 'none' },
     };
-  } else if (provider === 'ollama') {
-    providerConfig = {
+  }
+  if (provider === 'ollama') {
+    return {
       provider,
       baseURL: process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1',
       // Must match .env.example. The instruct build: plain "qwen3-vl:4b" is the
@@ -55,9 +61,21 @@ export function getConfig(): { port: number, providerConfig: ProviderConfig } {
       // through the OpenAI-compatible API.
       model: process.env.OLLAMA_MODEL || 'qwen3-vl:4b-instruct',
     };
-  } else {
-    throw new Error(`Unsupported MODEL_PROVIDER: ${provider}. Use nvidia, groq or ollama.`);
   }
+  throw new Error(`Unsupported ${setting}: ${String(provider)}. Use groq, ollama or nvidia.`);
+}
 
-  return { port, providerConfig };
+export function getConfig(): ServerConfig {
+  const port = parseInt(process.env.PORT || '3000', 10);
+  // Must match .env.example. Groq's Qwen did all 42 runs of the provider study
+  // (docs/provider-study.md); NVIDIA's Llama 3.2 11B did none.
+  const provider = (process.env.MODEL_PROVIDER || 'groq') as ProviderName;
+  const providerConfig = profile(provider, 'MODEL_PROVIDER');
+
+  const fallback = process.env.FALLBACK_PROVIDER?.trim();
+  if (!fallback) return { port, providerConfig };
+  if (fallback === provider) {
+    throw new Error(`FALLBACK_PROVIDER is the same as MODEL_PROVIDER (${provider}). Name another provider, or leave it empty.`);
+  }
+  return { port, providerConfig, fallbackConfig: profile(fallback as ProviderName, 'FALLBACK_PROVIDER') };
 }

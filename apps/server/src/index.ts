@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { PlanRequestSchema } from '@skrim/schema';
+import { PlanRequestSchema, type PlanRequest } from '@skrim/schema';
 import { getConfig } from './config.js';
 import { planAction, UnparseableOutputError } from './planner/index.js';
 import { ProviderError } from './providers/index.js';
@@ -16,9 +16,26 @@ app.get('/', (c) => {
     status: 'ok',
     message: 'Skrim server is running.',
     provider: config.providerConfig.provider,
-    model: config.providerConfig.model
+    model: config.providerConfig.model,
+    ...(config.fallbackConfig ? { fallback: { provider: config.fallbackConfig.provider, model: config.fallbackConfig.model } } : {}),
   });
 });
+
+/**
+ * The main provider plans the step. When it says to come back later (the
+ * server already waited out the short pauses), the fallback plans this one.
+ * Each step is planned from scratch, so the task carries on.
+ */
+async function plan(request: PlanRequest) {
+  try {
+    return await planAction(config.providerConfig, request);
+  } catch (error) {
+    const { fallbackConfig } = config;
+    if (!fallbackConfig || !(error instanceof ProviderError) || error.kind !== 'rate_limited') throw error;
+    console.warn(`[plan] ${config.providerConfig.provider} says to come back later; this step goes to ${fallbackConfig.provider} (${fallbackConfig.model})`);
+    return planAction(fallbackConfig, request);
+  }
+}
 
 app.post('/plan', async (c) => {
   const start = performance.now();
@@ -46,7 +63,7 @@ app.post('/plan', async (c) => {
   const shape = `step ${request.graph.cycle}, ${request.graph.elements.length} elements, ${request.history.length} in history`;
 
   try {
-    const result = await planAction(config.providerConfig, request);
+    const result = await plan(request);
     const latencyMs = Math.round(performance.now() - start);
     const target = 'target' in result.action && result.action.target ? ` ${result.action.target}` : '';
     const tokens = result.usage ? `, ${result.usage.promptTokens}+${result.usage.completionTokens} tokens` : '';
@@ -75,6 +92,7 @@ const server = serve({
 }, (info) => {
   console.log(`Skrim server on http://localhost:${info.port}`);
   console.log(`Provider: ${config.providerConfig.provider}, model: ${config.providerConfig.model}`);
+  if (config.fallbackConfig) console.log(`When it says to come back later: ${config.fallbackConfig.provider}, model: ${config.fallbackConfig.model}`);
   console.log('Each /plan request logs one line here (counts only, never content).');
 });
 

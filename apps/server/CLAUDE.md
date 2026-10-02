@@ -68,7 +68,9 @@ Hosted calls time out after 40 s and are retried once on a timeout or 5xx; Ollam
 
 One `.env` at the **repo root**, loaded via `--env-file-if-exists=../../.env`. See
 [`/.env.example`](../../.env.example). `groq` (the default), `ollama` and `nvidia` are wired;
-pick one with `MODEL_PROVIDER`.
+pick one with `MODEL_PROVIDER`. `FALLBACK_PROVIDER` names another to plan a step when the
+first says to come back later (Groq's daily cap); short waits the server sits out itself.
+It is the same adapter with other settings, not a second code path.
 
 ```powershell
 pnpm dev:server       # from the repo root; its log is this terminal
