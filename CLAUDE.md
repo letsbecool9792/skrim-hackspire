@@ -12,8 +12,9 @@ architectural decision, add it to "Locked decisions" with a one-line reason.
 
 ## Where the project stands
 
-Target: **DOM-only loop closing end to end first.** Everything else layers onto a
-working loop; nothing works without one (brief §10).
+Next milestone: **close the agent loop end to end** (DOM graph → PII redaction → server →
+one action → verify). Everything else layers onto a working loop; nothing works without one
+(brief §10). What is still missing is listed under "Open findings".
 
 ---
 
@@ -63,12 +64,17 @@ The product is **Skrim**; the team is **tropical crush**.
 | Where | Spelling |
 |---|---|
 | Anything a person reads: extension name, popup, landing page, docs | `Skrim` |
-| GitHub repo, npm scope `@skrim/*` | `skrim` |
+| GitHub repo, npm scope `@skrim/*`, message strings like `skrim:offscreen:ping` | `skrim` |
 | Firefox add-on id (`wxt.config.ts`) | `skrim@tropical-crush` |
 
-WXT derives the extension's manifest `name` from
-`package.json`, so Chrome currently lists it as **"@skrim/extension"**. Set an explicit
-`name` in `wxt.config.ts` — a judge sees that string on `chrome://extensions`.
+If the name ever changes:
+- Search with `git grep -i` for the old name, not just the npm scope. The message strings, the
+  Firefox add-on id, and the regex in `scripts/check-invariants.mjs` (`@skrim\/`) do not
+  contain `@name/`. If the regex is missed, a rule silently stops matching.
+- Regenerate `pnpm-lock.yaml` with `pnpm install` and commit it; CI installs with
+  `--frozen-lockfile`.
+- Do not rewrite files with `Set-Content` on Windows PowerShell 5.1. It writes ANSI and mangles
+  the non-ASCII characters in these docs.
 
 ---
 
