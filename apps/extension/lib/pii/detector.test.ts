@@ -211,6 +211,13 @@ describe("IFSC and UPI detection", () => {
     assert.deepEqual(detectUpiIds("@okbank and user@", vault), []);
     assert.deepEqual(vault.stats(), {});
   });
+
+  test("does not read an email address as a UPI ID", () => {
+    const vault = new TokenVault();
+
+    assert.deepEqual(detectUpiIds("Mail user@example.com or user@mail.example.co.in", vault), []);
+    assert.equal(detectUpiIds("Pay user@okaxis.", vault)[0]?.text, "user@okaxis");
+  });
 });
 
 describe("contextual numeric detection", () => {
@@ -241,6 +248,17 @@ describe("contextual numeric detection", () => {
     assert.deepEqual(detectAadhaarNumbers(text, vault), []);
     assert.deepEqual(detectAccountNumbers(text, vault), []);
     assert.deepEqual(vault.stats(), {});
+  });
+
+  test("a label only describes the number right after it", () => {
+    const vault = new TokenVault();
+
+    const redacted = redactDomData(
+      { label: "Aadhaar 1234 5678 9012, account number 123456789012" },
+      vault
+    );
+
+    assert.equal(redacted.label, "Aadhaar <PII:GOV_ID:1>, account number <PII:ACCOUNT:1>");
   });
 
   test("supports compact Aadhaar values and repeated accounts", () => {
@@ -334,6 +352,45 @@ describe("password detection and redaction", () => {
 
     assert.equal(redacted.value, "Contact <PII:EMAIL:1>");
     assert.equal(redacted.detections.length, 1);
+  });
+
+  test("gives tokens only to matches that survive overlap resolution", () => {
+    const vault = new TokenVault();
+
+    // A card number after "account number" matches both detectors; the card wins.
+    const redacted = redactDomData({ label: "account number 4539578763621486" }, vault);
+
+    assert.equal(redacted.label, "account number <PII:CARD:1>");
+    assert.deepEqual(vault.stats(), { CARD: 1 });
+  });
+
+  test("uses a field's label as context for its value", () => {
+    const vault = new TokenVault();
+
+    const redacted = redactDomData({ label: "Aadhaar number", value: "123456789012" }, vault);
+
+    assert.equal(redacted.label, "Aadhaar number");
+    assert.equal(redacted.value, "<PII:GOV_ID:1>");
+  });
+
+  test("trusts the field type when no pattern matches", () => {
+    const vault = new TokenVault();
+
+    const name = redactDomData({ label: "Full name", value: "Suparno Saha", autocomplete: "name" }, vault);
+    const phone = redactDomData({ label: "Mobile", value: "98765 43210", inputType: "tel" }, vault);
+
+    assert.equal(name.value, "<PII:NAME:1>");
+    assert.equal(name.detections[0]?.source, "dom-type");
+    assert.equal(phone.value, "<PII:PHONE:1>");
+  });
+
+  test("leaves ordinary field values alone", () => {
+    const vault = new TokenVault();
+
+    const redacted = redactDomData({ label: "Search", value: "red running shoes", inputType: "search" }, vault);
+
+    assert.equal(redacted.value, "red running shoes");
+    assert.deepEqual(vault.stats(), {});
   });
 });
 
