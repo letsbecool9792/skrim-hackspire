@@ -44,6 +44,8 @@ export interface FixtureScore {
   unaligned: number;
   timings: Reading["timings"];
   beyondView: Reading["beyondView"];
+  facesFound?: number;
+  facesExpected?: number;
 }
 
 interface Pair {
@@ -179,6 +181,8 @@ export function scoreFixture(truth: GroundTruth, reading: Reading): FixtureScore
     unaligned,
     timings: reading.timings,
     beyondView: reading.beyondView,
+    facesFound: reading.faces,
+    facesExpected: truth.faces,
   };
 }
 
@@ -204,6 +208,8 @@ export interface Totals {
   unaligned: number;
   byCategory: Record<string, { pii: number; caught: number }>;
   byLocation: Partial<Record<Location, { pii: number; caught: number }>>;
+  facesFound: number;
+  facesExpected: number;
   /** Median milliseconds per reading, per stage. */
   medianMs: { observe: number; vision: number; names: number; redact: number };
 }
@@ -255,6 +261,8 @@ export function summarise(scores: FixtureScore[]): Totals {
     unaligned: scores.reduce((sum, score) => sum + score.unaligned, 0),
     byCategory,
     byLocation,
+    facesFound: scores.reduce((sum, score) => sum + (score.facesFound ?? 0), 0),
+    facesExpected: scores.reduce((sum, score) => sum + (score.facesExpected ?? 0), 0),
     medianMs: {
       observe: median(scores.map((score) => score.timings.observeMs)),
       vision: median(scores.map((score) => score.timings.visionMs)),

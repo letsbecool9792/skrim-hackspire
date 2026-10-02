@@ -31,6 +31,8 @@ export interface GroundTruth {
   about: string;
   pii: PiiItem[];
   notPii: string[];
+  /** How many faces are on the page. */
+  faces?: number;
 }
 
 function fail(file: string, message: string): never {
@@ -42,6 +44,7 @@ export function parseGroundTruth(file: string, data: unknown): GroundTruth {
   if (typeof truth.page !== "string" || !truth.page.endsWith(".html")) fail(file, "page must name an .html fixture");
   if (typeof truth.about !== "string") fail(file, "about must be a sentence");
   if (!Array.isArray(truth.pii) || !Array.isArray(truth.notPii)) fail(file, "pii and notPii must be arrays");
+  if (truth.faces !== undefined && typeof truth.faces !== "number") fail(file, "faces must be a number");
   for (const item of truth.pii) {
     if (!PII_CATEGORIES.includes(item.category)) fail(file, `unknown category ${String(item.category)}`);
     if (typeof item.value !== "string" || item.value.length === 0) fail(file, "every pii item needs a value");

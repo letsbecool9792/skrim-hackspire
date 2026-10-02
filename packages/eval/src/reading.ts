@@ -26,4 +26,6 @@ export interface Reading {
   timings: { observeMs: number; visionMs: number; namesMs: number; redactMs: number };
   /** Whether the name model ran: "failed" means names were only caught by rules. */
   nameModel: "on" | "failed" | "off";
+  /** How many faces the vision model found on the page. */
+  faces?: number;
 }
