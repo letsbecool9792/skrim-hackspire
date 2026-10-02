@@ -1,5 +1,5 @@
 import { log } from "@skrim/shared";
-import { parseMessage, type PageObservationMessage, type ActionResultMessage } from "@/lib/messages.ts";
+import { parseMessage, type Message, type PageObservationMessage, type ActionResultMessage } from "@/lib/messages.ts";
 import { taskManager } from "./task-manager.ts";
 import { broadcastStatus, getActiveTabId, sendToContent } from "./message-router.ts";
 import { newActionId } from "@/lib/id.ts";
@@ -10,22 +10,43 @@ export const setActionPlanner = registerActionPlanner;
 export default defineBackground(() => {
   log.info("background.started");
   browser.runtime.onMessage.addListener((rawMessage: unknown) => {
-    const message = parseMessage(rawMessage);
-    if (!message) return false;
-    if (message.type === "task.start") void startTask(message.goal);
-    if (message.type === "task.cancel") void cancelTask();
-    if (message.type === "page.observation") void handleObservation(message);
-    if (message.type === "action.result") void handleActionResult(message);
+    route(rawMessage);
     return false;
   });
 });
+
+/** Dispatches a message from the popup, or a reply from the content script. */
+function route(rawMessage: unknown): void {
+  const message = parseMessage(rawMessage);
+  if (!message) return;
+  if (message.type === "task.start") void startTask(message.goal);
+  if (message.type === "task.cancel") void cancelTask();
+  if (message.type === "page.observation") void handleObservation(message);
+  if (message.type === "action.result") void handleActionResult(message);
+}
+
+/** Sends to the content script and routes its reply back into the loop. */
+async function askContent(tabId: number, message: Message): Promise<void> {
+  const reply = await sendToContent(tabId, message);
+  if (reply === undefined) {
+    // No content script answered: the tab was open before the extension
+    // loaded, or it is a page extensions cannot run on. No reply will ever
+    // come, so fail now instead of leaving the task "running" forever.
+    if (taskManager.isRunning()) {
+      taskManager.fail("CONTENT_SCRIPT_ERROR");
+      await finishTask();
+    }
+    return;
+  }
+  route(reply);
+}
 
 async function startTask(goal: string): Promise<void> {
   const task = taskManager.start(goal);
   await broadcastStatus(task.status, task.taskId, { stepCount: 0, maxSteps: task.maxSteps });
   const tabId = await getActiveTabId();
   if (tabId === null) { taskManager.fail("CONTENT_SCRIPT_ERROR"); await finishTask(); return; }
-  await sendToContent(tabId, { type: "page.observe", taskId: task.taskId });
+  await askContent(tabId, { type: "page.observe", taskId: task.taskId });
 }
 
 async function cancelTask(): Promise<void> {
@@ -55,7 +76,7 @@ async function handleObservation(message: PageObservationMessage): Promise<void>
     await finishTask();
     return;
   }
-  await sendToContent(tabId, { type: "action.execute", action, actionId: newActionId(task.stepCount), taskId: task.taskId });
+  await askContent(tabId, { type: "action.execute", action, actionId: newActionId(task.stepCount), taskId: task.taskId });
 }
 
 async function handleActionResult(message: ActionResultMessage): Promise<void> {
@@ -68,7 +89,7 @@ async function handleActionResult(message: ActionResultMessage): Promise<void> {
   if (!taskManager.incrementStep()) { taskManager.fail("MAX_STEPS_REACHED"); await finishTask(); return; }
   const tabId = await getActiveTabId();
   if (tabId === null || !task) { taskManager.fail("CONTENT_SCRIPT_ERROR"); await finishTask(); return; }
-  await sendToContent(tabId, { type: "page.observe", taskId: task.taskId });
+  await askContent(tabId, { type: "page.observe", taskId: task.taskId });
 }
 
 async function finishTask(): Promise<void> {

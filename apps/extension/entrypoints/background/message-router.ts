@@ -3,12 +3,22 @@ import type { TaskStatus } from "@/lib/task-state.ts";
 import type { ErrorCode } from "@/lib/errors.ts";
 import { log } from "@skrim/shared";
 
-export async function sendToContent(tabId: number, message: Message): Promise<void> {
+/**
+ * Sends a message to the content script and returns its reply, or undefined if
+ * nothing answered.
+ *
+ * The content script answers page.observe and action.execute with sendResponse.
+ * A sendResponse reply comes back ONLY here, as the value tabs.sendMessage
+ * resolves to; it never reaches runtime.onMessage. Callers must pass it on, or
+ * the loop stalls waiting for a message that was already delivered.
+ */
+export async function sendToContent(tabId: number, message: Message): Promise<unknown> {
   try {
     log.info("router.sendToContent", { type: message.type, tabId });
-    await browser.tabs.sendMessage(tabId, message);
+    return await browser.tabs.sendMessage(tabId, message);
   } catch (error) {
     log.warn("router.sendToContent.failed", { type: message.type, tabId, error: String(error) });
+    return undefined;
   }
 }
 
