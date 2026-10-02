@@ -5,7 +5,7 @@ import { createContentHandler } from "@/lib/content-handler.ts";
 import { domScreenGraphProvider } from "@/lib/dom/provider.ts";
 import { registerScreenGraphProvider } from "@/lib/integration.ts";
 import { parseMessage } from "@/lib/messages.ts";
-import { DASHBOARD_MSG_TYPE } from "@/lib/agent/dashboard-feed.ts";
+import { DASHBOARD_MSG_TYPE, DASHBOARD_URL } from "@/lib/agent/dashboard-feed.ts";
 
 export default defineContentScript({
   matches: ["<all_urls>"],
@@ -37,13 +37,16 @@ export default defineContentScript({
       // runtime message here and we forward the payload to the page. The
       // dashboard tab's React app listens to window.postMessage. Validated
       // with Zod on both sides (schema on the way in, dashboard on receipt).
+      // Only on the dashboard's own page, and only to that page's origin: this
+      // script runs on every site, and no other page should get the feed.
       if (
         rawMessage !== null &&
         typeof rawMessage === "object" &&
         (rawMessage as Record<string, unknown>).type === DASHBOARD_MSG_TYPE
       ) {
+        if (window.location.origin !== new URL(DASHBOARD_URL).origin) return false;
         const payload = (rawMessage as Record<string, unknown>).payload;
-        window.postMessage(payload, "*");
+        window.postMessage(payload, window.location.origin);
         sendResponse(true);
         return false; // synchronous reply
       }

@@ -33,7 +33,7 @@ export const DashboardObservedEventSchema = z.object({
   /** Counts by PII category — never values. */
   redactions: z.record(z.string(), z.number().int().nonnegative()),
   page: z.string(),
-  /** Per-stage timings (ms). Populated by Suparno's loop fix; undefined until then. */
+  /** How long each stage of reading this view took, in ms (readPage()'s timings). */
   stageTimingsMs: z
     .object({
       observe: z.number().nonnegative().optional(),
@@ -59,7 +59,19 @@ export const DashboardActedEventSchema = z.object({
   type: z.literal("acted"),
   step: z.number().int().nonnegative(),
   verified: z.boolean(),
+  /** What the planner was told about the step. */
   note: z.string().optional(),
+  /** The same in plain words, as the chat shows it. */
+  message: z.string().optional(),
+});
+
+/**
+ * Sent every couple of seconds while the side panel is open, so the dashboard
+ * can tell "the panel closed" from "the planner is slow" (a rate-limited step
+ * can take 15 s, a local model's first step longer).
+ */
+export const DashboardHeartbeatEventSchema = z.object({
+  type: z.literal("heartbeat"),
 });
 
 export const DashboardWarningEventSchema = z.object({
@@ -85,22 +97,28 @@ export const DashboardAgentEventSchema = z.discriminatedUnion("type", [
   DashboardActedEventSchema,
   DashboardWarningEventSchema,
   DashboardFinishedEventSchema,
+  DashboardHeartbeatEventSchema,
 ]);
 export type DashboardAgentEvent = z.infer<typeof DashboardAgentEventSchema>;
 
 // ─── Resource numbers ───────────────────────────────────────────────────────
 
 export const ModelFileSchema = z.object({
+  /** A folder of public/models, e.g. "gliner-pii". */
   name: z.string(),
   sizeBytes: z.number().int().nonnegative(),
-  /** Which runtime the model actually bound to. */
+  /** What it runs on; "unknown" for a model nothing loads yet. */
   backend: z.enum(["wasm", "webgpu", "unknown"]),
 });
 export type ModelFile = z.infer<typeof ModelFileSchema>;
 
+const PlannerNameSchema = z.object({ provider: z.string(), model: z.string() });
+
 export const ResourcesSchema = z.object({
-  /** Model files in public/models and which backend each bound. */
+  /** The models on the device (public/models, by folder) and what each runs on. */
   modelFiles: z.array(ModelFileSchema),
+  /** The planning server's model, and the one it falls back to when rate-limited. */
+  planner: PlannerNameSchema.extend({ fallback: PlannerNameSchema.optional() }).optional(),
   /** JS heap usage in bytes, from performance.memory (Chrome only). */
   jsHeapBytes: z.number().int().nonnegative().optional(),
   jsHeapLimitBytes: z.number().int().nonnegative().optional(),
@@ -150,3 +168,4 @@ export type DashboardObservedEvent = z.infer<typeof DashboardObservedEventSchema
 export type DashboardPlannedEvent = z.infer<typeof DashboardPlannedEventSchema>;
 export type DashboardActedEvent = z.infer<typeof DashboardActedEventSchema>;
 export type DashboardFinishedEvent = z.infer<typeof DashboardFinishedEventSchema>;
+export type DashboardHeartbeatEvent = z.infer<typeof DashboardHeartbeatEventSchema>;

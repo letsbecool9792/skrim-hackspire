@@ -215,7 +215,15 @@ async function main() {
   for (const v of VENDOR) await vendor(v);
   for (const l of LOCAL) await local(l);
 
-  const onDisk = await diskUsage(DEST);
+  // The dashboard's resource panel lists these sizes; the side panel reads
+  // them from here rather than downloading 45 MB to measure it.
+  const models = [];
+  for (const entry of await readdir(DEST, { withFileTypes: true })) {
+    if (entry.isDirectory()) models.push({ name: entry.name, bytes: await diskUsage(join(DEST, entry.name)) });
+  }
+  await writeFile(join(DEST, "manifest.json"), `${JSON.stringify({ models }, null, 2)}\n`);
+
+  const onDisk = models.reduce((sum, model) => sum + model.bytes, 0);
   console.log(`\nOn-disk model footprint: ${(onDisk / 1024 / 1024).toFixed(1)} MB`);
   console.log(`Resource use is 20% of the rubric - keep an eye on this number.\n`);
 }
