@@ -9,7 +9,7 @@ import { fetchServerInfo, type ServerInfo } from "@/lib/agent/server-planner.ts"
 import { tabLink } from "@/lib/agent/tab-link.ts";
 import { tabPixelReader } from "@/lib/vision/read-pixels.ts";
 import { SERVER_URL } from "./config.ts";
-import { onDashboardEvent } from "./main.tsx";
+import { feed } from "./feed-instance.ts";
 
 // ─── Chat model ────────────────────────────────────────────────────────────
 
@@ -297,7 +297,7 @@ export default function App() {
     controllerRef.current = controller;
     setRunning(true);
     try {
-      await runAgentTask({ goal, planner, link: tabLink(tab.id), signal: controller.signal, onEvent: (e) => { update(e); onDashboardEvent(e); }, findNames, readPixels: tabPixelReader(tab.id) });
+      await runAgentTask({ goal, planner, link: tabLink(tab.id), signal: controller.signal, onEvent: (e) => { update(e); feed.onEvent(e); }, findNames, readPixels: tabPixelReader(tab.id) });
     } finally {
       controllerRef.current = null;
       setRunning(false);
