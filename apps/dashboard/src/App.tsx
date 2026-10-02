@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import { AlertTriangle, Brain, Check, CircleAlert, Eye, Hourglass, Play, ShieldCheck, Square, X, type LucideIcon } from "lucide-react";
 import {
   DashboardMessageSchema,
   type DashboardMessage,
@@ -27,13 +28,13 @@ function TokenText({ text }: { text: string }) {
   const tokens = findPiiTokens(text);
   if (tokens.length === 0) return <>{text}</>;
 
-  const parts: React.ReactNode[] = [];
+  const parts: ReactNode[] = [];
   let cursor = 0;
   for (const token of tokens) {
     const idx = text.indexOf(token, cursor);
     if (idx > cursor) parts.push(text.slice(cursor, idx));
     parts.push(
-      <span key={idx} className="token-pill">
+      <span key={idx} className="token">
         {token}
       </span>,
     );
@@ -49,27 +50,7 @@ function WireView({ request }: { request: PlanRequest }) {
   const lines = JSON.stringify(request, null, 2).split("\n");
   return (
     <pre className="wire-pre">
-      {lines.map((line, i) => {
-        const tokenMatch = /<PII:[A-Z_]+:\d+>/g.exec(line);
-        if (!tokenMatch) return <div key={i}>{line}</div>;
-        // Highlight token strings inline
-        const parts: React.ReactNode[] = [];
-        let rest = line;
-        let offset = 0;
-        const matches = [...line.matchAll(/<PII:[A-Z_]+:\d+>/g)];
-        let last = 0;
-        for (const m of matches) {
-          parts.push(rest.slice(last - offset, (m.index ?? 0) - offset));
-          parts.push(
-            <span key={m.index} className="token-pill">
-              {m[0]}
-            </span>,
-          );
-          last = (m.index ?? 0) + m[0].length;
-        }
-        parts.push(rest.slice(last - offset));
-        return <div key={i}>{parts}</div>;
-      })}
+      {lines.map((line, i) => <div key={i}><TokenText text={line} /></div>)}
     </pre>
   );
 }
@@ -114,65 +95,59 @@ function ElementsPanel({ request }: { request: PlanRequest }) {
 
 // ─── Step feed ───────────────────────────────────────────────────────────────
 
+function StepCard({ className, Icon, type, children }: { className: string; Icon: LucideIcon; type: string; children?: ReactNode }) {
+  return (
+    <div className={`step-card ${className}`}>
+      <span className="step-glyph" aria-hidden="true"><Icon className="icon" size={16} /></span>
+      <span className="step-type">{type}</span>
+      <span className="step-detail">{children}</span>
+    </div>
+  );
+}
+
 function StepBadge({ event }: { event: DashboardAgentEvent }) {
   switch (event.type) {
     case "started":
       return (
-        <div className="step-card step-started">
-          <span className="step-type">▶ started</span>
-          <span className="step-detail">
-            <TokenText text={event.redactedGoal} />
-          </span>
-        </div>
+        <StepCard className="step-started" Icon={Play} type="Started">
+          <TokenText text={event.redactedGoal} />
+        </StepCard>
       );
     case "observed":
       return (
-        <div className="step-card step-observed">
-          <span className="step-type">👁 step {event.step} · observed</span>
-          <span className="step-detail">
-            {event.elements} elements ·{" "}
-            {Object.entries(event.redactions)
-              .filter(([, n]) => n > 0)
-              .map(([k, n]) => `${n} ${k}`)
-              .join(", ") || "no PII"}
-          </span>
-        </div>
+        <StepCard className="step-observed" Icon={Eye} type={`Step ${event.step} · saw`}>
+          {event.elements} elements ·{" "}
+          {Object.entries(event.redactions)
+            .filter(([, n]) => n > 0)
+            .map(([k, n]) => `${n} ${k}`)
+            .join(", ") || "no personal data"}
+        </StepCard>
       );
     case "planned":
       return (
-        <div className="step-card step-planned">
-          <span className="step-type">🧠 step {event.step} · {event.actionType}</span>
-          <span className="step-detail">
-            {event.targetLabel && <TokenText text={event.targetLabel} />}
-            <span className="step-latency">{event.latencyMs}ms</span>
-          </span>
-        </div>
+        <StepCard className="step-planned" Icon={Brain} type={`Step ${event.step} · ${event.actionType}`}>
+          {event.targetLabel && <TokenText text={event.targetLabel} />}
+          <span className="step-latency">{event.latencyMs} ms</span>
+        </StepCard>
       );
     case "acted":
       return (
-        <div className={`step-card ${event.verified ? "step-ok" : "step-warn"}`}>
-          <span className="step-type">{event.verified ? "✓" : "!"} step {event.step} · acted</span>
-          {(event.message ?? event.note) && <span className="step-detail"><TokenText text={event.message ?? event.note ?? ""} /></span>}
-        </div>
+        <StepCard className={event.verified ? "step-ok" : "step-warn"} Icon={event.verified ? Check : CircleAlert} type={`Step ${event.step} · ${event.verified ? "done" : "not confirmed"}`}>
+          {(event.message ?? event.note) && <TokenText text={event.message ?? event.note ?? ""} />}
+        </StepCard>
       );
     case "warning":
       return (
-        <div className="step-card step-warning">
-          <span className="step-type">⚠ warning</span>
-          <span className="step-detail">{event.message}</span>
-        </div>
+        <StepCard className="step-warning" Icon={AlertTriangle} type="Warning">
+          {event.message}
+        </StepCard>
       );
     case "finished":
       return (
-        <div className={`step-card step-finished-${event.outcome}`}>
-          <span className="step-type">
-            {event.outcome === "completed" ? "✓ done" : event.outcome === "cancelled" ? "◼ stopped" : "✗ failed"}
-          </span>
-          <span className="step-detail">
-            {event.steps} steps
-            {event.summary && <> · <TokenText text={event.summary} /></>}
-          </span>
-        </div>
+        <StepCard className={`step-finished-${event.outcome}`} Icon={event.outcome === "completed" ? Check : event.outcome === "cancelled" ? Square : X} type={event.outcome === "completed" ? "Finished" : event.outcome === "cancelled" ? "Stopped" : "Failed"}>
+          {event.steps} steps
+          {event.summary && <> · <TokenText text={event.summary} /></>}
+        </StepCard>
       );
     case "heartbeat":
       return null;
@@ -207,7 +182,7 @@ function ResourcePanel({
     <aside className="resource-panel">
       <div className="res-header">
         <span className={`status-dot ${connected ? "dot-live" : "dot-off"}`} />
-        <span className="res-title">Resource Panel</span>
+        <span className="res-title">Resources</span>
         {!connected && <span className="disconnected-badge">disconnected</span>}
       </div>
 
@@ -391,16 +366,17 @@ export default function App() {
       {/* ── Header ── */}
       <header className="dash-header">
         <div className="dash-brand">
-          <span className="dash-mark">S</span>
-          <strong>Skrim</strong>
-          <span className="dash-sub">Privacy Dashboard</span>
+          <span className="dash-mark" aria-hidden="true"><ShieldCheck className="icon" size={18} strokeWidth={2.25} /></span>
+          Skrim
+          <span className="dash-sub">Privacy dashboard</span>
         </div>
         {display?.redactedGoal && (
           <div className="dash-goal">
+            <span className="dash-goal-label">Goal as sent</span>
             <TokenText text={display.redactedGoal} />
           </div>
         )}
-        {parseError && <div className="parse-warn">⚠ {parseError}</div>}
+        {parseError && <div className="parse-warn"><AlertTriangle className="icon" size={16} aria-hidden="true" /> {parseError}</div>}
       </header>
 
       <div className="dash-body">
@@ -408,7 +384,7 @@ export default function App() {
         <main className="dash-main">
           {!display ? (
             <div className="waiting">
-              <div className="waiting-icon">⏳</div>
+              <div className="waiting-icon" aria-hidden="true"><Hourglass className="icon" size={28} /></div>
               <h1>Waiting for a task…</h1>
               <p>Start a task in the Skrim side panel.<br />Every step will appear here live.</p>
             </div>
