@@ -100,15 +100,6 @@ async function requestWithOneRetry(config: ProviderConfig, messages: ChatMessage
 }
 
 async function requestCompletion(config: ProviderConfig, messages: ChatMessage[]): Promise<Completion> {
-  // Ollama's OpenAI-compat endpoint (/v1/chat/completions) silently ignores
-  // the think:false flag on thinking-build models (qwen3-vl:4b). Its native
-  // endpoint (/api/chat) does forward it. Route Ollama through that path so
-  // think:false actually suppresses the chain-of-thought and steps go from
-  // 22-84 s down to ~1-2 s on a 6 GB GPU.
-  if (config.provider === 'ollama') {
-    return requestOllamaChat(config, messages);
-  }
-
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -126,7 +117,7 @@ async function requestCompletion(config: ProviderConfig, messages: ChatMessage[]
       body: JSON.stringify({
         model: config.model,
         messages,
-        temperature: 0.2,
+        temperature: 0.2, // low temp for planning
         ...config.extraBody,
       }),
       signal: AbortSignal.timeout(timeoutMs),
@@ -153,59 +144,13 @@ async function requestCompletion(config: ProviderConfig, messages: ChatMessage[]
   if (typeof content !== 'string') {
     throw new ProviderError('bad_response', `The ${config.provider} provider returned no message`);
   }
+  // An empty string is a model problem, not a provider one: a thinking model
+  // can spend its whole reply on reasoning. The planner re-asks, like any
+  // unparseable output.
   const prompt = data.usage?.prompt_tokens;
   const completion = data.usage?.completion_tokens;
   return {
     text: content,
     ...(Number.isInteger(prompt) && Number.isInteger(completion) ? { usage: { promptTokens: prompt, completionTokens: completion } } : {}),
   };
-}
-
-/**
- * Ollama native API path. Strips the /v1 suffix from OLLAMA_BASE_URL (which
- * points at the OpenAI-compat shim) to reach the real Ollama port, then calls
- * /api/chat — the only endpoint that forwards think:false to the model.
- */
-async function requestOllamaChat(config: ProviderConfig, messages: ChatMessage[]): Promise<Completion> {
-  // OLLAMA_BASE_URL is e.g. http://localhost:11434/v1 — drop the /v1 suffix.
-  const ollamaBase = config.baseURL.replace(/\/v1\/?$/, '');
-  const timeoutMs = TIMEOUT_MS.ollama;
-
-  // Map OpenAI roles to Ollama roles (same names, but explicit for clarity).
-  const ollamaMessages = messages.map((m) => ({ role: m.role, content: m.content }));
-
-  let response: Response;
-  try {
-    response = await fetch(`${ollamaBase}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: config.model,
-        messages: ollamaMessages,
-        stream: false,
-        options: { temperature: 0.2 },
-        // think:false is the key flag — it suppresses Qwen3's chain-of-thought
-        // on thinking-build models. On instruct builds it is a harmless no-op.
-        think: false,
-      }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-  } catch (err) {
-    if (err instanceof Error && err.name === 'TimeoutError') {
-      throw new ProviderError('timeout', `No reply from ${config.model} within ${timeoutMs / 1000} s`);
-    }
-    throw new ProviderError('network', 'Could not reach the Ollama provider', String(err));
-  }
-
-  if (!response.ok) {
-    const detail = (await response.text()).slice(0, 500);
-    throw new ProviderError('http', `The ollama provider returned HTTP ${response.status} for ${config.model}`, detail, response.status);
-  }
-
-  const data = await response.json();
-  const content = data.message?.content;
-  if (typeof content !== 'string') {
-    throw new ProviderError('bad_response', 'The ollama provider returned no message');
-  }
-  return { text: content };
 }
