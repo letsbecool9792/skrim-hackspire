@@ -20,7 +20,8 @@ interface StepView {
   targetLabel?: string;
   latencyMs: number;
   verified?: boolean;
-  note?: string;
+  /** What happened, for the user; the planner's own note is not shown. */
+  message?: string;
 }
 
 interface TaskItem {
@@ -45,7 +46,7 @@ function applyEvent(task: TaskItem, event: AgentEvent): TaskItem {
       if (event.action.type === "done") return task;
       return { ...task, phase: "acting", steps: [...task.steps, { step: event.step, action: event.action, targetLabel: event.targetLabel, latencyMs: event.latencyMs }] };
     case "acted":
-      return { ...task, phase: "reading", steps: task.steps.map((s) => (s.step === event.step ? { ...s, verified: event.verified, note: event.note } : s)) };
+      return { ...task, phase: "reading", steps: task.steps.map((s) => (s.step === event.step ? { ...s, verified: event.verified, message: event.message } : s)) };
     case "warning":
       return { ...task, warnings: [...task.warnings, event.message] };
     case "finished":
@@ -102,7 +103,7 @@ function describeAction(action: Action, targetLabel?: string): string {
     case "select": return `Choose ${quote(action.value)} in ${target}`;
     case "scroll": return `Scroll ${action.direction}${action.target ? ` in ${target}` : ""}`;
     case "navigate": return action.to === "back" ? "Go back" : `Open ${action.to}`;
-    case "extract": return `Read ${target} as “${action.as}”`;
+    case "extract": return `Read ${target}`;
     case "wait": return `Wait ${(action.ms / 1000).toFixed(1)} s`;
     case "done": return "Finish";
   }
@@ -162,7 +163,7 @@ function StepRow({ step }: { step: StepView }) {
       <div className="step-body">
         <div className="step-title"><Tokenised text={describeAction(step.action, step.targetLabel)} /></div>
         {reason && <div className="step-reason"><Tokenised text={reason} /></div>}
-        {step.verified === false && <div className="step-note">Not confirmed: {step.note ?? "the page did not change"}</div>}
+        {step.verified === false && <div className="step-note">{step.message ?? "Not confirmed."}</div>}
       </div>
       <span className="step-meta">
         {step.verified === undefined ? <span className="spinner" aria-label="Working" /> : step.verified ? "✓" : "!"}
@@ -184,9 +185,8 @@ function ResultCard({ finished }: { finished: Finished }) {
       {finished.summary && <p><Tokenised text={finished.summary} /></p>}
       {finished.message && <p>{finished.message}</p>}
       <div className="result-foot">
-        <small>
+        <small title={finished.errorCode}>
           {finished.steps} step{finished.steps === 1 ? "" : "s"}
-          {finished.errorCode && finished.outcome === "failed" ? ` · ${finished.errorCode}` : ""}
         </small>
         <button className="info-button" type="button" onClick={() => setShowPrivacy((shown) => !shown)} aria-expanded={showPrivacy} aria-label="What stayed on this device" title="What stayed on this device">
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 7.2v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /><circle cx="8" cy="4.9" r="0.9" fill="currentColor" /></svg>

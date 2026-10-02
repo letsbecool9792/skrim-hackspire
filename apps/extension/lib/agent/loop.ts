@@ -54,7 +54,11 @@ export type AgentEvent =
   | { type: "started"; taskId: string; redactedGoal: string }
   | { type: "observed"; step: number; elements: number; redactions: RedactionCounts; page: string }
   | { type: "planned"; step: number; action: Action; targetLabel?: string; model: string; latencyMs: number }
-  | { type: "acted"; step: number; verified: boolean; note?: string }
+  /**
+   * `note` is what the planner is told in its history; `message` says the same
+   * to the user, in plain words, when there is something to say.
+   */
+  | { type: "acted"; step: number; verified: boolean; note?: string; message?: string }
   /** Something the user should know that does not stop the task. */
   | { type: "warning"; message: string }
   | {
@@ -212,12 +216,15 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
       // A click that would place an order, pay, delete or create an account is
       // refused unless the goal asks for it (lib/agent/commit-guard.ts).
       const refused = action.type === "click" && target ? unaskedCommitment(`${target.label ?? ""} ${target.value ?? ""}`, options.goal) : undefined;
-      const outcome: ActOutcome = refused
-        ? { verified: false, note: `not clicked: it would ${refused}, which the goal does not ask for. If the goal is met, answer done` }
-        : await act(link, taskId, step, action, { vault, names }, signal);
-      if (refused) log.info("agent.refusedCommitment", { taskId, step });
+      let outcome: ActOutcome;
+      if (refused) {
+        outcome = { verified: false, note: `not clicked: it would ${refused}, which the goal does not ask for. If the goal is met, answer done`, message: `Skipped: it would ${refused}, which you didn't ask for.` };
+        log.info("agent.refusedCommitment", { taskId, step });
+      } else {
+        outcome = await act(link, taskId, step, action, { vault, names }, signal);
+      }
       history.push({ cycle: step, action, verified: outcome.verified, ...(outcome.note ? { note: outcome.note } : {}) });
-      onEvent({ type: "acted", step, verified: outcome.verified, note: outcome.note });
+      onEvent({ type: "acted", step, verified: outcome.verified, ...(outcome.note ? { note: outcome.note } : {}), ...(outcome.message ? { message: outcome.message } : {}) });
       if (action.type === "extract" && outcome.extractedValue) {
         await names.prepareTexts([outcome.extractedValue]);
         extracted[action.as] = redactText(outcome.extractedValue, vault, names.lookup);
@@ -315,17 +322,20 @@ function joinNotes(first: string | undefined, second: string): string {
 
 interface ActOutcome {
   verified: boolean;
+  /** For the planner's history. */
   note?: string;
+  /** For the user, in the chat. */
+  message?: string;
   extractedValue?: string;
 }
 
-/** Short, PII-free notes the planner reads in its history. */
-const ERROR_NOTES: Partial<Record<ErrorCode, string>> = {
-  TARGET_NOT_FOUND: "no such element on the page any more; ids change after every action",
-  TARGET_NOT_CLICKABLE: "the element is disabled or hidden",
-  NAVIGATION_BLOCKED: "navigation to another site is not allowed",
-  MALFORMED_ACTION: "the action was malformed",
-  CONTENT_SCRIPT_ERROR: "the action failed inside the page",
+/** Short, PII-free notes the planner reads in its history, and what the user is told. */
+const ERROR_NOTES: Partial<Record<ErrorCode, { note: string; message: string }>> = {
+  TARGET_NOT_FOUND: { note: "no such element on the page any more; ids change after every action", message: "That was no longer on the page." },
+  TARGET_NOT_CLICKABLE: { note: "the element is disabled or hidden", message: "That is disabled or hidden." },
+  NAVIGATION_BLOCKED: { note: "navigation to another site is not allowed", message: "Skipped: it leads to another site." },
+  MALFORMED_ACTION: { note: "the action was malformed", message: "The planner's step could not be carried out." },
+  CONTENT_SCRIPT_ERROR: { note: "the action failed inside the page", message: "The page did not accept that step." },
 };
 
 /** States worth reporting after an action. "focused" is not: every click causes it. */
@@ -357,7 +367,7 @@ async function act(link: PageLink, taskId: string, step: number, action: Action,
     const resolved = resolveTokens(action.value, privacy.vault);
     // The model used a token this task never issued. Typing it literally is
     // the one thing we never do, so the step is skipped and reported.
-    if (!resolved.ok) return { verified: false, note: `not typed: ${resolved.unknown.join(", ")} is not a token on this page` };
+    if (!resolved.ok) return { verified: false, note: `not typed: ${resolved.unknown.join(", ")} is not a token on this page`, message: "Skipped: the planner used a placeholder that stands for nothing on this page." };
     typedValue = resolved.value;
   }
 
@@ -379,14 +389,30 @@ async function act(link: PageLink, taskId: string, step: number, action: Action,
 
     // No reply and no page load. If the page is really gone, the next
     // observation says so, in words the user can act on.
-    if (result?.type !== "action.result") return { verified: false, note: "the page did not answer" };
+    if (result?.type !== "action.result") return { verified: false, note: "the page did not answer", message: "The page did not respond." };
     if (!result.ok) {
-      return { verified: false, note: ERROR_NOTES[result.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? "the action failed" };
+      return { verified: false, ...(ERROR_NOTES[result.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? { note: "the action failed", message: "That step failed." }) };
     }
-    if (result.targetAfter) await privacy.names.prepareTexts([result.targetAfter.label, result.targetAfter.value]);
-    const after = result.targetAfter ? describeTarget(result.targetAfter, privacy) : undefined;
-    const note = result.changed ? after : ["the page did not change", after].filter(Boolean).join("; ");
-    return { verified: result.changed, ...(note ? { note } : {}), ...(result.extractedValue === undefined ? {} : { extractedValue: result.extractedValue }) };
+    if (result.changed || action.type !== "scroll") {
+      if (result.targetAfter) await privacy.names.prepareTexts([result.targetAfter.label, result.targetAfter.value]);
+      const after = result.targetAfter ? describeTarget(result.targetAfter, privacy) : undefined;
+      const note = result.changed ? after : ["the page did not change", after].filter(Boolean).join("; ");
+      return {
+        verified: result.changed,
+        ...(note ? { note } : {}),
+        ...(result.changed ? {} : { message: "Nothing changed on the page." }),
+        ...(result.extractedValue === undefined ? {} : { extractedValue: result.extractedValue }),
+      };
+    }
+    // A scroll that moved nothing has reached the end. Saying so stops a
+    // planner scrolling on, looking for something that is not there.
+    const end = action.direction === "up" ? "top" : action.direction === "down" ? "bottom" : "edge";
+    const what = action.target ? "that area" : "the page";
+    return {
+      verified: false,
+      note: `${what} did not move: it is already at the ${end}, so what the goal needs is not further ${action.direction}`,
+      message: `Already at the ${end} of ${what}.`,
+    };
   } finally {
     watch.stop();
   }

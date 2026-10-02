@@ -244,11 +244,31 @@ describe("runAgentTask", () => {
     const { planner, requests } = scripted((request, step) =>
       step === 0 ? { type: "click", target: idOf(request, "Place order") } : { type: "done", success: true, summary: "ok" });
 
-    await run("Change the coupon code to SAVE20", planner);
+    const { events } = await run("Change the coupon code to SAVE20", planner);
 
     assert.equal(placed, false);
     assert.equal(requests[1]?.history[0]?.verified, false);
     assert.match(requests[1]?.history[0]?.note ?? "", /^not clicked: it would place an order or pay/);
+    // The user gets the same in plain words, not the planner's instructions.
+    const acted = events.find((e) => e.type === "acted");
+    assert.equal(acted?.type === "acted" && acted.message, "Skipped: it would place an order or pay, which you didn't ask for.");
+  });
+
+  test("says when a scroll is already at the end, so the planner stops looking further down", async () => {
+    await page(`<p>A short page</p>`);
+    const { planner, requests } = scripted((_request, step) =>
+      step === 0 ? { type: "scroll", direction: "down", amount: 600 } : { type: "done", success: false, summary: "not here" });
+    // happy-dom scrolls without limit; a browser at the bottom of the page does not move.
+    const root = document.documentElement;
+    const scrollBy = root.scrollBy;
+    root.scrollBy = () => {};
+
+    const { events } = await run("Find the search box", planner).finally(() => { root.scrollBy = scrollBy; });
+
+    assert.equal(requests[1]?.history[0]?.verified, false);
+    assert.match(requests[1]?.history[0]?.note ?? "", /already at the bottom/);
+    const acted = events.find((e) => e.type === "acted");
+    assert.equal(acted?.type === "acted" && acted.message, "Already at the bottom of the page.");
   });
 
   test("reports a planner failure with its message", async () => {
