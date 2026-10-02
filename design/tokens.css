@@ -26,6 +26,10 @@
   --text-lg: 1.0625rem;
   --text-xl: 1.375rem;
   --text-2xl: 1.75rem;
+  /* Display sizes — landing page only; side panel and dashboard stop at --text-2xl. */
+  --text-3xl: 2.25rem;
+  --text-4xl: 3rem;
+  --text-5xl: 3.75rem;
   --leading-tight: 1.25;
   --leading-body: 1.5;
   --weight-regular: 400;
@@ -41,6 +45,11 @@
   --space-6: 1.5rem;
   --space-8: 2rem;
   --space-10: 2.5rem;
+  /* Larger steps — landing page sections. */
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
 
   /* Shape */
   --radius-sm: 6px;
