@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "models:fetch": "node scripts/fetch-models.mjs",
+    "models:install-icon": "python3 scripts/install_icon_detector.py",
     "dev:extension": "pnpm --filter @skrim/extension dev",
     "dev:server": "pnpm --filter @skrim/server dev",
     "dev:dashboard": "pnpm --filter @skrim/dashboard dev",

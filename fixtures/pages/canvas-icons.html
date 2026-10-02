@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Canvas icon toolbar</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 20px; }
+    canvas { border: 1px solid #ccc; border-radius: 8px; background: #fafafa; }
+  </style>
+</head>
+<body>
+  <h1>Canvas icon toolbar</h1>
+  <canvas id="toolbar" width="480" height="120" aria-label="Action toolbar"></canvas>
+  <script>
+    const canvas = document.getElementById("toolbar");
+    const ctx = canvas?.getContext?.("2d");
+    if (ctx) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, 480, 120);
+
+      // Icon button 1: Search (magnifying glass)
+      ctx.strokeStyle = "#333333";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(60, 60, 16, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(72, 72);
+      ctx.lineTo(84, 84);
+      ctx.stroke();
+
+      // Icon button 2: Plus / Add
+      ctx.beginPath();
+      ctx.moveTo(160, 44);
+      ctx.lineTo(160, 76);
+      ctx.moveTo(144, 60);
+      ctx.lineTo(176, 60);
+      ctx.stroke();
+
+      // Icon button 3: Close / X
+      ctx.beginPath();
+      ctx.moveTo(244, 44);
+      ctx.lineTo(276, 76);
+      ctx.moveTo(276, 44);
+      ctx.lineTo(244, 76);
+      ctx.stroke();
+
+      // Icon button 4: Hamburger Menu (3 lines)
+      ctx.beginPath();
+      ctx.moveTo(344, 48);
+      ctx.lineTo(376, 48);
+      ctx.moveTo(344, 60);
+      ctx.lineTo(376, 60);
+      ctx.moveTo(344, 72);
+      ctx.lineTo(376, 72);
+      ctx.stroke();
+
+      // Icon button 5: Chevron / Right Arrow
+      ctx.beginPath();
+      ctx.moveTo(436, 46);
+      ctx.lineTo(450, 60);
+      ctx.lineTo(436, 74);
+      ctx.stroke();
+    }
+  </script>
+</body>
+</html>
