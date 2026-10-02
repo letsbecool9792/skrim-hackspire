@@ -55,12 +55,15 @@ describe("extractScreenGraph", () => {
     assert.equal(button?.value, undefined);
   });
 
-  test("reads the chosen option of a select", () => {
-    const { byLabel } = extract(
+  test("reads a dropdown's choice and lists its options, without the options as elements", () => {
+    const { byLabel, elements } = extract(
       `<label for="size">Size</label><select id="size"><option>Small</option><option selected>Large</option></select>`
     );
 
-    assert.equal(byLabel("Size")?.value, "Large");
+    const select = byLabel("Size");
+    assert.equal(select?.value, "Large");
+    assert.equal(select?.hint, "options: Small | Large");
+    assert.equal(elements.filter((element) => element.role === "option").length, 0);
   });
 
   test("describes a checkbox by its state, not a value", () => {
