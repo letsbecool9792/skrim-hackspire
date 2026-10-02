@@ -2,7 +2,8 @@ import { defineContentScript } from "#imports";
 import { log } from "@skrim/shared";
 import { initObserver, getObservationVersion } from "./observer.ts";
 import { executeAction } from "@/lib/actions/dispatcher.ts";
-import { getScreenGraphProvider, getTokenResolver } from "@/lib/integration.ts";
+import { domScreenGraphProvider } from "@/lib/dom/provider.ts";
+import { getScreenGraphProvider, getTokenResolver, registerScreenGraphProvider } from "@/lib/integration.ts";
 import { parseMessage } from "@/lib/messages.ts";
 
 export default defineContentScript({
@@ -10,6 +11,10 @@ export default defineContentScript({
   runAt: "document_idle",
   main() {
     initObserver();
+    // WS2's DOM extractor supplies the graph. It must be registered in this
+    // content-script context, because that is where getScreenGraphProvider()
+    // is called on page.observe.
+    registerScreenGraphProvider(domScreenGraphProvider);
     let currentRegistry = new Map<string, Element>();
     browser.runtime.onMessage.addListener((rawMessage: unknown, _sender, sendResponse) => {
       const message = parseMessage(rawMessage);

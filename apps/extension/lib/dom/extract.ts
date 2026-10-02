@@ -4,6 +4,15 @@ import {
   type ScreenElement,
 } from "@skrim/schema";
 
+export interface DomScreenGraph {
+  elements: ScreenElement[];
+  /**
+   * Element id -> the live DOM element it names. This is what the action
+   * executor uses to find the target of `{ type: "click", target: "e17" }`.
+   */
+  registry: Map<string, Element>;
+}
+
 /**
  * Extracts a generic representation of the current page.
  *
@@ -11,7 +20,20 @@ import {
  * No raw PII should be intentionally added here.
  */
 export function extractScreenElements(): ScreenElement[] {
+  return extractScreenGraph().elements;
+}
+
+/**
+ * Extracts the page's elements together with the registry that maps each id
+ * back to its DOM element.
+ *
+ * The id and its registry entry are written in the same step of the same loop.
+ * That is deliberate: if ids were assigned in one place and elements looked up
+ * in another, an action addressed to e17 could land on a different element.
+ */
+export function extractScreenGraph(): DomScreenGraph {
   const elements: ScreenElement[] = [];
+  const registry = new Map<string, Element>();
   const includedElements = new Map<Element, ScreenElement>();
   const candidates = document.querySelectorAll("*");
 
@@ -39,6 +61,7 @@ export function extractScreenElements(): ScreenElement[] {
 
     elements.push(screenElement);
     includedElements.set(element, screenElement);
+    registry.set(screenElement.id, element);
   }
 
   addChildren(includedElements);
@@ -47,7 +70,7 @@ export function extractScreenElements(): ScreenElement[] {
     ScreenElementSchema.parse(element);
   }
 
-  return elements;
+  return { elements, registry };
 }
 
 function addChildren(includedElements: Map<Element, ScreenElement>): void {
