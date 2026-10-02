@@ -95,8 +95,7 @@ skrim/
 │   │   │   ├── offscreen/     Chrome only. ALL model inference lives here —
 │   │   │   │                  WebGPU and WASM are unavailable in a service worker.
 │   │   │   ├── content/       DOM extraction + action execution. Runs in the page.
-│   │   │   ├── sidepanel/     User-facing task UI.
-│   │   │   └── popup/         Quick controls, permissions surface.
+│   │   │   └── popup/         Task UI: goal input, status, page capture.
 │   │   ├── lib/
 │   │   │   ├── dom/           Element graph: roles, labels, bboxes, a11y tree walk.
 │   │   │   ├── vision/        Model loading, WebGPU/WASM device selection.
