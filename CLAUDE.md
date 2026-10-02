@@ -15,9 +15,9 @@ architectural decision, add it to "Locked decisions" with a one-line reason.
 The agent loop is closed end to end (DOM graph → PII redaction → server → one action →
 verify), in a chat side panel, and works in Chrome on the fixture pages. Both
 Qwen planners finish all six fixture goals. The eval harness scores detection on 21
-annotated fixtures. Next: **retest in Chrome and run the eval there**, settle the default
-provider (Groq's free tier allows only 4–5 steps a minute), then perception beyond the DOM,
-starting with what the eval misses. See "Status" and "Open findings".
+annotated fixtures. The default planner is Groq's Qwen 3.8 27B. Next: **retest in Chrome
+and run the eval there**, then perception beyond the DOM, starting with what the eval
+misses. See "Status" and "Open findings".
 
 ---
 
@@ -31,8 +31,8 @@ Settled in the setup session. Do not reopen without a reason.
 | **WXT** for the extension | Only framework treating Firefox as first-class; handles manifest-version and API polyfill differences from one codebase. Plasmo is Chrome-first, CRXJS means hand-wrangling Firefox at 2am |
 | **Transformers.js v3** for local inference | Pipelines + tokenisers included. Drop to raw `onnxruntime-web` where there is no pipeline: the YOLO icon detector, and GLiNER (runs on `onnxruntime-web/wasm` with `@huggingface/tokenizers`, the tokenizer Transformers.js itself uses) |
 | **Hono on Node 22** for the server | Thin: prompt build, schema validation, retry. No ML in the server |
-| **Qwen** as the server brain | Apache 2.0, strong GUI grounding, available both hosted and via Ollama, so demo beat 8 is a base-URL swap. NVIDIA hosts no Qwen; the free hosted Qwen is `qwen/qwen3.8-27b` on Groq, and local is Qwen3-VL 4B. The NVIDIA default, Llama 3.2 11B, never finishes a task (see "Open findings") |
-| **NVIDIA Build** as the dev provider | Free, no credit card, ~40 RPM, no daily token cap, OpenAI-compatible |
+| **Qwen** as the server brain | Apache 2.0, strong GUI grounding, available both hosted and via Ollama, so demo beat 8 is a base-URL swap. NVIDIA hosts no Qwen; the free hosted Qwen is `qwen/qwen3.8-27b` on Groq, and local is Qwen3-VL 4B. NVIDIA's Llama 3.2 11B never finishes a task ([`docs/provider-study.md`](docs/provider-study.md)) |
+| **Groq** (`qwen/qwen3.8-27b`) as the default provider | Free, no credit card, OpenAI-compatible. Did all 42 runs of the provider study, fastest and in the fewest steps. Its cost is the free tier: 4–5 steps a minute (the server waits these out) and a daily cap; when the day runs out, switch to Ollama. NVIDIA stays wired: no daily cap |
 | **MV3 on both browsers** | Firefox MV3 event pages keep DOM access, so we get the offscreen-free path *and* "MV3 everywhere" on the slide. WXT defaults Firefox to MV2 — override it |
 | **Eval runs in a real browser** via Playwright | The rubric scores precision/recall on the shipped path. Node-side numbers would measure different code than we demo |
 | Ollama `qwen3-vl:4b-instruct` for air-gap | 6 GB VRAM ceiling. See "Hardware reality". The instruct build, not the plain tag, which is the much slower thinking build |
@@ -44,20 +44,21 @@ Settled in the setup session. Do not reopen without a reason.
 All four speak OpenAI-compatible chat completions, so the server holds **one adapter** with a
 swapped `baseURL`. Never add a second code path.
 
-**`nvidia`, `groq` and `ollama` are wired.** The other two are documented so we know where to
-go if those stop being sufficient — do not add them to `.env.example` until they are
-actually needed.
+**`groq`, `ollama` and `nvidia` are wired; `groq` is the default.** The other two are
+documented so we know where to go if those stop being sufficient — do not add them to
+`.env.example` until they are actually needed.
 
 | Profile | Status | Use | Cost |
 |---|---|---|---|
-| `nvidia` | **wired** | still the default, with Llama 3.2 11B: 0 of 42 in the provider study. Its best, `nvidia/nemotron-3-super-120b-a12b`, 31 of 42 | free, no card, ~40 RPM, no daily cap |
-| `groq` | **wired** | hosted Qwen (`qwen/qwen3.8-27b`), 42 of 42 in the provider study | free, no card, per model: 1,000 requests/day, 8,000 tokens/min (7,000 input; about 4–5 steps); the server waits out short 429s |
-| `ollama` | **wired** | air-gap demo, offline dev | free, local |
+| `groq` | **wired, default** | hosted Qwen (`qwen/qwen3.8-27b`), 42 of 42 in the provider study | free, no card, per model: 1,000 requests/day, 8,000 tokens/min (7,000 input; about 4–5 steps); the server waits out short 429s |
+| `ollama` | **wired** | air-gap demo, offline dev, and the fallback when Groq's day runs out | free, local |
+| `nvidia` | **wired** | no daily cap. Its default model, Llama 3.2 11B, did 0 of 42 in the provider study; set `NVIDIA_MODEL=nvidia/nemotron-3-super-120b-a12b` (37 of 42) to use it | free, no card, ~40 RPM, no daily cap |
 | `cloudflare` | not wired | also hosts `qwen3.8-27b` | free, no card, 10k neurons/day |
 | `openrouter` | not wired | last resort | **50 req/day** without credits — unusable as a daily driver |
 
-Each teammate needs **their own** NVIDIA key. The 40 RPM is per account; teammates sharing
-one key will rate-limit each other into confusion during crunch.
+Each teammate needs **their own** Groq key (and NVIDIA key, if they use it). The limits are
+per account; teammates sharing one key will rate-limit each other into confusion during
+crunch, and a study run can use up the day's quota before a demo.
 
 > **Do not use GPT / Gemini / Claude as the server brain.** Brief §4.4 requires an
 > offline-deployable open-weight model. Getting this wrong breaks the privacy claim.
@@ -229,23 +230,28 @@ add to it whenever a change needs a manual check, and tick items off when report
     "ID number 1" pill (read from the canvas by OCR, then hidden)
   - `fixtures/pages/checkout.html`, `Change the coupon code to SAVE20`: no order is placed;
     if the model tries, its step says "not clicked: it would place an order or pay"
-  - with Groq (`$env:MODEL_PROVIDER = "groq"`), several tasks in a row: steps slow down to
-    ~14 s when the minute's tokens run out, but no task fails with "rate limit reached"
+  - with the default provider (Groq), several tasks in a row: steps slow down to ~14 s when
+    the minute's tokens run out, but no task fails with "rate limit reached"
+- [ ] **Groq is the default now**: with no `$env:MODEL_PROVIDER` set, `pnpm dev:server` and
+      the side panel's header show `qwen/qwen3.8-27b`. If they show another model, the root
+      `.env` still sets `MODEL_PROVIDER` (it overrides the default): change it to `groq` or
+      delete the line. Needs `GROQ_API_KEY` in `.env`
 - [ ] **Run the eval in Chromium** once: `pnpm --filter @skrim/eval exec playwright install
       chromium` (~150 MB, once), then `pnpm eval`; compare with `pnpm eval:node`
 - [ ] **Export the OmniParser icon detector** (Python venv, `scripts/`): the one-time setup in
       "Setup — fresh clone"
 - [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
-- [ ] **Pick the default provider**: the study ([`docs/provider-study.md`](docs/provider-study.md))
-      points to Groq's Qwen 3.8 27B; the default is still NVIDIA Llama 3.2 11B (0 of 42)
+- [x] **Pick the default provider**: Groq's Qwen 3.8 27B, as the study
+      ([`docs/provider-study.md`](docs/provider-study.md)) recommends (decided 2026-10-02)
 
 ### What's left, in order
 
 **1. Prove it in a real browser, and pick the model.**
 - [x] Run [`docs/testing.md`](docs/testing.md) section 5 in Chrome (its bugs fixed)
-- [x] Measure Groq's Qwen 3.8 with `pnpm test:agent`: 6 of 6 (see "Open findings")
+- [x] Measure Groq's Qwen 3.8 with `pnpm test:agent`: 6 of 6
 - [x] A proper provider study: task success against free-tier limits, per model
       ([`docs/provider-study.md`](docs/provider-study.md), `pnpm study`)
+- [x] Make its winner, Groq's Qwen 3.8 27B, the default planner
 
 **2. Perception beyond the DOM** (WS2, WS3)
 - [x] GLiNER inference for names and addresses in free text
@@ -276,23 +282,21 @@ Collected while merging the team's first PRs, while testing and closing the loop
 the first Chrome test. Each needs a decision or a follow-up. Delete an entry once it is
 dealt with.
 
-**Pick the default provider: the study says Groq's Qwen 3.8 27B.** The full study is in
-[`docs/provider-study.md`](docs/provider-study.md): 8 free open-weight models, 14 agent
-tasks, 3 runs each. In short:
-- Groq `qwen/qwen3.8-27b` and `openai/gpt-oss-120b` passed 42 of 42; Qwen is twice as fast
-  (0.5 s a step) and needs fewer steps. Groq's limits: 8,000 tokens a minute (7,000 input),
-  about 4–5 steps, which the server now waits out when Groq says how long (usually 2–3 s),
-  so back-to-back steps take ~14 s; and a daily cap that two study runs in a row used up
-  (which one was not captured; the study now records it). Each teammate needs a key.
-- NVIDIA's best, Nemotron 3 Super, passed 31 of 42 (37 with the new prompt rule), slower,
-  with the odd 503, but no daily cap: a fallback.
-- **Today's default, NVIDIA Llama 3.2 11B, passed 0 of 42.** It never says done.
-- Local Qwen3-VL 4B passed 31 of 42 and, asked to change a coupon, **placed the order**. A
-  prompt rule did not stop it; the loop now refuses such clicks (`lib/agent/commit-guard.ts`).
-
-The default in `apps/server/src/config.ts` is still NVIDIA Llama: switching it, and
-whether gpt-oss (OpenAI's open-weight model) is acceptable at all, is the owner's call.
-Cloudflare Workers AI hosts Qwen 3.8 too, if Groq's limits ever bite.
+**Groq is the default; moving off it when its day runs out is by hand.** Groq's
+`qwen/qwen3.8-27b` did all 42 runs of the provider study
+([`docs/provider-study.md`](docs/provider-study.md)), twice as fast as the runner-up. Its
+free tier is the cost: 4–5 steps a minute, which the server waits out (back-to-back steps
+take ~14 s), and a daily cap that two study runs in a row used up. The server does not
+switch by itself: when the day runs out, restart it with `MODEL_PROVIDER=ollama` (local
+Qwen3-VL 4B, 37 of 42 with the commit guard, which stops it placing orders nobody asked
+for). Still open:
+- Moving to the next model automatically when one says "come back in minutes". Each step
+  is planned from scratch, so a task could carry on with another model; not tried.
+- Groq's `openai/gpt-oss-120b` also did 42 of 42, on its own quota, which would double the
+  day. Whether OpenAI's open-weight model is acceptable on the slides is a team call.
+- NVIDIA's default model is still Llama 3.2 11B, which did 0 of 42 (it never says done).
+  Anyone using NVIDIA should set Nemotron 3 Super (37 of 42).
+- Cloudflare Workers AI hosts Qwen 3.8 too, if Groq's limits ever bite.
 
 **Which names are private is a rule; where it must trade, privacy wins.** GLiNER cannot tell
 the user's name from a public figure's (it hid 52 names on Wikipedia's main page), and
@@ -355,11 +359,11 @@ npm install -g pnpm      # NOT corepack: it writes to Program Files and needs ad
 git clone <repo> && cd skrim
 pnpm install
 pnpm models:fetch        # weights are gitignored; extension has nothing to load without this
-cp .env.example .env     # then add your own NVIDIA key
+cp .env.example .env     # then add your own Groq key
 ```
 
 **`.env` lives at the repo root**, not in `apps/server/`. One file for the whole monorepo.
-`NVIDIA_API_KEY` is the only value you must fill in — everything else has a working default.
+`GROQ_API_KEY` is the only value you must fill in — everything else has a working default.
 
 **Only if you own the model pipeline (workstream 3):**
 
@@ -373,8 +377,8 @@ python -m venv .venv
 > activation silently failing is how the setup session nuked a global Python install.
 
 **Only if you own the air-gap path:** `winget install Ollama.Ollama` then
-`ollama pull qwen3-vl:4b-instruct` (3.3 GB). Today this is also the planner that works best
-(see "Open findings"); with Ollama running, start the server with `MODEL_PROVIDER=ollama`.
+`ollama pull qwen3-vl:4b-instruct` (3.3 GB). This is also the fallback when Groq's daily
+limit runs out: with Ollama running, start the server with `MODEL_PROVIDER=ollama`.
 
 ---
 
@@ -440,7 +444,7 @@ Needs: + Python venv (only for the ONNX export).
 - `scripts/` — model export and fetch
 
 ### 4 · Server agent, action schema, providers
-Needs: + own NVIDIA key.
+Needs: + own Groq key.
 - [`apps/server/CLAUDE.md`](apps/server/CLAUDE.md) — the planning brain
 
 ### 5 · Eval harness and metrics

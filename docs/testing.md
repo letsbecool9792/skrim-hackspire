@@ -13,7 +13,8 @@ pnpm install
 pnpm models:fetch        # re-run after pulling: new model files get added over time
 ```
 
-Your root `.env` needs `NVIDIA_API_KEY` (or `GROQ_API_KEY`, see section 3).
+Your root `.env` needs `GROQ_API_KEY`: the default planner is Groq's Qwen 3.8 27B. The
+alternatives are in section 3.
 
 **Load the extension in Chrome**
 
@@ -34,7 +35,7 @@ and loading it again turns **Allow access to file URLs** back off; without it, t
 fail with a message saying so.
 
 **The side panel header shows which model the server is using.** If it says
-`llama-3.2-11b-vision-instruct` when you meant to use Ollama, an older server is still
+`qwen/qwen3.8-27b` when you meant to use Ollama, an older server is still
 running on port 3000 (see section 3).
 
 **Where logs go.** Nothing logs page content: ids, counts and timings only.
@@ -124,14 +125,15 @@ From the provider study ([`provider-study.md`](provider-study.md), 14 tasks x 3 
 
 | Setup | How | Result |
 |---|---|---|
-| **Groq, Qwen 3.8 27B (hosted)** | `GROQ_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "groq"; pnpm dev:server` | **Best: 42 of 42**, 0.5 s a step. The free tier allows about 4–5 steps a minute (8,000 tokens); the server waits out Groq's short "try again in 2 s" instead of failing |
-| **Ollama, Qwen3-VL 4B instruct (local)** | `ollama pull qwen3-vl:4b-instruct`, then `$env:MODEL_PROVIDER = "ollama"; pnpm dev:server` | 31 of 42, 0.6 s a step after an ~8 s first load. Overreaches: it placed an order when asked to change a coupon, which the loop now refuses |
-| NVIDIA, Nemotron 3 Super 120B | `NVIDIA_API_KEY` in `.env`, then `$env:NVIDIA_MODEL = "nvidia/nemotron-3-super-120b-a12b"` | 31 of 42, 2.6 s a step; 40 requests a minute and no daily cap |
-| NVIDIA, Llama 3.2 11B Vision (still the default) | `NVIDIA_API_KEY` in `.env` | **0 of 42**: it never says done |
+| **Groq, Qwen 3.8 27B (hosted), the default** | `GROQ_API_KEY` in `.env`, then `pnpm dev:server` | **Best: 42 of 42**, 0.5 s a step. The free tier allows about 4–5 steps a minute (8,000 tokens); the server waits out Groq's short "try again in 2 s" instead of failing. It also has a daily cap |
+| **Ollama, Qwen3-VL 4B instruct (local)**: offline, and when Groq's day runs out | `ollama pull qwen3-vl:4b-instruct`, then `$env:MODEL_PROVIDER = "ollama"; pnpm dev:server` | 31 of 42, 0.6 s a step after an ~8 s first load. Overreaches: it placed an order when asked to change a coupon, which the loop now refuses (37 of 42 with that guard) |
+| NVIDIA, Nemotron 3 Super 120B | `NVIDIA_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "nvidia"; $env:NVIDIA_MODEL = "nvidia/nemotron-3-super-120b-a12b"` | 31 of 42, 2.6 s a step; 40 requests a minute and no daily cap |
+| NVIDIA, Llama 3.2 11B Vision (NVIDIA's default model) | `NVIDIA_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "nvidia"` | **0 of 42**: it never says done |
 
 `$env:...` settings last until you close that terminal. To make one permanent, set
 `MODEL_PROVIDER` (and `OLLAMA_MODEL=qwen3-vl:4b-instruct`, if your `.env` names a model) in
-the root `.env`. The plain `qwen3-vl:4b` tag is the "thinking" build: 5–40 s a step.
+the root `.env`; a `MODEL_PROVIDER` line there overrides the Groq default. The plain
+`qwen3-vl:4b` tag is the "thinking" build: 5–40 s a step.
 
 ---
 
