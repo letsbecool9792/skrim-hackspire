@@ -112,6 +112,12 @@ describe("outbound tripwire", () => {
     assert.equal(scanForRawPii("1234567890123456").length, 0);
   });
 
+  test("does not take a book's ISBN for a card, though it passes Luhn", () => {
+    // Both from the references of Wikipedia's Alan Turing article.
+    assert.equal(scanForRawPii("ISBN 978-0-307-33598-2").length, 0);
+    assert.equal(scanForRawPii("ISBN 9781402067082").length, 0);
+  });
+
   test("never reports the offending value in the finding", () => {
     const findings = scanForRawPii("suparno@example.com");
     assert.equal(JSON.stringify(findings).includes("suparno"), false);

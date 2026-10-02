@@ -70,7 +70,9 @@ export function scanForRawPii(serialised: string): RawPiiFinding[] {
   }
   for (const m of serialised.matchAll(CARD_CANDIDATE)) {
     const digits = m[0].replace(/[^\d]/g, "");
-    if (digits.length >= 13 && digits.length <= 19 && passesLuhn(digits)) {
+    // A book's ISBN-13 (978/979) passes Luhn; no card number starts with 0.
+    const notACard = digits.startsWith("0") || (digits.length === 13 && /^97[89]/.test(digits));
+    if (!notACard && digits.length >= 13 && digits.length <= 19 && passesLuhn(digits)) {
       findings.push({ kind: "CARD", atIndex: m.index, length: m[0].length });
     }
   }
