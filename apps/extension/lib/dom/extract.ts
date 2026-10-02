@@ -4,13 +4,25 @@ import {
   type ScreenElement,
 } from "@skrim/schema";
 
+/** What a form field says about its contents. Input for PII detection only. */
+export interface FieldInfo {
+  inputType?: string;
+  autocomplete?: string;
+}
+
 export interface DomScreenGraph {
+  /**
+   * NOT yet redacted: labels and values are the page's raw text. The side
+   * panel redacts them before anything is sent anywhere.
+   */
   elements: ScreenElement[];
   /**
    * Element id -> the live DOM element it names. This is what the action
    * executor uses to find the target of `{ type: "click", target: "e17" }`.
    */
   registry: Map<string, Element>;
+  /** Element id -> field type and autocomplete hint, for form fields that have them. */
+  fields: Record<string, FieldInfo>;
 }
 
 /**
@@ -34,6 +46,7 @@ export function extractScreenElements(): ScreenElement[] {
 export function extractScreenGraph(): DomScreenGraph {
   const elements: ScreenElement[] = [];
   const registry = new Map<string, Element>();
+  const fields: Record<string, FieldInfo> = {};
   const includedElements = new Map<Element, ScreenElement>();
   const candidates = document.querySelectorAll("*");
 
@@ -50,10 +63,13 @@ export function extractScreenGraph(): DomScreenGraph {
       continue;
     }
 
+    const label = getAccessibleName(element);
+    const value = getValue(element, label);
     const screenElement: ScreenElement = {
       id: createElementId(elements.length),
       role: getRole(element),
-      label: getAccessibleName(element),
+      label,
+      ...(value === undefined ? {} : { value }),
       bbox: getBoundingBox(element),
       source: "dom",
       state: getState(element),
@@ -62,6 +78,8 @@ export function extractScreenGraph(): DomScreenGraph {
     elements.push(screenElement);
     includedElements.set(element, screenElement);
     registry.set(screenElement.id, element);
+    const field = getFieldInfo(element);
+    if (field) fields[screenElement.id] = field;
   }
 
   addChildren(includedElements);
@@ -70,7 +88,42 @@ export function extractScreenGraph(): DomScreenGraph {
     ScreenElementSchema.parse(element);
   }
 
-  return { elements, registry };
+  return { elements, registry, fields };
+}
+
+/** Input types whose value is not text the user typed or chose. */
+const NON_VALUE_INPUT_TYPES = new Set(["checkbox", "radio", "file", "hidden", "submit", "reset", "button", "image"]);
+const BUTTON_INPUT_TYPES = new Set(["submit", "reset", "button"]);
+
+/**
+ * A field's current value, or, for anything else, its visible text when that
+ * differs from its accessible name. People describe a button by what it shows
+ * ("Show panel"), while its aria-label may say something else ("Toggle
+ * panel"); the planner needs both. Raw text: redacted later in the side panel.
+ */
+function getValue(element: Element, label: string | undefined): string | undefined {
+  let value: string | undefined;
+  if (element instanceof HTMLInputElement) {
+    if (NON_VALUE_INPUT_TYPES.has(element.type)) return undefined;
+    value = normalizeText(element.value);
+  } else if (element instanceof HTMLTextAreaElement) {
+    value = normalizeText(element.value);
+  } else if (element instanceof HTMLSelectElement) {
+    value = normalizeText(element.selectedOptions[0]?.textContent);
+  } else if (element instanceof HTMLElement && element.isContentEditable) {
+    value = normalizeText(element.textContent);
+  } else if (TEXT_FALLBACK_ROLES.has(getRole(element))) {
+    value = normalizeText(element.textContent);
+  }
+  return value === label ? undefined : value;
+}
+
+function getFieldInfo(element: Element): FieldInfo | undefined {
+  if (!isLabelableControl(element)) return undefined;
+  const inputType = element instanceof HTMLInputElement ? element.type : undefined;
+  const autocomplete = element.getAttribute("autocomplete")?.trim() || undefined;
+  if (!inputType && !autocomplete) return undefined;
+  return { ...(inputType ? { inputType } : {}), ...(autocomplete ? { autocomplete } : {}) };
 }
 
 function addChildren(includedElements: Map<Element, ScreenElement>): void {
@@ -323,7 +376,17 @@ function getAccessibleName(element: Element): string | undefined {
     return associatedLabel;
   }
 
-  // 4. Placeholder
+  // 4. The caption of <input type="submit|reset|button">, which is its value
+  if (element instanceof HTMLInputElement && BUTTON_INPUT_TYPES.has(element.type)) {
+    const caption = normalizeText(element.value);
+    if (caption) {
+      return caption;
+    }
+    if (element.type === "submit") return "Submit";
+    if (element.type === "reset") return "Reset";
+  }
+
+  // 5. Placeholder
   if (isTextEntryControl(element)) {
     const placeholder = normalizeText(element.placeholder);
     if (placeholder) {
@@ -331,19 +394,19 @@ function getAccessibleName(element: Element): string | undefined {
     }
   }
 
-  // 5. Text content
+  // 6. Text content
   const textContent = getTextFallback(element);
   if (textContent) {
     return textContent;
   }
 
-  // 6. title
+  // 7. title
   const title = normalizeText(htmlElement.getAttribute("title"));
   if (title) {
     return title;
   }
 
-  // 7. alt text for images
+  // 8. alt text for images
   const alt = getAltText(element);
   if (alt) {
     return alt;
@@ -535,6 +598,11 @@ function getRole(element: Element): ScreenElement["role"] {
           return "slider";
         case "search":
           return "searchbox";
+        case "submit":
+        case "reset":
+        case "button":
+        case "image":
+          return "button";
         default:
           return "textbox";
       }
