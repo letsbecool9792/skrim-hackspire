@@ -55,7 +55,7 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 159 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 158 tests:
 
 | Tests | Covers |
 |---|---|
@@ -65,7 +65,7 @@ Runs the five invariant rules, typechecks all 7 packages, and runs 159 tests:
 | 59 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection (birth dates, labels from the element before), form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), whole addresses, the token vault |
 | 19 in `lib/vision` | DOM + vision fusion, the escalation policy, and which regions to read with OCR |
 | 17 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons, only what is near the view) and click verification, in a simulated DOM |
-| 23 in `lib/agent` | The whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel), and which names are private |
+| 22 in `lib/agent` | The whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel), and which names are private |
 
 The same command runs in CI on every PR.
 
@@ -92,9 +92,10 @@ Try your own sentences to see what the model misses: a name tucked into a long s
 of other data ("Hi, I'm Suparno. Email ...") often slips through.
 
 The demo shows everything the detectors find. In a task, names and addresses are hidden only
-where they are private (`lib/agent/private-names.ts`): on a page that shows the user's data,
-after words like "Welcome back" or "Deliver to", and wherever a name already hidden appears
-again. Names in articles, news and search results stay readable.
+where they may be private (`lib/agent/private-names.ts`): everywhere in the goal, on a page
+that shows the user's data, after words like "Welcome back" or "Deliver to", and wherever a
+name already hidden appears again. Other names in articles, news and search results stay
+readable.
 
 ---
 
@@ -175,11 +176,12 @@ pill, and the page gets the real address. The name and phone fields may stay emp
 form does not need them and the goal did not ask. The **ⓘ** button under the result says
 what stayed on the device: here a name, an email address, a phone number and an address.
 
-Then a real site, for example Wikipedia with `Search for Alan Turing`. There should be no
-"Sent to the server as" line: a public name stays as written. The first step should come
-quickly: only the part of the page in and near the view is read, and name detection does
-not run on a page that shows none of your data. Clicking a link that opens a new page
-continues the task on that page.
+Then a real site, for example Wikipedia with `Search for Alan Turing`. The chat shows "Sent to
+the server as: Search for name 1": every name in a goal is hidden, public or not, because no
+rule can tell a public figure from a contact. "Alan Turing" is then hidden on the pages too;
+other names stay readable. The first step should come quickly: only the part of the page in
+and near the view is read, and name detection does not run on a page that shows none of your
+data. Clicking a link that opens a new page continues the task on that page.
 
 Text that exists only as pixels: open `fixtures/pages/canvas-card.html` (an ID card drawn on a
 canvas) and ask `What is the PAN on my ID?`. Skrim captures the tab, reads the canvas with

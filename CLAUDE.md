@@ -166,7 +166,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (159 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (158 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       before the OmniParser detector. The built extension is 86.6 MB, including ONNX
@@ -210,20 +210,36 @@ Built, by workstream:
 - [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, `pnpm test:agent`,
       `pnpm eval:node`. All in [`docs/testing.md`](docs/testing.md)
 
+### Waiting on Suparno (manual)
+
+Things only a person at the browser, or the project owner, can do. Keep this list current:
+add to it whenever a change needs a manual check, and tick items off when reported.
+
+- [ ] **Retest in Chrome** what changed since the first Chrome test (none of it tried in a browser
+      yet), reloading Skrim on `chrome://extensions` first:
+  - `Click show panel`, `Open the details section` and `Go to section 2` on the click
+    fixture take one click each, then ✓ Done
+  - the ⓘ button under a result shows what stayed on the device; the input box has no
+    scroll arrows
+  - Wikipedia, `Search for Alan Turing`: "Sent to the server as: search for name 1", and
+    the first step comes quickly; "Alan Turing" is hidden on the pages too, other names
+    are not; a link that opens a new page continues the task
+  - the form fixture still hides the name, email, phone and address (ⓘ)
+  - `fixtures/pages/canvas-card.html`, `What is the PAN on my ID?`: the answer shows an
+    "ID number 1" pill (read from the canvas by OCR, then hidden)
+- [ ] **Run the eval in Chromium** once: `pnpm --filter @skrim/eval exec playwright install
+      chromium` (~150 MB, once), then `pnpm eval`; compare with `pnpm eval:node`
+- [ ] **Export the OmniParser icon detector** (Python venv, `scripts/`): the one-time setup in
+      "Setup — fresh clone"
+- [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
+- [ ] **Pick the default provider**, from the provider study (see "Open findings")
+
 ### What's left, in order
 
 **1. Prove it in a real browser, and pick the model.**
 - [x] Run [`docs/testing.md`](docs/testing.md) section 5 in Chrome (its bugs fixed)
 - [x] Measure Groq's Qwen 3.8 with `pnpm test:agent`: 6 of 6 (see "Open findings")
-- [ ] **Retest in Chrome** what changed after the first Chrome test, none of it tried in a browser
-      yet: `Click show panel`, `Open the details section` and `Go to section 2` take one
-      click each; the ⓘ button under a result; the input box has no scroll arrows; Wikipedia
-      `Search for Alan Turing` is sent as written and starts quickly, and a link that
-      opens a new page continues the task; the form fixture still hides the name, email,
-      phone and address; on `fixtures/pages/canvas-card.html`, `What is the PAN on my ID?`
-      should show a "ID number 1" pill (the PAN read from the canvas and hidden)
-- [ ] Run `pnpm eval` once (Playwright's Chromium first) and compare with `pnpm eval:node`
-- [ ] Settle the default provider, given Groq's rate limit (see "Open findings")
+- [ ] A proper provider study: task success against free-tier limits, per model
 
 **2. Perception beyond the DOM** (WS2, WS3)
 - [x] GLiNER inference for names and addresses in free text
@@ -277,14 +293,16 @@ NVIDIA hosts no Qwen at all (81 models listed); Cloudflare Workers AI hosts Qwen
 Still to decide: the default provider for teammates without a GPU. NVIDIA's only fast
 model cannot finish tasks; Groq's can but is rate limited.
 
-**Which names are private is a rule, and it has gaps.** GLiNER cannot tell the user's name
-from a public figure's (it hid 52 names on Wikipedia's main page), and asking it for
-"famous person" did not help. So `lib/agent/private-names.ts` decides by where a name
-appears: every name on a page that shows the user's data, a name after words addressing
-the user ("Welcome back", "Deliver to"), in the goal a name after "email", "call" and the
-like, and any name already hidden in the task. Known gaps:
-- A private name in the goal with none of those words, on a public page ("find Rahul
-  Sharma's profile"), is sent as written.
+**Which names are private is a rule; where it must trade, privacy wins.** GLiNER cannot tell
+the user's name from a public figure's (it hid 52 names on Wikipedia's main page), and
+asking it for "famous person" did not help. So `lib/agent/private-names.ts` decides by where
+a name appears: every name in the goal (the user's own words), every name on a page that
+shows the user's data, a name after words addressing the user ("Welcome back", "Deliver
+to"), and any name already hidden in the task, wherever it appears again. The owner's call:
+a public name hidden is better than a private one sent, so "search for alan
+turing" goes as "search for <PII:NAME:1>", and "Alan Turing" is hidden on every page of that
+task. Known gaps:
+- A private name on a public page, outside the goal and after no cue words, is readable.
 - A business phone number makes a page count as personal, so everything named on it is
   hidden: the eval's search results page loses a celebrity chef and "biryani".
 - The cue words are English.
