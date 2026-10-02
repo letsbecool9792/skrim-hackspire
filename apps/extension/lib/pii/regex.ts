@@ -38,6 +38,12 @@ const ACCOUNT_CONTEXT = /account(?:\s+number|\s+no\.?|#)?/i;
 const DATE_PATTERN = /\b(?:\d{1,2}[/.-]\d{1,2}[/.-](?:19|20)\d{2}|(?:19|20)\d{2}-\d{2}-\d{2}|\d{1,2} (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* (?:19|20)\d{2})\b/gi;
 const DOB_CONTEXT = /date of birth|birth ?date|\bd\.?o\.?b\b|\bborn\b/i;
 
+const PASSPORT_PATTERN = /\b[A-Z]\d{7}\b/gi;
+const PASSPORT_CONTEXT = /passport/i;
+
+const OTHER_ID_PATTERN = /\b[A-Z0-9-]{4,20}\b/gi;
+const OTHER_ID_CONTEXT = /(?:patient|member|customer|employee)\s+id|policy\s+(?:number|no\.?|#)|\bmrn\b/i;
+
 /** How far back a label may sit before the number it describes. */
 const CONTEXT_WINDOW = 48;
 
@@ -137,7 +143,9 @@ export function findRegexCandidates(text: string): PiiCandidate[] {
     ...findMatches(text, "ACCOUNT", "regex", 1, IFSC_PATTERN),
     ...findMatches(text, "ACCOUNT", "regex", 1, UPI_PATTERN),
     ...findContextualNumbers(text, AADHAAR_PATTERN, AADHAAR_CONTEXT, "GOV_ID"),
+    ...findContextualNumbers(text, PASSPORT_PATTERN, PASSPORT_CONTEXT, "GOV_ID"),
     ...findContextualNumbers(text, ACCOUNT_NUMBER_PATTERN, ACCOUNT_CONTEXT, "ACCOUNT"),
+    ...findContextualNumbers(text, OTHER_ID_PATTERN, OTHER_ID_CONTEXT, "OTHER"),
     ...findContextualNumbers(text, DATE_PATTERN, DOB_CONTEXT, "DOB"),
   ];
 }
@@ -177,4 +185,10 @@ export function detectAadhaarNumbers(text: string, vault: TokenVault): PiiMatch[
 
 export function detectAccountNumbers(text: string, vault: TokenVault): PiiMatch[] {
   return tokenise(findContextualNumbers(text, ACCOUNT_NUMBER_PATTERN, ACCOUNT_CONTEXT, "ACCOUNT"), vault);
+}
+export function detectPassportNumbers(text: string, vault: TokenVault): PiiMatch[] {
+  return tokenise(findContextualNumbers(text, PASSPORT_PATTERN, PASSPORT_CONTEXT, "GOV_ID"), vault);
+}
+export function detectOtherIds(text: string, vault: TokenVault): PiiMatch[] {
+  return tokenise(findContextualNumbers(text, OTHER_ID_PATTERN, OTHER_ID_CONTEXT, "OTHER"), vault);
 }
