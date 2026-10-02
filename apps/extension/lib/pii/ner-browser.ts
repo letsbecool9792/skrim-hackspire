@@ -28,7 +28,12 @@ async function fetchJson(path: string): Promise<object> {
 
 export function loadNameFinder(): Promise<NameFinder> {
   loading ??= (async () => {
+    // Extension sidepanel pages are not cross-origin isolated, so
+    // SharedArrayBuffer is unavailable and ORT's threaded Worker cannot start.
+    // Disable the proxy worker path *before* ORT initialises anything, so it
+    // runs inference inline on a single WASM thread instead.
     ort.env.wasm.numThreads = 1;
+    ort.env.wasm.proxy = false;
     const [tokenizerJson, tokenizerConfig] = await Promise.all([
       fetchJson(`${MODEL_DIR}tokenizer.json`),
       fetchJson(`${MODEL_DIR}tokenizer_config.json`),
