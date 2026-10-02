@@ -2,6 +2,8 @@ import { log, timed } from "@skrim/shared";
 
 export interface CaptureResult {
   data: Uint8Array;
+  /** The same PNG as a data URI, which is what the OCR engine takes. In memory only. */
+  dataUri: string;
   capturedAt: number;
   durationMs: number;
   width: number;
@@ -33,7 +35,7 @@ export async function captureIfNeeded(tabId: number): Promise<CaptureResult | nu
         width = (((data[16]! << 24) | (data[17]! << 16) | (data[18]! << 8) | data[19]!) >>> 0);
         height = (((data[20]! << 24) | (data[21]! << 16) | (data[22]! << 8) | data[23]!) >>> 0);
       }
-      return { data, capturedAt: lastCaptureAt, durationMs: lastCaptureAt - startedAt, width, height };
+      return { data, dataUri, capturedAt: lastCaptureAt, durationMs: lastCaptureAt - startedAt, width, height };
     } catch (error) {
       log.warn("capture.failed", { tabId, error: String(error) });
       return null;

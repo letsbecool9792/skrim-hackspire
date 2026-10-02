@@ -20,6 +20,14 @@ export const ERROR_CODES = [
   "NAVIGATION_BLOCKED",
   // The planner ended the task with { type: "done", success: false }.
   "GOAL_NOT_ACHIEVED",
+  // The task ran past its time budget.
+  "TASK_TIMEOUT",
+  // The server could not be reached, or answered with an error.
+  "PLANNER_ERROR",
+  // Several steps in a row changed nothing on the page.
+  "NO_PROGRESS",
+  // assertOutboundSafe() found raw PII in a request: a redaction bug. Nothing was sent.
+  "PII_TRIPWIRE",
 ] as const;
 
 export const ErrorCodeSchema = z.enum(ERROR_CODES);

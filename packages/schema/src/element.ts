@@ -81,11 +81,13 @@ export const ElementSourceSchema = z.enum(["dom", "vision", "fused"]);
 export type ElementSource = z.infer<typeof ElementSourceSchema>;
 
 /**
- * One node of the screen graph, already redacted.
+ * One node of the screen graph.
  *
- * INVARIANT: by the time a ScreenElement exists, `label` and `value` contain
- * either safe text or PII tokens - never a raw email, phone number or name.
- * Redaction happens during graph construction, not before transmission.
+ * INVARIANT: by the time a ScreenElement leaves the extension's side panel,
+ * `label`, `value` and `hint` contain either safe text or PII tokens - never a
+ * raw email, phone number or name. The content script extracts raw elements;
+ * the side panel redacts them against the task's vault as soon as they arrive,
+ * before any planning, logging or display.
  */
 export const ScreenElementSchema = z.object({
   id: ElementIdSchema,
@@ -95,8 +97,9 @@ export const ScreenElementSchema = z.object({
   label: z.string().optional(),
 
   /**
-   * Current value for inputs, or text content for static nodes.
-   * Holds a PiiToken when the real value was sensitive.
+   * Current value for inputs and selects, or the visible text when it differs
+   * from `label` (a button with aria-label "Toggle panel" showing "Show
+   * Panel"). Holds a PiiToken when the real value was sensitive.
    */
   value: z.string().optional(),
 

@@ -1,4 +1,4 @@
-import type { Action } from "@skrim/schema";
+import { findPiiTokens, type Action } from "@skrim/schema";
 import type { ActionResult } from "./dispatcher.ts";
 
 type TypeAction = Extract<Action, { type: "type" }>;
@@ -11,9 +11,13 @@ type WaitAction = Extract<Action, { type: "wait" }>;
 export async function executeType(action: TypeAction, actionId: string, registry: Map<string, Element>, getObservationVersion: () => number, resolveToken?: (value: string) => string | null): Promise<ActionResult> {
   const element = registry.get(action.target);
   if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLElement && element.isContentEditable)) return failure(actionId, "TARGET_NOT_FOUND", getObservationVersion);
-  const value = resolveToken?.(action.value) ?? (action.value.startsWith("<PII:") ? null : action.value);
-  if (value === null) return failure(actionId, "CONTENT_SCRIPT_ERROR", getObservationVersion);
+  const value = resolveToken?.(action.value) ?? action.value;
+  // Fail closed: never type a token into a real form, even one buried in a sentence.
+  if (findPiiTokens(value).length > 0) return failure(actionId, "CONTENT_SCRIPT_ERROR", getObservationVersion);
   const before = getObservationVersion();
+  // Typing what the field already holds changes nothing, and must not count
+  // as progress: a planner told "verified" will happily do it again.
+  const alreadyThere = readElementValue(element) === value;
   if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
     const prototype = element instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
     Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(element, value);
@@ -22,27 +26,49 @@ export async function executeType(action: TypeAction, actionId: string, registry
   }
   element.dispatchEvent(new Event("input", { bubbles: true }));
   element.dispatchEvent(new Event("change", { bubbles: true }));
-  if (action.submit) element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  return success(actionId, getObservationVersion() > before || readElementValue(element) === value, getObservationVersion);
+  if (action.submit) pressEnter(element);
+  const typed = !alreadyThere && readElementValue(element) === value;
+  return success(actionId, typed || (action.submit === true && getObservationVersion() > before), getObservationVersion);
+}
+
+/**
+ * A synthetic Enter keydown does not submit a form; browsers only do that for
+ * real key presses. So submit the field's form the way Enter would, with
+ * validation and the submit event, and send the key events for pages that
+ * listen for Enter themselves (search boxes, chat inputs).
+ */
+function pressEnter(element: HTMLElement): void {
+  const key = (type: string) => new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true });
+  // A page that handles Enter itself usually cancels the event; then it has
+  // done the submitting, and doing it again would submit twice.
+  const handledByPage = !element.dispatchEvent(key("keydown"));
+  element.dispatchEvent(key("keypress"));
+  element.dispatchEvent(key("keyup"));
+  if (!handledByPage && element instanceof HTMLInputElement && element.form) element.form.requestSubmit();
 }
 
 export async function executeScroll(action: ScrollAction, actionId: string, registry: Map<string, Element>, getObservationVersion: () => number): Promise<ActionResult> {
   const target = action.target ? registry.get(action.target) : document.documentElement;
   if (!(target instanceof HTMLElement)) return failure(actionId, "TARGET_NOT_FOUND", getObservationVersion);
   const amount = action.amount ?? window.innerHeight;
+  const before = [target.scrollLeft, target.scrollTop];
   target.scrollBy({ left: action.direction === "left" ? -amount : action.direction === "right" ? amount : 0, top: action.direction === "up" ? -amount : action.direction === "down" ? amount : 0, behavior: "instant" });
-  return success(actionId, true, getObservationVersion);
+  // Unverified at the end of the page, so the planner stops scrolling.
+  return success(actionId, target.scrollLeft !== before[0] || target.scrollTop !== before[1], getObservationVersion);
 }
 
 export async function executeSelect(action: SelectAction, actionId: string, registry: Map<string, Element>, getObservationVersion: () => number): Promise<ActionResult> {
   const element = registry.get(action.target);
   if (!(element instanceof HTMLSelectElement)) return failure(actionId, "TARGET_NOT_FOUND", getObservationVersion);
-  const option = Array.from(element.options).find((candidate) => candidate.textContent?.trim() === action.value || candidate.value === action.value);
+  const wanted = action.value.trim().toLowerCase();
+  const option = Array.from(element.options).find((candidate) => candidate.textContent?.trim().toLowerCase() === wanted || candidate.value.toLowerCase() === wanted);
   if (!option) return failure(actionId, "TARGET_NOT_FOUND", getObservationVersion);
+  const before = element.selectedIndex;
   element.value = option.value;
   element.dispatchEvent(new Event("input", { bubbles: true }));
   element.dispatchEvent(new Event("change", { bubbles: true }));
-  return success(actionId, true, getObservationVersion);
+  // Choosing what was already chosen is not progress.
+  return success(actionId, element.selectedIndex !== before, getObservationVersion);
 }
 
 export async function executeNavigate(action: NavigateAction, actionId: string, getObservationVersion: () => number): Promise<ActionResult> {
@@ -55,13 +81,22 @@ export async function executeNavigate(action: NavigateAction, actionId: string, 
   return success(actionId, true, getObservationVersion);
 }
 
+/**
+ * Reads an element's text for later steps. The raw text goes back to the side
+ * panel, which redacts it before it is stored or sent. Reading changes nothing
+ * on the page, so it counts as verified when there was something to read.
+ */
 export async function executeExtract(action: ExtractAction, actionId: string, registry: Map<string, Element>, getObservationVersion: () => number): Promise<ActionResult> {
-  return registry.has(action.target) ? success(actionId, false, getObservationVersion) : failure(actionId, "TARGET_NOT_FOUND", getObservationVersion);
+  const element = registry.get(action.target);
+  if (!element || !element.isConnected) return failure(actionId, "TARGET_NOT_FOUND", getObservationVersion);
+  const text = (readElementValue(element) || element.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 500);
+  return { ...success(actionId, text.length > 0, getObservationVersion), extractedValue: text };
 }
 
+/** Waiting is what was asked for, so it always counts as verified. */
 export async function executeWait(action: WaitAction, actionId: string, getObservationVersion: () => number): Promise<ActionResult> {
   await new Promise((resolve) => setTimeout(resolve, action.ms));
-  return success(actionId, false, getObservationVersion);
+  return success(actionId, true, getObservationVersion);
 }
 
 function readElementValue(element: Element): string {

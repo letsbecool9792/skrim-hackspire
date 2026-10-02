@@ -1,4 +1,5 @@
 import type { ScreenGraph } from "./graph.js";
+import type { PlanRequest } from "./protocol.js";
 
 /**
  * THE TRIPWIRE.
@@ -78,14 +79,17 @@ export function scanForRawPii(serialised: string): RawPiiFinding[] {
 }
 
 /**
- * Throw if a graph about to be sent still contains raw PII.
+ * Throw if a payload about to be sent still contains raw PII.
+ *
+ * Pass the WHOLE request body, not just the graph: the goal, the history and
+ * extracted values cross the wire too. A `ScreenGraph` alone is still accepted.
  *
  * Call this in the ONE place that performs the network request. Do not scatter
  * it around, and do not catch and ignore it - if this fires, redaction has a
  * bug and the correct response is to stop, not to continue quietly.
  */
-export function assertOutboundSafe(graph: ScreenGraph): void {
-  const findings = scanForRawPii(JSON.stringify(graph));
+export function assertOutboundSafe(payload: ScreenGraph | PlanRequest): void {
+  const findings = scanForRawPii(JSON.stringify(payload));
   if (findings.length === 0) return;
 
   const summary = findings.map((f) => f.kind).join(", ");

@@ -1,0 +1,166 @@
+import assert from "node:assert/strict";
+import { before, describe, test } from "node:test";
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { assertOutboundSafe, type Action, type PlanRequest, type PlanResponse } from "@skrim/schema";
+
+import { getObservationVersion, initObserver } from "../../entrypoints/content/observer.ts";
+import { createContentHandler } from "../content-handler.ts";
+import { domScreenGraphProvider } from "../dom/provider.ts";
+import { registerScreenGraphProvider, type ActionPlanner } from "../integration.ts";
+import { runAgentTask, type AgentEvent, type PageLink } from "./loop.ts";
+
+/**
+ * The whole loop in Node: the real content-side handler, DOM extractor, action
+ * executor, redaction and vault, against a page in happy-dom. Only the planner
+ * is scripted, and the browser's messaging is replaced by a JSON round trip.
+ */
+
+before(() => {
+  GlobalRegistrator.register();
+  Element.prototype.getBoundingClientRect = function () {
+    return { x: 10, y: 10, width: 100, height: 20, top: 10, left: 10, right: 110, bottom: 30, toJSON: () => ({}) } as DOMRect;
+  };
+  Element.prototype.scrollIntoView = () => {};
+  document.body.innerHTML = "<main></main>";
+  initObserver();
+  registerScreenGraphProvider(domScreenGraphProvider);
+});
+
+const handle = createContentHandler(getObservationVersion);
+const link: PageLink = {
+  // Like browser messaging: only JSON-safe data crosses.
+  send: async (message) => JSON.parse(JSON.stringify((await handle(JSON.parse(JSON.stringify(message)))) ?? null)) ?? undefined,
+  watchNavigation: () => ({ started: false, loaded: async () => true, stop: () => {} }),
+};
+
+async function page(html: string): Promise<void> {
+  document.body.innerHTML = html;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/** A planner that answers from a script and keeps every request it was sent. */
+function scripted(next: (request: PlanRequest, step: number) => Action): { planner: ActionPlanner; requests: PlanRequest[] } {
+  const requests: PlanRequest[] = [];
+  const planner: ActionPlanner = async (request) => {
+    requests.push(request);
+    return { action: next(request, requests.length - 1), model: "scripted", latencyMs: 1, repairs: 0 } satisfies PlanResponse;
+  };
+  return { planner, requests };
+}
+
+const idOf = (request: PlanRequest, label: string) => {
+  const element = request.graph.elements.find((e) => e.label === label && e.role !== "text");
+  assert.ok(element, `no element labelled ${label}`);
+  return element.id;
+};
+
+async function run(goal: string, planner: ActionPlanner, signal = new AbortController().signal) {
+  const events: AgentEvent[] = [];
+  await runAgentTask({ goal, planner, link, signal, onEvent: (event) => events.push(event) });
+  const finished = events.at(-1);
+  assert.equal(finished?.type, "finished");
+  return { events, finished: finished as Extract<AgentEvent, { type: "finished" }> };
+}
+
+describe("runAgentTask", () => {
+  test("clicks, sees the page change, and finishes when the planner says done", async () => {
+    await page(`<button aria-label="Increment counter">Count: 0</button>`);
+    const counter = document.querySelector("button")!;
+    counter.addEventListener("click", () => { counter.textContent = "Count: 1"; });
+    const { planner, requests } = scripted((request, step) =>
+      step === 0 ? { type: "click", target: idOf(request, "Increment counter") } : { type: "done", success: true, summary: "Clicked once" });
+
+    const { finished } = await run("Increment the counter once", planner);
+
+    assert.equal(counter.textContent, "Count: 1");
+    assert.equal(finished.outcome, "completed");
+    assert.equal(finished.steps, 1);
+    assert.deepEqual(requests[1]?.history.map((s) => s.verified), [true]);
+    assert.equal(requests[1]?.graph.elements.find((e) => e.label === "Increment counter")?.value, "Count: 1");
+  });
+
+  test("sends only tokens, and types the real value when the planner uses one", async () => {
+    await page(`<p>Signed in as someone@example.com</p><label for="email">Email</label><input id="email" type="email">`);
+    const { planner, requests } = scripted((request, step) =>
+      step === 0 ? { type: "type", target: idOf(request, "Email"), value: "<PII:EMAIL:1>" } : { type: "done", success: true, summary: "Filled" });
+
+    const { finished } = await run("Put my email in the email field", planner);
+
+    assert.equal(finished.outcome, "completed");
+    assert.equal((document.querySelector("#email") as HTMLInputElement).value, "someone@example.com");
+    for (const request of requests) {
+      assert.doesNotMatch(JSON.stringify(request), /someone@example\.com/);
+      assert.doesNotThrow(() => assertOutboundSafe(request));
+    }
+    assert.deepEqual(requests[0]?.graph.manifest.tokensInPlay, ["<PII:EMAIL:1>"]);
+    // Next view: the field now holds the address, and shows as the same token.
+    assert.equal(requests[1]?.graph.elements.find((e) => e.label === "Email" && e.role === "textbox")?.value, "<PII:EMAIL:1>");
+  });
+
+  test("redacts PII in the goal itself", async () => {
+    await page(`<button>Send</button>`);
+    const { planner, requests } = scripted(() => ({ type: "done", success: true, summary: "ok" }));
+
+    await run("Send an invite to friend@example.org", planner);
+
+    assert.equal(requests[0]?.goal, "Send an invite to <PII:EMAIL:1>");
+  });
+
+  test("never types a token the task did not issue", async () => {
+    await page(`<label for="email">Email</label><input id="email" type="email">`);
+    const { planner, requests } = scripted((request, step) =>
+      step === 0 ? { type: "type", target: idOf(request, "Email"), value: "<PII:EMAIL:9>" } : { type: "done", success: false, summary: "gave up" });
+
+    await run("Fill in the email", planner);
+
+    assert.equal((document.querySelector("#email") as HTMLInputElement).value, "");
+    assert.equal(requests[1]?.history[0]?.verified, false);
+    assert.match(requests[1]?.history[0]?.note ?? "", /not typed/);
+  });
+
+  test("stops when several steps in a row change nothing", async () => {
+    await page(`<button>Does nothing</button>`);
+    const { planner, requests } = scripted((request) => ({ type: "click", target: idOf(request, "Does nothing") }));
+
+    const { finished } = await run("Make something happen", planner);
+
+    assert.equal(finished.errorCode, "NO_PROGRESS");
+    assert.equal(requests.length, 3);
+    assert.equal(requests[2]?.history.at(-1)?.note, "the page did not change");
+  });
+
+  test("reports a planner failure with its message", async () => {
+    await page(`<button>Go</button>`);
+    const planner: ActionPlanner = async () => { throw new Error("Could not reach the Skrim server"); };
+
+    const { finished } = await run("Go", planner);
+
+    assert.equal(finished.errorCode, "PLANNER_ERROR");
+    assert.equal(finished.message, "Could not reach the Skrim server");
+  });
+
+  test("stops without sending when the outbound check finds PII", async () => {
+    await page(`<button>Go</button>`);
+    const planner: ActionPlanner = async (request) => {
+      assertOutboundSafe({ ...request, goal: "leaked someone@example.com" });
+      throw new Error("unreachable");
+    };
+
+    const { finished } = await run("Go", planner);
+
+    assert.equal(finished.errorCode, "PII_TRIPWIRE");
+  });
+
+  test("ends as cancelled when the user stops it", async () => {
+    await page(`<button>Go</button>`);
+    const controller = new AbortController();
+    const planner: ActionPlanner = (_request, signal) => new Promise((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason));
+      controller.abort();
+    });
+
+    const { finished } = await run("Go", planner, controller.signal);
+
+    assert.equal(finished.outcome, "cancelled");
+  });
+});

@@ -4,7 +4,7 @@ import type { ErrorCode } from "@/lib/errors.ts";
 import { executeClick } from "./click.ts";
 import { executeExtract, executeNavigate, executeScroll, executeSelect, executeType, executeWait } from "./stubs.ts";
 
-export interface ActionResult { ok: boolean; actionId: string; changed: boolean; completed?: boolean; errorCode?: ErrorCode; observationVersion: number; }
+export interface ActionResult { ok: boolean; actionId: string; changed: boolean; completed?: boolean; errorCode?: ErrorCode; observationVersion: number; extractedValue?: string; }
 
 export interface ActionRuntimeContext {
   resolveToken?: (value: string) => string | null;
