@@ -1,0 +1,435 @@
+{
+  "prompt_name": "skrim-project-context",
+  "version": "1.0.0",
+  "generated_for": "AI coding agents and project teammates",
+  "identity": {
+    "project": "skrim",
+    "team": "tropical crush",
+    "problem_statement": "A browser agent that never shows the server your data",
+    "one_line_summary": "A Chrome and Firefox browser agent that performs tasks while ensuring the remote planning server receives only a privacy-safe structural representation of the user's screen."
+  },
+  "agent_instruction": "Use this document as the authoritative project context when planning, implementing, reviewing, or explaining changes. Preserve the existing TypeScript monorepo architecture, shared schemas, privacy boundary, workstream ownership, and observe-plan-act-verify lifecycle. Prefer the smallest change that closes the current workflow. Never invent a second implementation of an owned abstraction.",
+  "mission": {
+    "user_value": "The extension can inspect pages, understand their structure and visual context, and complete browser tasks such as filling forms, finding items, clicking controls, navigating, and extracting information.",
+    "privacy_claim": "The client may read data already present in the user's browser, but raw sensitive data must never cross the client-server boundary. The remote server receives enough structure to reason and sends back an action, while the client performs the action locally.",
+    "technical_thesis": "DOM structure and local vision are fused on-device; an open-weight VLM plans over a tokenised graph; a browser-side executor performs one validated action at a time and verifies the resulting state.",
+    "trust_boundary": "The user's browser and extension are trusted to inspect and resolve local data. The remote planner is untrusted and stateless. Privacy is enforced before network transmission, not by asking the server to redact data it has already received."
+  },
+  "scoring_targets": [
+    {
+      "weight_percent": 25,
+      "criterion": "Understanding the screen",
+      "evidence": "Correct DOM graph, visual element detection, OCR or face handling, and DOM/vision fusion."
+    },
+    {
+      "weight_percent": 20,
+      "criterion": "Finding personal data",
+      "evidence": "Measured evaluation on synthetic pages, including near-miss non-PII values."
+    },
+    {
+      "weight_percent": 20,
+      "criterion": "Hiding it precisely",
+      "evidence": "Redaction IoU and over-redaction rate, with referential tokens for values that must remain usable."
+    },
+    {
+      "weight_percent": 20,
+      "criterion": "Cost on the user's machine",
+      "evidence": "Model footprint, memory, backend selection, CPU/GPU use, and live dashboard measurements."
+    },
+    {
+      "weight_percent": 15,
+      "criterion": "Speed",
+      "evidence": "Per-stage and total timings from observation through verified action."
+    }
+  ],
+  "architecture": {
+    "style": "TypeScript end to end in a pnpm monorepo",
+    "runtime": {
+      "extension": "WXT, Manifest V3, Chrome and Firefox",
+      "server": "Hono on Node 22",
+      "dashboard": "Vite and React",
+      "public_web": "Separate Vite and React landing page",
+      "evaluation": "Playwright driving a real Chromium extension build"
+    },
+    "packages": {
+      "packages/schema": {
+        "name": "@skrim/schema",
+        "purpose": "Load-bearing Zod contract shared by extension, server, dashboard, and evaluation.",
+        "exports": ["ScreenGraph", "ScreenElement", "Action", "PiiToken", "RedactionManifest", "PlanRequest", "PlanResponse", "navigation guards", "outbound safety guards"]
+      },
+      "packages/shared": {
+        "name": "@skrim/shared",
+        "purpose": "ID-only logging, timing instrumentation, and shared configuration helpers."
+      },
+      "packages/eval": {
+        "name": "@skrim/eval",
+        "purpose": "Real-browser evaluation harness for detection, redaction, resource, and latency metrics."
+      }
+    },
+    "applications": {
+      "apps/extension": "The product extension: background orchestration, content execution, popup, capture, DOM graph integration, privacy integration, and browser messaging.",
+      "apps/server": "Stateless open-weight model planner. It receives a safe graph and returns exactly one schema-valid action.",
+      "apps/dashboard": "Projected demo instrument showing the real page, server-visible graph, wire payload, status, and resources.",
+      "apps/web": "Separate public landing page. It must not be allowed to break the live dashboard demo."
+    },
+    "dependency_direction": "The schema package imports nothing from applications or implementations. Applications depend inward on packages/schema and packages/shared."
+  },
+  "privacy_model": {
+    "local_only_operations": [
+      "DOM traversal and accessible-name extraction",
+      "Regex detection of structured PII such as email, phone, card, and account-like values",
+      "NER detection of names and addresses",
+      "Face detection, OCR, and visual PII detection",
+      "Token vault storage and token resolution",
+      "Image redaction and redaction-manifest creation",
+      "Typing real values into the real page"
+    ],
+    "referential_redaction": {
+      "principle": "Sensitive values are replaced with typed tokens rather than destroyed when the task may need to use them.",
+      "example_local": "Email: suparno@example.com",
+      "example_server_value": "<PII:EMAIL:1>",
+      "example_graph": {
+        "id": "e17",
+        "role": "textbox",
+        "label": "Email",
+        "value": "<PII:EMAIL:1>",
+        "bbox": [412, 260, 280, 36],
+        "state": "editable"
+      },
+      "vault_rule": "The token-to-real-value mapping is in-memory only, scoped to the current task, and wiped on task completion, failure, cancellation, or tab close."
+    },
+    "image_privacy": "Images that cannot be tokenised are redacted locally. A manifest preserves non-sensitive semantic information such as the type and coordinates of a face or sensitive region.",
+    "outbound_boundary": "The one network-request path must call assertOutboundSafe() and must send only the privacy-safe PlanRequest. No raw graph values, page HTML, screenshots, tokens that reveal their underlying value, or request bodies may be logged.",
+    "forbidden_persistence": ["localStorage", "sessionStorage", "indexedDB", "chrome.storage", "browser.storage", "server databases", "server request-body logs", "extension telemetry"],
+    "logging_policy": "Logs may contain IDs, counts, statuses, timings, model IDs, repair counts, and stable error codes. Logs must not contain goals, graph values, page HTML, screenshots, raw tokens, or request bodies."
+  },
+  "core_workflows": {
+    "vertical_slice": {
+      "name": "DOM-only loop",
+      "goal": "Close the end-to-end loop before adding model complexity.",
+      "sequence": [
+        "User enters a goal in the popup.",
+        "Popup sends task.start with the goal to the background context.",
+        "Background creates an in-memory task state and step limit.",
+        "Background asks the active tab to produce a page observation.",
+        "Content script asks the registered WS2 provider for a screen graph and element registry.",
+        "WS3 supplies a privacy-safe graph and in-memory token resolver.",
+        "Background invokes the registered WS4 planner.",
+        "WS4 builds and validates a PlanRequest, calls the server, validates the PlanResponse, and returns one action.",
+        "Background sends exactly one action.execute message to the content script.",
+        "Content script executes against the registry from the preceding observation.",
+        "Content script verifies the expected state change and returns action.result.",
+        "Background accepts success only when verified, then requests a fresh observation.",
+        "The loop repeats until done, failure, cancellation, timeout, or the maximum step count."
+      ],
+      "first_implementation_scope": ["DOM graph", "regex PII", "in-memory tokens", "server provider or deterministic planner", "click or type action", "post-action verification"]
+    },
+    "observe_plan_act_verify": {
+      "invariant": "One observation produces one action. The page is observed again after every action because the DOM and coordinates may change.",
+      "observe": "Build a fresh graph, registry, privacy-safe values, visual-capture flag, and timing sample.",
+      "plan": "Send goal, safe graph, bounded history, and safe extracted values to the stateless planner.",
+      "act": "Execute only a schema-valid action against the registry from the immediately preceding observation.",
+      "verify": "Confirm a meaningful state change or the explicit success semantics of done, then continue or finish.",
+      "stale_state_rule": "Never reuse an old registry after navigation or meaningful mutation."
+    },
+    "privacy_workflow": [
+      "Read page data locally.",
+      "Detect structured and semantic PII locally.",
+      "Allocate typed token IDs and retain the real values only in the in-memory vault.",
+      "Replace sensitive graph values with tokens and redact image regions locally.",
+      "Construct the PlanRequest from the safe graph.",
+      "Assert the outbound payload is safe immediately before the network request.",
+      "Send the request to a stateless open-weight planner.",
+      "When a returned type action contains a PII token, resolve it locally and fail closed if resolution fails.",
+      "Wipe task memory at task end."
+    ],
+    "server_workflow": [
+      "Receive a PlanRequest containing goal, safe graph, bounded history, and optional safe extracted values.",
+      "Validate the request with the shared schema.",
+      "Build a prompt that explains graph IDs, token semantics, the closed action space, and one-action planning.",
+      "Call one OpenAI-compatible provider adapter using the configured open-weight model.",
+      "Parse model output as JSON.",
+      "If parsing fails, extract the outermost object and retry parsing.",
+      "Validate the result with ActionSchema.",
+      "If validation fails, re-prompt once with the validation error.",
+      "Return unparseable_model_output after two repair attempts.",
+      "Return PlanResponse with action, model, server latency, and repair count.",
+      "Never persist identity, sessions, history, or request bodies."
+    ],
+    "capture_workflow": [
+      "Use MutationObserver and a cheap frame signature to detect meaningful changes.",
+      "Avoid full visual inference on every frame.",
+      "Respect captureVisibleTab rate limiting of roughly two calls per second.",
+      "Keep screenshots in memory only.",
+      "Run expensive vision processing only after capture gating permits it.",
+      "Let WS2 interpret and fuse visual results and WS3 redact them before network use.",
+      "Record timing and backend information for WS6 and WS5."
+    ],
+    "evaluation_workflow": [
+      "Create 30 to 50 synthetic pages under fixtures/pages/.",
+      "Create matching ground-truth annotations under fixtures/ground-truth/.",
+      "Build the real extension.",
+      "Load the extension into Chromium with Playwright.",
+      "Navigate to fixture pages over normal HTTP.",
+      "Drive the existing extension messages and runtime path.",
+      "Measure detection recall and precision, redaction IoU, over-redaction rate, per-stage latency, and total latency.",
+      "Report failure modes and commit a summary suitable for the tradeoff slide.",
+      "Do not import detection code into Node or substitute Node inference for the shipped browser path."
+    ],
+    "demo_workflow": [
+      "Keep a split screen projected throughout the demo.",
+      "Show the real page with personal data on the left.",
+      "Show exactly what the server receives on the right: structure, tokens, masks, and manifests.",
+      "Start a multi-step task on a page dense with personal data.",
+      "Let the agent observe, plan, click or type, verify, and repeat.",
+      "Open developer tools and show the actual outbound request body contains no raw PII.",
+      "Show that a local token still resolves to the real value when filling a field.",
+      "Demonstrate a visual-only case such as a face, scanned document, canvas, or cross-origin iframe.",
+      "Show live resource and latency measurements.",
+      "Switch the same provider adapter from hosted NVIDIA to local Ollama to demonstrate air-gapped operation."
+    ]
+  },
+  "browser_contexts": {
+    "background": {
+      "chrome": "Manifest V3 service worker",
+      "firefox": "Manifest V3 event page",
+      "owns": ["task lifecycle", "active-tab routing", "planner invocation", "step limits", "status broadcasts", "message validation"],
+      "must_not": ["DOM access", "WebGPU inference", "WASM inference", "PII detection", "target selection", "raw-value logging"]
+    },
+    "content_script": {
+      "owns": ["current DOM registry", "registered screen graph provider integration", "action execution", "action verification", "token resolver integration"],
+      "must_not": ["build a second graph", "send raw values to server", "choose planner targets", "persist extension state"]
+    },
+    "popup": {
+      "owns": ["goal input", "start", "cancel", "status", "errors"],
+      "must_not": ["inspect active-page DOM", "plan actions", "perform PII detection"]
+    },
+    "chrome_offscreen": {
+      "purpose": "Extension-page location for Chrome-only model inference when required.",
+      "rule": "Model inference does not run in the Chrome service worker."
+    },
+    "firefox": {
+      "rule": "Reuse the same contracts and modules. Branch only at genuine platform boundaries, mainly the offscreen requirement."
+    }
+  },
+  "workstreams": {
+    "WS1": {
+      "name": "Extension shell, permissions, capture, action execution",
+      "owns": ["background task lifecycle", "browser messaging", "active-tab routing", "popup status", "captureVisibleTab access", "capture cooldown and frame gating", "action dispatcher", "post-action verification", "platform configuration"],
+      "primary_paths": ["apps/extension/entrypoints/background/", "apps/extension/entrypoints/content/index.ts", "apps/extension/lib/actions/", "apps/extension/lib/capture/", "apps/extension/lib/integration.ts", "apps/extension/lib/messages.ts", "apps/extension/wxt.config.ts"],
+      "registration_contracts": {
+        "from_WS2": "registerScreenGraphProvider() supplies safe ScreenElement[] and a matching Map of element IDs to DOM elements.",
+        "from_WS3": "registerTokenResolver() supplies an in-memory resolver used by type actions.",
+        "from_WS4": "registerActionPlanner() supplies a validated one-action planner.",
+        "to_WS5": "Expose task.status, page.observation, action.execute, action.result, and timing samples.",
+        "to_WS6": "Expose status, step count, safe graph metadata, and timing samples."
+      },
+      "action_rules": ["click scrolls into view and verifies state or mutation", "type resolves tokens, sets value, dispatches input/change, and may submit", "scroll is bounded and may target an element", "select chooses by label or value rather than unstable index", "navigate permits same-origin paths or back only", "extract targets a later privacy-safe extraction pipeline", "wait is schema bounded", "done finishes without pretending a page changed"],
+      "failure_codes": ["CONTENT_SCRIPT_ERROR", "TARGET_NOT_FOUND", "TARGET_NOT_CLICKABLE", "ACTION_TIMEOUT", "NAVIGATION_BLOCKED", "MALFORMED_ACTION", "MAX_STEPS_REACHED"],
+      "must_not_own": ["canonical DOM graph construction", "PII detection", "token vault", "server planning"]
+    },
+    "WS2": {
+      "name": "Screen graph, DOM extraction, and vision fusion",
+      "owns": ["candidate selection", "roles", "accessible names", "geometry", "state", "hierarchy", "graph IDs", "DOM/vision fusion", "graph correctness", "visual interpretation"],
+      "primary_paths": ["apps/extension/lib/dom/", "apps/extension/lib/vision/", "content-side graph-provider registration"],
+      "provider_contract": "Return ScreenElement[] and a registry with exactly the same IDs, plus hasVisualCapture. IDs use the e<number> format and are assigned per observation cycle.",
+      "inputs": ["DOM", "local visual detector output", "OCR when required", "face detection when required", "capture gating results"],
+      "must_not_own": ["WS1 action dispatcher", "task lifecycle", "PII vault", "server target selection"],
+      "success_condition": "A fresh, structurally useful graph can drive site-agnostic action planning on pages the team has never seen."
+    },
+    "WS3": {
+      "name": "PII detection, redaction, and token vault",
+      "owns": ["regex bank", "NER", "face and visual PII detection", "detector fusion", "confidence", "typed token allocation", "in-memory vault", "privacy-safe graph adapter", "image redaction", "redaction manifest", "outbound safety integration"],
+      "primary_paths": ["apps/extension/lib/pii/", "apps/extension/lib/vault/", "privacy adapter and token-resolver registration", "apps/extension/public/models/"],
+      "detection_strategy": ["Use DOM metadata and regex for fast exact structured values.", "Use NER for names, addresses, and semantic text.", "Use local vision for faces, canvas content, cross-origin content, scanned documents, and images.", "Fuse sources conservatively and retain confidence for evaluation."],
+      "vault_contract": "Map typed tokens to real values in memory only. Never persist, log, transmit, or expose the mapping to the server or dashboard.",
+      "must_not_own": ["WS1 DOM traversal", "action selection", "remote redaction", "server planning"],
+      "success_condition": "The server can reason over useful tokens and manifests while the client can still perform the requested task with real values."
+    },
+    "WS4": {
+      "name": "Server agent, provider adapter, prompts, and action schema flow",
+      "owns": ["Hono server", "stateless plan endpoint", "prompt construction", "provider configuration", "model output parsing", "JSON repair", "PlanRequest and PlanResponse validation", "planner registration in background"],
+      "primary_paths": ["apps/server/src/", "apps/server/CLAUDE.md", "background planner registration"],
+      "server_contract": "Receive PlanRequest and return one PlanResponse. The server is not a perception system and does not redact data.",
+      "provider_policy": "Use one OpenAI-compatible adapter with an environment-selected base URL and model. NVIDIA and Ollama are wired; Cloudflare and OpenRouter are documented but not active.",
+      "model_policy": "Use open-weight, air-gap-deployable models only. Do not use GPT, Gemini, Claude, or closed-model SDKs as the planning brain.",
+      "repair_policy": ["parse JSON", "extract outermost object and retry parse if needed", "validate with ActionSchema", "re-prompt once with validation error", "return unparseable_model_output after two repair attempts"],
+      "must_not_own": ["image processing", "PII detection", "redaction", "database", "identity", "session memory", "request-body logging"]
+    },
+    "WS5": {
+      "name": "Evaluation harness, fixtures, and metrics",
+      "owns": ["Playwright browser harness", "synthetic pages", "ground truth", "precision and recall calculations", "redaction IoU", "over-redaction rate", "latency measurements", "failure-mode reporting", "committed result summary"],
+      "primary_paths": ["packages/eval/", "fixtures/pages/", "fixtures/ground-truth/", "evaluation results"],
+      "fixture_coverage": ["ordinary forms and tables", "PII in canvas", "PII in cross-origin iframe", "scanned ID image", "face in a photo", "near-miss order numbers", "product codes", "tracking IDs", "dates that are not PII"],
+      "hard_rule": "Evaluate the real built extension in a real browser. Do not score Node-side copies of detector logic or substitute Node inference.",
+      "success_condition": "Produce defensible numbers and explain what the system misses instead of claiming perfect detection."
+    },
+    "WS6": {
+      "name": "Dashboard, split-screen demo, and resource panel",
+      "owns": ["live split-screen view", "server-visible graph rendering", "wire payload view", "task status", "resource panel", "timing presentation", "projector-friendly visual hierarchy", "malformed-message degradation"],
+      "primary_paths": ["apps/dashboard/"],
+      "display_data": ["safe graph IDs", "roles", "states", "source metadata", "token strings", "redaction metadata", "model ID", "repair count", "inference timings", "memory and footprint", "backend", "round-trip latency"],
+      "must_not_do": ["redact data itself", "connect to the token vault", "display raw values", "recompute detection", "duplicate privacy logic", "crash on malformed messages"],
+      "success_condition": "A judge can see the privacy boundary, agent progress, and performance evidence continuously from a projector."
+    }
+  },
+  "shared_contracts": {
+    "screen_element": {
+      "required_concepts": ["id", "role", "label", "value or token", "bbox", "state"],
+      "id_format": "e<number>",
+      "registry_rule": "The registry and graph must use the same IDs, and the registry is replaced on every fresh observation."
+    },
+    "action_space": {
+      "closed": true,
+      "verbs": ["click", "type", "scroll", "select", "navigate", "extract", "wait", "done"],
+      "rule": "The server returns exactly one action per cycle.",
+      "targeting": "Actions target graph element IDs rather than site-specific selectors.",
+      "type_value": "May be literal non-sensitive text or a typed PII token resolved locally.",
+      "navigation": "Client-side guard permits same-origin paths or back only."
+    },
+    "plan_request": {
+      "fields": ["goal", "graph", "history", "extracted"],
+      "history_limit": 20,
+      "privacy": "All fields must already be safe before request construction or transmission."
+    },
+    "plan_response": {
+      "fields": ["action", "model", "latencyMs", "repairs"],
+      "validation": "ActionSchema and PlanResponseSchema from @skrim/schema"
+    },
+    "message_boundary": "Intra-extension messages are defined in apps/extension/lib/messages.ts and are distinct from the client-server schemas in @skrim/schema.",
+    "timing": "Use timed() from @skrim/shared and expose getSamples() data to evaluation and dashboard consumers."
+  },
+  "non_negotiable_rules": [
+    "Keep everything TypeScript end to end.",
+    "Do not run inference in the Chrome MV3 service worker.",
+    "Do not add localStorage, sessionStorage, IndexedDB, chrome.storage, or browser.storage.",
+    "Do not use console.* in the extension; use the shared ID-only logger.",
+    "Do not use site-specific selectors.",
+    "Do not implement a second DOM extractor.",
+    "Do not redact on the server.",
+    "Do not send raw PII, raw screenshots, page HTML, or vault contents over the network.",
+    "Do not log values, goals, screenshots, tokens, graph contents, or request bodies.",
+    "Do not use closed-model providers or SDKs as the server brain.",
+    "Keep the server stateless: no identity, sessions, database, or request memory.",
+    "Use one provider adapter for hosted and local OpenAI-compatible models.",
+    "Never let the server send a batch of actions.",
+    "Fail closed when a PII token cannot be resolved.",
+    "Preserve workstream ownership and use registration hooks at boundaries.",
+    "Do not add unrelated refactors while closing a workflow."
+  ],
+  "failure_behavior": {
+    "no_graph_provider": "Return an empty observation and fail clearly.",
+    "content_script_unavailable": "Report CONTENT_SCRIPT_ERROR.",
+    "unknown_target": "Report TARGET_NOT_FOUND.",
+    "disabled_or_zero_size_target": "Report TARGET_NOT_CLICKABLE.",
+    "no_expected_click_change": "Report ACTION_TIMEOUT.",
+    "unresolved_pii_token": "Fail closed with CONTENT_SCRIPT_ERROR and never type the token literally.",
+    "cross_origin_navigation": "Report NAVIGATION_BLOCKED.",
+    "invalid_server_action": "Report MALFORMED_ACTION.",
+    "maximum_steps": "Report MAX_STEPS_REACHED.",
+    "malformed_dashboard_message": "Keep rendering the last known good state and show a small warning.",
+    "provider_error": "Return a stable schema error and do not retry indefinitely."
+  },
+  "provider_configuration": {
+    "environment_file": ".env at repository root",
+    "wired_profiles": {
+      "nvidia": "Development default; hosted open-weight model through NVIDIA Build.",
+      "ollama": "Local qwen3-vl:4b for offline or air-gapped demonstration."
+    },
+    "documented_profiles": {
+      "cloudflare": "Backup option, not currently wired.",
+      "openrouter": "Emergency option, not currently wired and limited without credits."
+    },
+    "model_constraints": {
+      "open_weights_required": true,
+      "local_ceiling": "Qwen3-VL 4B class on approximately 4.5 GB working VRAM.",
+      "tradeoff_curve": "Measure hosted 32B, hosted 8B, and local 4B accuracy versus latency rather than hiding hardware limits."
+    }
+  },
+  "repository_map": {
+    "root": ["CLAUDE.md", "BRIEF.md", "package.json", "pnpm-workspace.yaml", "turbo.json", "tsconfig.base.json", ".env.example"],
+    "extension": "apps/extension/",
+    "server": "apps/server/",
+    "dashboard": "apps/dashboard/",
+    "web": "apps/web/",
+    "schema": "packages/schema/",
+    "shared": "packages/shared/",
+    "eval": "packages/eval/",
+    "fixtures": "fixtures/",
+    "scripts": "scripts/",
+    "project_context": "docs/project-context.prompt.json"
+  },
+  "development_commands": {
+    "install": "pnpm install",
+    "fetch_models": "pnpm models:fetch",
+    "verify_all": "pnpm verify",
+    "invariants": "pnpm check",
+    "typecheck": "pnpm typecheck",
+    "tests": "pnpm test",
+    "build_all": "pnpm build",
+    "extension_chrome": "pnpm dev:extension",
+    "extension_firefox": "pnpm --filter @skrim/extension dev:firefox",
+    "server": "pnpm dev:server",
+    "dashboard": "pnpm dev:dashboard",
+    "web": "pnpm dev:web",
+    "extension_build": "pnpm --filter @skrim/extension build",
+    "extension_firefox_build": "pnpm --filter @skrim/extension build:firefox"
+  },
+  "current_status": {
+    "done": [
+      "Monorepo scaffold and workspace packages",
+      "Shared strict TypeScript configuration",
+      "Schema package with core graph, action, PII, protocol, and guard contracts",
+      "Shared ID-only logger and timing instrumentation",
+      "Invariant checks, CI, and PR guardrails",
+      "WXT configuration and explicit extension manifest name",
+      "Vendored local model assets including quantised GLiNER, BlazeFace, MediaPipe, and Tesseract assets",
+      "Ollama qwen3-vl:4b and NVIDIA Build setup"
+    ],
+    "priority_next": [
+      "Close the DOM-only vertical slice end to end.",
+      "Implement server provider adapter, prompt, response parsing, JSON repair, and planner registration.",
+      "Implement token vault and referential redaction.",
+      "Add OmniParser-style icon detector artifact and vision fusion.",
+      "Build the real-browser evaluation harness and fixture set.",
+      "Build dashboard split-screen and resource panel.",
+      "Verify Chrome and Firefox builds and then measure model and latency tradeoffs."
+    ],
+    "blocked_or_pending": ["full vision fusion", "30 to 50 fixture corpus", "committed evaluation results", "complete dashboard", "Firefox validation", "GLiNER uint8 versus fp16 measurement"]
+  },
+  "implementation_guidance": {
+    "before_editing": [
+      "Find the nearest abstraction that directly controls the requested behavior.",
+      "Read the local CLAUDE.md and a neighboring test or call site.",
+      "State a falsifiable local hypothesis and choose a cheap discriminating check.",
+      "Make the smallest change that tests the hypothesis."
+    ],
+    "after_editing": [
+      "Run the narrowest behavior or test command immediately.",
+      "Repair failures in the same slice before widening scope.",
+      "Run at least one executable validation before reporting completion.",
+      "Use pnpm verify for final cross-package validation when the environment permits."
+    ],
+    "review_focus": ["privacy leaks", "cross-context violations", "schema drift", "stale registry use", "unverified actions", "site-specific selectors", "persistence", "raw logging", "provider policy violations", "missing real-browser tests"]
+  },
+  "completion_definition": {
+    "vertical_slice_is_closed_when": [
+      "A user goal starts a task from the popup.",
+      "The content script produces a graph through the WS2 registration hook.",
+      "PII is detected or represented safely through WS3 and the vault.",
+      "The planner receives only a safe request and returns one schema-valid action.",
+      "The content script executes that action against the current registry.",
+      "The result is verified and a fresh observation follows.",
+      "The task can finish or fail with a stable status and memory cleanup.",
+      "A real browser test proves the loop and confirms no raw values reach logs or outbound requests."
+    ],
+    "project_is_demo_ready_when": [
+      "The vertical slice works on an unseen-style fixture page.",
+      "Vision-only cases are handled locally.",
+      "Evaluation reports precision, recall, IoU, over-redaction, resource, and latency numbers.",
+      "The dashboard shows the real server-visible payload and resource measurements.",
+      "The hosted and Ollama providers can be swapped through the shared adapter.",
+      "Chrome and Firefox builds pass their targeted validation."
+    ]
+  }
+}
