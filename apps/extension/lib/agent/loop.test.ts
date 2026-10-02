@@ -7,6 +7,7 @@ import { getObservationVersion, initObserver } from "../../entrypoints/content/o
 import { createContentHandler } from "../content-handler.ts";
 import { domScreenGraphProvider } from "../dom/provider.ts";
 import { registerScreenGraphProvider, type ActionPlanner } from "../integration.ts";
+import type { NameFinder } from "../pii/gliner.js";
 import { runAgentTask, type AgentEvent, type PageLink } from "./loop.ts";
 
 /**
@@ -104,6 +105,33 @@ describe("runAgentTask", () => {
     await run("Send an invite to friend@example.org", planner);
 
     assert.equal(requests[0]?.goal, "Send an invite to <PII:EMAIL:1>");
+  });
+
+  test("hides names the name finder reports, in the goal and on the page", async () => {
+    await page(`<p>Signed in as Asha Rao</p><button>Log out</button>`);
+    const findNames: NameFinder = async (texts) => texts.map((text) => {
+      const start = text.indexOf("Asha Rao");
+      return start === -1 ? [] : [{ category: "NAME", source: "ner", confidence: 0.9, text: "Asha Rao", start, end: start + 8 }];
+    });
+    const { planner, requests } = scripted(() => ({ type: "done", success: true, summary: "ok" }));
+    const events: AgentEvent[] = [];
+
+    await runAgentTask({ goal: "Log Asha Rao out", planner, link, signal: new AbortController().signal, onEvent: (e) => events.push(e), findNames });
+
+    assert.doesNotMatch(JSON.stringify(requests[0]), /Asha Rao/);
+    assert.equal(requests[0]?.goal, "Log <PII:NAME:1> out");
+    assert.ok(requests[0]?.graph.elements.some((e) => e.label === "Signed in as <PII:NAME:1>"));
+  });
+
+  test("warns and carries on when the name finder cannot start", async () => {
+    await page(`<button>Go</button>`);
+    const { planner } = scripted(() => ({ type: "done", success: true, summary: "ok" }));
+    const events: AgentEvent[] = [];
+
+    await runAgentTask({ goal: "Go", planner, link, signal: new AbortController().signal, onEvent: (e) => events.push(e), findNames: async () => { throw new Error("no model"); } });
+
+    assert.ok(events.some((e) => e.type === "warning" && /NOT being hidden/.test(e.message)));
+    assert.equal(events.at(-1)?.type === "finished" && events.at(-1)?.type, "finished");
   });
 
   test("never types a token the task did not issue", async () => {
