@@ -142,11 +142,17 @@ function getValue(element: Element, label: string | undefined): string | undefin
   } else if (element instanceof HTMLTextAreaElement) {
     value = normalizeText(element.value);
   } else if (element instanceof HTMLSelectElement) {
-    value = normalizeText(element.selectedOptions[0]?.textContent);
+    // Not selectedOptions: happy-dom, which the tests run on, does not update it.
+    value = normalizeText(element.options[element.selectedIndex]?.textContent);
   } else if (element instanceof HTMLElement && element.isContentEditable) {
     value = normalizeText(element.textContent);
   } else if (TEXT_FALLBACK_ROLES.has(getRole(element))) {
-    value = normalizeText(element.textContent);
+    value = normalizeText(nameFromContent(element));
+  } else if (element instanceof HTMLElement && hasMeaningfulDirectText(element)) {
+    // A region or dialog that holds text itself, like an accordion's panel
+    // (<div role="region">text</div>). Its text is in no other element, so
+    // without this the planner never sees that the panel opened.
+    value = normalizeText(nameFromContent(element));
   }
   return value === label ? undefined : value;
 }
@@ -518,7 +524,32 @@ function getTextFallback(element: Element): string | undefined {
     return undefined;
   }
 
-  return normalizeText(element.textContent);
+  return normalizeText(nameFromContent(element));
+}
+
+/**
+ * An element's text as a screen reader reads it: its text, plus the names of
+ * the images and icons inside it, minus anything aria-hidden. A logo link is
+ * often only images: Wikipedia's has no text but images whose alt says
+ * "Wikipedia" and "The Free Encyclopedia". By textContent alone it had no
+ * name, and the planner clicked it blind.
+ */
+function nameFromContent(element: Element): string {
+  let text = "";
+  for (const node of element.childNodes) {
+    if (text.length > MAX_ACCESSIBLE_NAME_LENGTH) break;
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent ?? "";
+      continue;
+    }
+    if (!(node instanceof Element) || node.getAttribute("aria-hidden") === "true") continue;
+    const ownName =
+      normalizeText(node.getAttribute("aria-label")) ??
+      (node instanceof HTMLImageElement ? normalizeText(node.alt) : undefined) ??
+      (node.tagName.toLowerCase() === "svg" ? normalizeText(node.querySelector("title")?.textContent) : undefined);
+    text += ownName === undefined ? nameFromContent(node) : ` ${ownName} `;
+  }
+  return text;
 }
 
 function getAltText(element: Element): string | undefined {

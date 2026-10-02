@@ -75,6 +75,28 @@ describe("extractScreenGraph", () => {
     assert.ok(checkbox?.state?.includes("unchecked"));
   });
 
+  test("names a link made only of images by their alt text, skipping hidden icons", () => {
+    const { elements } = extract(
+      `<a href="/"><img alt="" aria-hidden="true" src="icon.svg"><span><img alt="Wikipedia" src="w.svg"><img alt="The Free Encyclopedia" src="t.svg"></span></a>`
+    );
+
+    assert.equal(elements.find((element) => element.role === "link")?.label, "Wikipedia The Free Encyclopedia");
+  });
+
+  test("names an icon button by its svg title or an inner aria-label", () => {
+    const { elements } = extract(
+      `<button><svg><title>Search</title></svg></button><button><span aria-label="Close"></span></button>`
+    );
+
+    assert.deepEqual(elements.filter((element) => element.role === "button").map((element) => element.label), ["Search", "Close"]);
+  });
+
+  test("keeps the text of a region that holds text itself, like an accordion's panel", () => {
+    const { elements } = extract(`<div role="region">More detailed information here.</div>`);
+
+    assert.equal(elements.find((element) => element.role === "region")?.value, "More detailed information here.");
+  });
+
   test("maps every id back to the element it describes", () => {
     const { elements, registry } = extract(`<button>One</button><button>Two</button>`);
 
