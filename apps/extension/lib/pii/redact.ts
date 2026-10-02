@@ -43,12 +43,32 @@ export type NameLookup = (text: string) => PiiCandidate[];
  */
 export function detectText(text: string, vault: TokenVault, context?: string, names?: NameLookup): PiiMatch[] {
   const found = names?.(text) ?? [];
-  if (!context) return tokenise(resolveOverlaps([...findRegexCandidates(text), ...found]), vault);
+  if (!context) return tokenise(withWholeAddresses(text, resolveOverlaps([...findRegexCandidates(text), ...found])), vault);
   const prefix = `${context}: `;
   const inText = findRegexCandidates(prefix + text)
     .filter((candidate) => candidate.start >= prefix.length)
     .map((candidate) => ({ ...candidate, start: candidate.start - prefix.length, end: candidate.end - prefix.length }));
-  return tokenise(resolveOverlaps([...inText, ...found]), vault);
+  return tokenise(withWholeAddresses(text, resolveOverlaps([...inText, ...found])), vault);
+}
+
+/** Short parts separated by commas, from the start of the text: "Flat 4B, Lake View Apartments, ". */
+const ADDRESS_PARTS_BEFORE = /^\s*(?:[^,.;:!?]{1,40},\s*)+$/;
+
+/**
+ * GLiNER often finds the end of an address and not its first parts: it found
+ * "Koramangala, Bengaluru 560034" in "Flat 4B, Lake View Apartments,
+ * Koramangala, Bengaluru 560034". When all that comes
+ * before an address is short comma-separated parts, with nothing else found
+ * among them, they are the rest of it.
+ */
+function withWholeAddresses(text: string, candidates: PiiCandidate[]): PiiCandidate[] {
+  return candidates.map((candidate) => {
+    if (candidate.category !== "ADDRESS" || candidate.start === 0) return candidate;
+    const before = text.slice(0, candidate.start);
+    if (!ADDRESS_PARTS_BEFORE.test(before) || candidates.some((other) => other.end <= candidate.start)) return candidate;
+    const start = before.search(/\S/);
+    return { ...candidate, start, text: text.slice(start, candidate.end) };
+  });
 }
 
 /**
@@ -94,6 +114,12 @@ export function fieldCategory(inputType?: string, autocomplete?: string): PiiCat
 export interface DomData {
   label?: string;
   value?: string;
+  /**
+   * The label of the element just before, when it may say what this one
+   * holds: a <dt> for its <dd>, a <th> for its <td>. Only numbers that need a
+   * label ("Aadhaar", "Date of birth", "Account number") use it.
+   */
+  context?: string;
   /** The input's `type` attribute. */
   inputType?: string;
   /** The input's `autocomplete` attribute. */
@@ -106,7 +132,7 @@ export function redactDomData(data: DomData, vault: TokenVault, names?: NameLook
     detections.push(...matches);
     return redactMatches(text, matches);
   };
-  const labelMatches = data.label ? detectText(data.label, vault, undefined, names) : [];
+  const labelMatches = data.label ? detectText(data.label, vault, data.context, names) : [];
   return {
     label: data.label === undefined ? undefined : redact(data.label, labelMatches),
     value: data.value === undefined ? undefined : redact(data.value, detectValue(data, vault, names)),
@@ -122,11 +148,13 @@ function detectValue(data: DomData, vault: TokenVault, names?: NameLookup): PiiM
     const match = detectPasswordValue(value, vault);
     return match ? [match] : [];
   }
-  const matches = detectText(value, vault, data.label, names);
-  if (matches.length > 0) return matches;
-  // Nothing matched a pattern, but the field says what it holds: a name, or a
-  // phone number written without a country code. Trust the field.
+  // The field says what it holds: a name, an address, a phone number written
+  // without a country code. Trust it for the whole value. Matches inside it
+  // are not enough: GLiNER found "3rd Cross, Indiranagar" in a street field
+  // holding "221B, 3rd Cross, Indiranagar" and left "221B" readable.
   const category = fieldCategory(data.inputType, data.autocomplete);
-  if (!category || value.trim().length === 0) return [];
-  return [{ token: vault.set(category, value), category, source: "dom-type", confidence: 0.9, text: value, start: 0, end: value.length }];
+  if (category && value.trim().length > 0) {
+    return [{ token: vault.set(category, value), category, source: "dom-type", confidence: 0.9, text: value, start: 0, end: value.length }];
+  }
+  return detectText(value, vault, data.label, names);
 }

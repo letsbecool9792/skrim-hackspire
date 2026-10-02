@@ -38,13 +38,34 @@ export function pageTexts(observation: PageObservationMessage): string[] {
   return [...texts];
 }
 
+/** Longest label read as the label of the element after it, and longest text it may label. */
+const SHORT_TEXT = 40;
+
+/**
+ * What labels an element, when the element before it does: the <dt> before a
+ * <dd>, the <th> before a <td>. "12/03/1990" alone is a date; after "Date of
+ * birth" it is a birth date. Only short texts count on both sides, so a
+ * heading does not label the paragraph under it.
+ */
+export function labelBefore(elements: readonly ScreenElement[], index: number): string | undefined {
+  const own = elements[index]?.label;
+  if (!own || own.length > SHORT_TEXT) return undefined;
+  // Skip one unlabelled element: a table row sits between a <th> and its <td>.
+  for (const previous of elements.slice(Math.max(0, index - 2), index).reverse()) {
+    if (previous.label) return previous.label.length <= SHORT_TEXT ? previous.label : undefined;
+  }
+  return undefined;
+}
+
 export function redactPage(observation: PageObservationMessage, cycle: number, vault: TokenVault, names?: NameLookup): RedactedPage {
   const redactions: RedactionCounts = {};
   const count = (category: PiiCategory) => { redactions[category] = (redactions[category] ?? 0) + 1; };
 
-  const elements: ScreenElement[] = (observation.elements ?? []).map((element) => {
+  const raw = observation.elements ?? [];
+  const elements: ScreenElement[] = raw.map((element, index) => {
     const field = observation.fields?.[element.id];
-    const redacted = redactDomData({ label: element.label, value: element.value, ...field }, vault, names);
+    const context = labelBefore(raw, index);
+    const redacted = redactDomData({ label: element.label, value: element.value, ...field, ...(context ? { context } : {}) }, vault, names);
     redacted.detections.forEach((detection) => count(detection.category));
     const hintMatches = element.hint ? detectText(element.hint, vault, undefined, names) : [];
     hintMatches.forEach((match) => count(match.category));

@@ -51,6 +51,18 @@ describe("PrivateNames", () => {
     assert.deepEqual(hidden(view.lookup, texts[2]!), ["Karan"]);
   });
 
+  test("counts a page as personal when a number is labelled by the element before it", async () => {
+    const { finder } = finderFor({ "Meera Iyer": "NAME" });
+    const names = new PrivateNames(finder, () => {});
+    // A <dl>: "Aadhaar" labels the number after it; the number alone is not PII.
+    const { observation, texts } = page("Name", "Meera Iyer", "Aadhaar", "2345 6789 0123");
+
+    const view = await names.preparePage(observation, texts);
+
+    assert.equal(view.personal, true);
+    assert.deepEqual(hidden(view.lookup, "Meera Iyer"), ["Meera Iyer"]);
+  });
+
   test("hides a name that follows words addressing the user, and the address right after it", async () => {
     const { finder } = finderFor({ "Asha": "NAME", "Rahul Sharma": "NAME", "12 MG Road, Bengaluru": "ADDRESS", "Einstein": "NAME" });
     const names = new PrivateNames(finder, () => {});

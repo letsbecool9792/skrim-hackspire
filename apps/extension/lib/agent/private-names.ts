@@ -4,6 +4,7 @@ import type { PageObservationMessage } from "../messages.ts";
 import type { NameFinder } from "../pii/gliner.js";
 import { fieldCategory, type NameLookup } from "../pii/redact.js";
 import { findRegexCandidates, type PiiCandidate } from "../pii/regex.js";
+import { labelBefore } from "./redact.ts";
 
 /**
  * Which names and addresses are hidden, and which go to the server as written.
@@ -54,7 +55,11 @@ const normalise = (value: string) => value.toLowerCase().replace(/\s+/g, " ").tr
 /** Whether a page shows the user's own data. Regex and field hints only: no model. */
 export function isPersonalPage(observation: PageObservationMessage, texts: readonly string[]): boolean {
   if (texts.some((text) => findRegexCandidates(text).length > 0)) return true;
-  return (observation.elements ?? []).some((element) => {
+  const elements = observation.elements ?? [];
+  return elements.some((element, index) => {
+    // A value labelled by the element before it: "Aadhaar", then "2345 6789 0123".
+    const context = labelBefore(elements, index);
+    if (context && findRegexCandidates(`${context}: ${element.label}`).length > 0) return true;
     const field = observation.fields?.[element.id];
     if (!field || !element.value?.trim()) return false;
     return field.inputType === "password" || fieldCategory(field.inputType, field.autocomplete) !== undefined;
