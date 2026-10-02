@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { TokenVault } from "../vault/vault.js";
+import { glinerCandidates, isBusinessAddress } from "./gliner.js";
 import {
   detectCards,
   detectAadhaarNumbers,
@@ -456,7 +457,37 @@ describe("addresses found in part", () => {
     const vault = new TokenVault();
 
     assert.equal(redactDomData({ label: "Deliveries go to 12 MG Road, Bengaluru" }, vault, tail("12 MG Road, Bengaluru")).label, "Deliveries go to <PII:ADDRESS:1>");
-    assert.equal(redactDomData({ label: "IFSC HDFC0001234, MG Road branch" }, vault, tail("MG Road branch")).label, "IFSC <PII:ACCOUNT:1>, MG Road branch");
+    assert.equal(redactDomData({ label: "IFSC HDFC0001234, MG Road branch" }, vault, tail("MG Road branch")).label, "IFSC <PII:ACCOUNT:1>, <PII:ADDRESS:2>");
+  });
+
+  test("does not take a business's name in as part of the address after it", () => {
+    const vault = new TokenVault();
+
+    assert.equal(redactDomData({ label: "Apollo Clinic, Bannerghatta Road" }, vault, tail("Bannerghatta Road")).label, "Apollo Clinic, <PII:ADDRESS:1>");
+  });
+});
+
+describe("which addresses are a business's", () => {
+  const entity = (text: string, label = "address") => ({ text, label, score: 0.9, start: 0, end: text.length });
+
+  test("drops a business's address, which is not the user's", () => {
+    assert.equal(isBusinessAddress("Apollo Clinic, Bannerghatta Road"), true);
+    assert.equal(isBusinessAddress("MG Road branch"), true);
+    assert.deepEqual(glinerCandidates([entity("MG Road branch")]), []);
+  });
+
+  test("keeps hiding anything that may be a home, though it names a business", () => {
+    // A street named after one, a house number first, a landmark: all may be someone's home.
+    for (const home of ["Hospital Road, Bengaluru", "12 Bank Street", "Flat 4, SBI Bank Colony, Pune", "Near City Hospital, 5 MG Road", "#7, Clinic Lane"]) {
+      assert.equal(isBusinessAddress(home), false, home);
+      assert.equal(glinerCandidates([entity(home)]).length, 1, home);
+    }
+  });
+
+  test("never takes the name of an ID document for a person, and nothing else is on that list", () => {
+    assert.deepEqual(glinerCandidates([entity("Aadhaar", "person")]), []);
+    // A word from our own test pages is not special-cased: whether GLiNER takes it for a name is GLiNER's.
+    assert.equal(glinerCandidates([entity("Koramangala", "person")]).length, 1);
   });
 });
 

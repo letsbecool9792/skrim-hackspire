@@ -32,19 +32,41 @@ const GLINER_LABEL_CATEGORIES: Record<string, PiiCategory> = {
 export const NAME_LABELS = ["person", "address"] as const;
 export const NAME_THRESHOLD = 0.6;
 
-const DENYLIST_EXACT = new Set(["aadhaar", "aadhar", "uidai", "biryani", "koramangala", "skrim"]);
-const BUSINESS_ADDRESS_WORDS = /\b(?:clinic|branch|hospital|bank|restaurant|store)\b/i;
+/**
+ * Words GLiNER took for names that name an Indian ID document: "Aadhaar"
+ * beside a card number. Document vocabulary, true on any site. Words from our
+ * own test pages do not belong here: they would raise the score and help on no
+ * other page.
+ */
+const NOT_NAMES = new Set(["aadhaar", "aadhar", "uidai"]);
+
+const BUSINESS_WORD = /\b(?:clinic|branch|hospital|bank|restaurant|store)\b/gi;
+/** The business word names a street ("Hospital Road", "Bank Street"): the address may be a home. */
+const STREET_AFTER = /^\s+(?:road|rd|street|st|lane|ln|marg|nagar|colony|layout|avenue|ave|cross|main|circle|chowk|gali|bazaar|block|sector)\b/i;
+/** A home address: a landmark ("near City Hospital"), a house, flat or plot, or a number first. */
+const HOME_CUE = /\b(?:near|opp|opposite|behind|beside|next to|flat|house|apartment|apt|floor|plot|door)\b|^\s*#?\d/i;
+
+/**
+ * Whether an address is a business's, not the user's: "Apollo Clinic,
+ * Bannerghatta Road", "MG Road branch". Hiding those costs the planner
+ * context. Privacy over context: anything that may be a home stays hidden,
+ * "12 Hospital Road" and "near City Hospital, 5 MG Road" included.
+ */
+export function isBusinessAddress(text: string): boolean {
+  if (HOME_CUE.test(text)) return false;
+  for (const match of text.matchAll(BUSINESS_WORD)) {
+    if (!STREET_AFTER.test(text.slice((match.index ?? 0) + match[0].length))) return true;
+  }
+  return false;
+}
 
 /** Maps entities to redaction candidates, keeping the best of any overlapping ones. No tokens yet. */
 export function glinerCandidates(entities: GlinerEntity[], minimumConfidence = 0.5): PiiCandidate[] {
   const candidates = entities.filter((entity) => {
     const category = GLINER_LABEL_CATEGORIES[entity.label.toLowerCase()];
     if (category === undefined || entity.score < minimumConfidence || entity.start < 0 || entity.end <= entity.start || entity.text.length !== entity.end - entity.start) return false;
-    
-    const lower = entity.text.toLowerCase().trim();
-    if (category === "NAME" && DENYLIST_EXACT.has(lower)) return false;
-    if (category === "ADDRESS" && BUSINESS_ADDRESS_WORDS.test(lower)) return false;
-    
+    if (category === "NAME" && NOT_NAMES.has(entity.text.toLowerCase().trim())) return false;
+    if (category === "ADDRESS" && isBusinessAddress(entity.text)) return false;
     return true;
   }).map((entity) => ({ entity, category: GLINER_LABEL_CATEGORIES[entity.label.toLowerCase()] as PiiCategory }))
     .sort((left, right) => right.entity.score - left.entity.score || left.entity.start - right.entity.start);
