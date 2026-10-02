@@ -29,7 +29,10 @@ const UPI_PATTERN = /\b[a-z0-9][a-z0-9._-]{1,80}@[a-z][a-z0-9]{1,30}(?![a-z0-9-]
 const AADHAAR_PATTERN = /\b\d{4}[ -]?\d{4}[ -]?\d{4}\b/g;
 const ACCOUNT_NUMBER_PATTERN = /\b\d{8,18}\b/g;
 
-const AADHAAR_CONTEXT = /aadhaar|aadhar|uidai/i;
+// "aadhaar" / "aadhar" / "uidai" are the direct labels. "id card" / "identity
+// card" / "national id" / "government id" cover OCR reads of scanned ID card
+// images, where the nearby text labels the document rather than the field.
+const AADHAAR_CONTEXT = /aadhaar|aadhar|uidai|id\s+card|identity\s+card|national\s+id|government\s+id|govt\.?\s+id/i;
 const ACCOUNT_CONTEXT = /account(?:\s+number|\s+no\.?|#)?/i;
 // A date is a birth date only when labelled as one: every page is full of dates.
 const DATE_PATTERN = /\b(?:\d{1,2}[/.-]\d{1,2}[/.-](?:19|20)\d{2}|(?:19|20)\d{2}-\d{2}-\d{2}|\d{1,2} (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* (?:19|20)\d{2})\b/gi;
@@ -37,6 +40,20 @@ const DOB_CONTEXT = /date of birth|birth ?date|\bd\.?o\.?b\b|\bborn\b/i;
 
 /** How far back a label may sit before the number it describes. */
 const CONTEXT_WINDOW = 48;
+
+/**
+ * Repairs OCR artefacts that break structured PII patterns. Tesseract sometimes
+ * inserts a space after a period inside an email local-part, splitting
+ * "karan.mehta@example.com" into "karan. mehta@example.com". This pass collapses
+ * those gaps before the regex detectors run.
+ *
+ * Only collapses when the fragment after the space leads to an "@" with no
+ * intervening whitespace, so ordinary sentence endings ("See you. Call me.")
+ * are not affected.
+ */
+export function normalizeOcrText(text: string): string {
+  return text.replace(/(\w)\. (\w[^\s]*@)/g, "$1.$2");
+}
 
 function passesLuhn(value: string): boolean {
   let sum = 0;

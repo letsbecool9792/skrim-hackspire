@@ -516,3 +516,95 @@ describe("GLiNER entity tokenisation", () => {
     assert.deepEqual(vault.stats(), { NAME: 1 });
   });
 });
+
+import { normalizeOcrText } from "./regex.js";
+
+describe("normalizeOcrText — OCR artefact repair", () => {
+  test("collapses a space after a period inside an email local-part", () => {
+    // Tesseract OCR sometimes splits "karan.mehta@example.com" into
+    // "karan. mehta@example.com"; the email regex then only catches the half
+    // with "@". Normalising before detection fixes the partial leak.
+    assert.equal(
+      normalizeOcrText("Email: karan. mehta@example.com"),
+      "Email: karan.mehta@example.com",
+    );
+  });
+
+  test("does not collapse a sentence-ending period followed by a word without @", () => {
+    assert.equal(
+      normalizeOcrText("Hello. Meet me at the office."),
+      "Hello. Meet me at the office.",
+    );
+  });
+
+  test("does not collapse Dr./Mr. style titles when no @ follows", () => {
+    assert.equal(
+      normalizeOcrText("Dr. Sharma visited the clinic."),
+      "Dr. Sharma visited the clinic.",
+    );
+  });
+
+  test("collapses multiple artefacts in one string", () => {
+    assert.equal(
+      normalizeOcrText("a. b@x.com and c. d@y.org"),
+      "a.b@x.com and c.d@y.org",
+    );
+  });
+
+  test("after normalisation the email is detected in full", () => {
+    const vault = new TokenVault();
+    const text = normalizeOcrText("Email: karan. mehta@example.com");
+    const matches = detectEmails(text, vault);
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0]?.text, "karan.mehta@example.com");
+  });
+});
+
+describe("Aadhaar detection — context-gated with extended label recognition", () => {
+  test("detects with classic 'Aadhaar' label", () => {
+    const vault = new TokenVault();
+    const matches = detectAadhaarNumbers("Aadhaar: 1234 5678 9012", vault);
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0]?.text, "1234 5678 9012");
+    assert.equal(matches[0]?.category, "GOV_ID");
+  });
+
+  test("detects with 'UIDAI' label", () => {
+    const vault = new TokenVault();
+    const matches = detectAadhaarNumbers("UIDAI number: 1234-5678-9012", vault);
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0]?.text, "1234-5678-9012");
+  });
+
+  test("detects when an 'ID card' label precedes the number (OCR of scanned card)", () => {
+    // On a scanned ID card image, Tesseract reads the whole region and the
+    // preceding element's label ("Uploaded ID card", "Identity card") becomes
+    // the context. The extended context regex matches this, so the 12-digit
+    // number is caught even without a direct "Aadhaar" label.
+    const vault = new TokenVault();
+    const matches = detectAadhaarNumbers("Uploaded ID card: 1234 5678 9012", vault);
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0]?.text, "1234 5678 9012");
+  });
+
+  test("detects with 'identity card' label", () => {
+    const vault = new TokenVault();
+    const matches = detectAadhaarNumbers("Identity card 1234 5678 9012", vault);
+    assert.equal(matches.length, 1);
+  });
+
+  test("does NOT detect a 4-4-4 number without any label (order number risk)", () => {
+    // "7789 5561 2230" appears in inbox.html as an order reference: the same
+    // 4-4-4 format. Without a label, we cannot tell it from an Aadhaar, so
+    // we do not hide it.
+    const vault = new TokenVault();
+    const matches = detectAadhaarNumbers("7789 5561 2230", vault);
+    assert.equal(matches.length, 0);
+  });
+
+  test("does NOT detect a bare 12-digit run without any label", () => {
+    const vault = new TokenVault();
+    const matches = detectAadhaarNumbers("Order 123456789012 placed.", vault);
+    assert.equal(matches.length, 0);
+  });
+});
