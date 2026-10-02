@@ -144,6 +144,11 @@ skrim/
 │   ├── pages/             30–50 synthetic pages with PII in known places.
 │   └── ground-truth/      Annotations the harness scores against.
 │
+├── design/
+│   └── tokens.css         The design language: colours, type, spacing, the placeholder
+│                          pill. Imported by the side panel and the dashboard (and the
+│                          landing page, later). Change a value here, all of them follow.
+│
 ├── scripts/               Build-time tooling. Nothing here runs at extension runtime.
 │   ├── fetch-models.mjs   Populates public/models/. Node only, no deps, no Python.
 │   ├── artifacts/         Committed ONNX we export ourselves (see gitignore note).
@@ -232,10 +237,11 @@ Built, by workstream:
 | Ayushi (WS3) | Detection: the email leak and the Aadhaar miss read by OCR (PR 18, finished by Suparno), false positives (PR 17), names in URL paths; then face detection and face scoring in the eval | `pnpm eval`; Groq when needed |
 | Dhruba (WS2) | 19 more fixtures, to about 40 (faces, Hindi, long pages, real-site layouts) and reading long pages in the eval; then the OmniParser export and icon detector | `pnpm eval`; Groq when needed |
 
-**Hands off: the side panel's look.** Suparno redesigns
-`apps/extension/entrypoints/sidepanel/App.tsx` and `style.css` next; ask him before changing
-them. His bug fixes have landed, so the other files held back for them are open again, and
-face detection and the icon detector can plug into `lib/agent/read-page.ts` now.
+**The look is one language, in `design/tokens.css`.** The side panel and the dashboard use it
+(first pass on `design/ui-language`, 2026-10-03, waiting on Suparno's eyes). Use its tokens,
+not new hex values or pixel sizes; icons are lucide, never emoji; fonts are bundled
+(`@fontsource-variable`), never fetched. Ask Suparno before changing the side panel's layout.
+Face detection and the icon detector can plug into `lib/agent/read-page.ts` now.
 
 ### Waiting on Suparno (manual)
 
@@ -277,6 +283,14 @@ add to it whenever a change needs a manual check, and tick items off when report
   - [ ] with the default provider (Groq), several tasks in a row: steps slow down to ~14 s when
     the minute's tokens run out, but no task fails with "rate limit reached". Not confirmed:
     Groq limited so fast that testing moved to Ollama
+- [ ] **The new look** (`design/ui-language`; rebuild with `pnpm --filter @skrim/extension build`
+      and reload Skrim, restart `pnpm dev:dashboard`). Look at both in light and dark (Windows
+      colour mode) and say what to change:
+  - side panel: the empty state, a finished task (steps, the result card, the "Privacy" button),
+    a failed task, the composer while a task runs
+  - dashboard: waiting state, a task's live feed, the request the server received, the
+    resource panel, and "disconnected" after closing the panel. From the back of a room, is the
+    text big enough? Offline, the fonts must still be Inter, not a fallback
 - [ ] **Groq is the default now**: with no `$env:MODEL_PROVIDER` set, `pnpm dev:server` and
       the side panel's header show `qwen/qwen3.8-27b`. If they show another model, the root
       `.env` still sets `MODEL_PROVIDER` (it overrides the default): change it to `groq` or
