@@ -69,7 +69,7 @@ The product is **Skrim**; the team is **tropical crush**.
 | Where | Spelling |
 |---|---|
 | Anything a person reads: extension name, side panel, landing page, docs | `Skrim` |
-| GitHub repo, npm scope `@skrim/*`, message strings like `skrim:offscreen:ping` | `skrim` |
+| GitHub repo, npm scope `@skrim/*`, `window.__skrimEval` in eval builds | `skrim` |
 | Firefox add-on id (`wxt.config.ts`) | `skrim@tropical-crush` |
 
 If the name ever changes:
@@ -104,8 +104,6 @@ skrim/
 │   │   │   ├── sidepanel/     The chat UI, and where the agent loop runs.
 │   │   │   ├── background/    Opens the side panel. Nothing else: Chrome kills a
 │   │   │   │                  service worker whose fetch() takes over 30 s.
-│   │   │   ├── offscreen/     Chrome only, for model inference. Unused so far;
-│   │   │   │                  see "Open findings".
 │   │   │   └── content/       Answers the side panel: page graph, actions. Runs in the page.
 │   │   ├── lib/
 │   │   │   ├── agent/         The loop: observe → redact → plan → act → verify.
@@ -168,15 +166,15 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (156 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (159 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       before the OmniParser detector. The built extension is 86.6 MB, including ONNX
       Runtime's 14 MB WebAssembly
 - [x] WXT config: MV3 on both browsers, name Skrim, per-browser permissions, WebAssembly
       allowed by the CSP. Permissions: `<all_urls>` host access (the reach the content script
-      already had, now also covering capture, injection and the server), `scripting`,
-      `sidePanel`, and `offscreen` on Chrome
+      already had, now also covering capture, injection and the server), `scripting`, and
+      `sidePanel` on Chrome. `offscreen` was dropped
 
 **The loop is closed**: goal → DOM graph → redaction against a per-task vault →
 server → one action → verify → repeat, in a chat side panel. Tested in Node against
@@ -190,8 +188,10 @@ Built, by workstream:
       and for going in circles, the tab fixed per task
 - [x] **WS2 perception:** DOM extraction with visible text, field values, dropdown options,
       and names from images and icons (alt text, svg titles); only what is in and near the
-      view, at most 120 elements, with a count of the rest. The OCR module works in Chrome;
-      fusion and escalation modules exist but are not in the loop
+      view, at most 120 elements, with a count of the rest. **Text in pixels** (a canvas, a
+      big image, a cross-origin iframe) is read with on-device OCR in the loop and redacted
+      like DOM text (`lib/vision/read-pixels.ts`; not tried in a browser yet). The fusion
+      module waits for the icon detector
 - [x] **WS3 privacy:** regex detectors (birth dates and labels from the element before
       included; ISBNs are not cards), form-field hints, **GLiNER for names and addresses in
       free text** (side panel, ~12 ms a text), and **a rule for which names are private**
@@ -220,16 +220,19 @@ Built, by workstream:
       click each; the ⓘ button under a result; the input box has no scroll arrows; Wikipedia
       `Search for Alan Turing` is sent as written and starts quickly, and a link that
       opens a new page continues the task; the form fixture still hides the name, email,
-      phone and address
+      phone and address; on `fixtures/pages/canvas-card.html`, `What is the PAN on my ID?`
+      should show a "ID number 1" pill (the PAN read from the canvas and hidden)
 - [ ] Run `pnpm eval` once (Playwright's Chromium first) and compare with `pnpm eval:node`
 - [ ] Settle the default provider, given Groq's rate limit (see "Open findings")
 
 **2. Perception beyond the DOM** (WS2, WS3)
 - [x] GLiNER inference for names and addresses in free text
-- [ ] Face detection (the BlazeFace model is fetched; no code yet)
-- [ ] OmniParser icon detector: export (`scripts/artifacts/omniparser-icon.onnx`) and inference
-- [ ] Wire OCR and vision fusion into the loop, for canvas and image-only pages
-- [ ] Decide where inference runs: the side panel can now host it (see "Open findings")
+- [x] OCR in the loop, for text in a canvas, an image or a cross-origin iframe
+- [x] Where inference runs: the side panel (the offscreen document is gone)
+- [ ] Face detection (the BlazeFace model is fetched; no code yet). It matters once a
+      screenshot goes to the server; today the planner gets text only
+- [ ] OmniParser icon detector: export (`scripts/artifacts/omniparser-icon.onnx`) and
+      inference, then vision fusion for icon-only buttons
 
 **3. Measure and show it** (WS5, WS6)
 - [x] Eval harness, and 21 fixtures with ground truth
@@ -288,7 +291,8 @@ like, and any name already hidden in the task. Known gaps:
 
 **What the eval finds** (`pnpm eval:node`, 21 fixtures): 100% recall on PII in the
 page's text, 87.7% on all PII, 77.3% precision, 8 of 127 near-misses hidden. The misses are
-all inside a canvas, an image or a cross-origin iframe: vision's job. The false positives:
+all inside a canvas, an image or a cross-origin iframe, which the Node check cannot capture;
+the loop now reads those with OCR, which only the browser run can score. The false positives:
 single capitalised words taken for names ("Skrim", "Aadhaar", "biryani", "Koramangala"),
 business addresses on personal pages ("Apollo Clinic, Bannerghatta Road", "MG Road
 branch"), and the search results page above. The fixtures were written by the same hand as
@@ -306,11 +310,6 @@ or a Worker so the chat does not freeze meanwhile.
 are listed, at most 120, and the prompt says how many more lie above and below. The planner
 must scroll to reach the rest, and a long paragraph is cut at 200 characters. Untried in
 Chrome: whether Qwen scrolls when what it needs is not listed.
-
-**The offscreen document is probably unnecessary now.** It exists because Chrome's service
-worker cannot run WebAssembly or WebGPU. The loop lives in the side panel, an ordinary page,
-and both OCR and GLiNER run there (both checked in Chrome). Dropping the
-offscreen document would also drop the `offscreen` permission.
 
 **Name detection fails open.** If GLiNER cannot load in the side panel, the task continues
 with the regex layer and the chat shows a red warning that names and addresses are not being
@@ -466,8 +465,9 @@ Run the air-gap beat with the extension's WebGPU path idle, or accept it being s
 ## Gotchas
 
 - **No inference in the Chrome service worker.** Transformers.js cannot reach WebGPU *or*
-  WASM there ([#787](https://github.com/huggingface/transformers.js/issues/787)). Chrome
-  needs `chrome.offscreen`; Firefox event pages have DOM access and need nothing.
+  WASM there ([#787](https://github.com/huggingface/transformers.js/issues/787)). Every
+  model runs in the side panel, an ordinary extension page on both browsers. The offscreen
+  document that used to exist for this was removed, with its permission.
 - **MV3 CSP blocks CDN WASM.** MediaPipe and Tesseract runtimes must be served from inside
   the bundle — that is what the vendor step in `fetch-models.mjs` is for.
 - **`captureVisibleTab` is rate-limited** to ~2/sec with no way to raise it. Drive the

@@ -55,7 +55,7 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 156 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 159 tests:
 
 | Tests | Covers |
 |---|---|
@@ -63,7 +63,7 @@ Runs the five invariant rules, typechecks all 7 packages, and runs 156 tests:
 | 12 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks) and the prompt format |
 | 9 in `@skrim/eval` | Scoring: lining redacted text up with the original, recall, precision, IoU, over-redaction |
 | 59 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection (birth dates, labels from the element before), form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), whole addresses, the token vault |
-| 16 in `lib/vision` | DOM + vision fusion and the escalation policy |
+| 19 in `lib/vision` | DOM + vision fusion, the escalation policy, and which regions to read with OCR |
 | 17 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons, only what is near the view) and click verification, in a simulated DOM |
 | 23 in `lib/agent` | The whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel), and which names are private |
 
@@ -181,6 +181,12 @@ quickly: only the part of the page in and near the view is read, and name detect
 not run on a page that shows none of your data. Clicking a link that opens a new page
 continues the task on that page.
 
+Text that exists only as pixels: open `fixtures/pages/canvas-card.html` (an ID card drawn on a
+canvas) and ask `What is the PAN on my ID?`. Skrim captures the tab, reads the canvas with
+on-device OCR, and hides what it read like any other text, so the answer should show an
+"ID number 1" pill rather than the number. This only works while the task's tab is the one
+on screen.
+
 The chat stays for as long as the panel is open. Closing the panel stops a running task and
 clears everything.
 
@@ -223,8 +229,7 @@ canvas, an image or an iframe), 77.3% precision, and 8 of 127 near-misses hidden
 
 | Part | Why |
 |---|---|
-| Face detection, OmniParser icon detection | Not built. The OmniParser model has not been exported |
-| Vision in the loop (OCR, fusion) | The modules exist, but the loop observes the DOM only. OCR itself read the fixtures in Chrome in 0.1–0.4 s, through a test button since removed |
+| Face detection | Not built; it matters once a screenshot goes to the server, and today none does. No eval fixture has a face yet |
+| Icon detection, vision fusion | The OmniParser model is not exported; fusion waits for it. (OCR is in the loop: text in a canvas, image or frame is read and redacted) |
 | Dashboard, landing page | Still the Vite templates |
-| Eval: faces | No fixture with a face yet; BlazeFace is not wired either |
 | Firefox | Builds, but nothing has been tried in it yet |

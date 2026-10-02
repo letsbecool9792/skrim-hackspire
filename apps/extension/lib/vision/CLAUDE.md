@@ -6,10 +6,18 @@
 
 On Chrome, model inference **cannot** happen in the background service worker — WebGPU and
 WASM are both unavailable there ([transformers.js#787](https://github.com/huggingface/transformers.js/issues/787)).
-That is why `entrypoints/offscreen/` exists. But the agent loop now runs in the side panel,
-an ordinary extension page, and OCR already runs there (in Tesseract's own Worker). Whether
-to keep the offscreen document at all is open; see CLAUDE.md "Open findings". Heavy models
-belong in a Worker either way, so the UI stays responsive.
+It runs in the side panel instead, an ordinary extension page, where the agent loop lives:
+OCR (in Tesseract's own Worker) and GLiNER already do. The offscreen document that was
+meant for this was removed. Heavy models belong in a Worker, so the chat
+stays responsive.
+
+## Text in pixels
+
+`read-pixels.ts`: when the view holds a canvas, an iframe or an image big enough to hold
+text (`escalation.ts` decides), the side panel captures the tab once and OCRs just those
+regions, a line at a time. Each line becomes a `source: "vision"` text element and is
+redacted like DOM text. It reads only while the task's tab is the one on screen, because
+the browser captures a window's active tab.
 
 Every model here is WebAssembly, which the manifest's CSP allows with `'wasm-unsafe-eval'`.
 Without it, Tesseract hung with no error.
