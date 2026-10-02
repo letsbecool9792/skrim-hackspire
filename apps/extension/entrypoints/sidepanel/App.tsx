@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { Action, PiiCategory } from "@skrim/schema";
+import { AlertTriangle, ArrowDownUp, ArrowRight, ArrowUp, ChevronsUpDown, CircleCheck, Clock, Eraser, Keyboard, MousePointer2, ScanText, ShieldCheck, Square, type LucideIcon } from "lucide-react";
 import type { ErrorCode } from "@/lib/errors.ts";
 import { getActionPlanner } from "@/lib/integration.ts";
 import { runAgentTask, type AgentEvent } from "@/lib/agent/loop.ts";
@@ -10,6 +11,8 @@ import { tabLink } from "@/lib/agent/tab-link.ts";
 import { tabPixelReader } from "@/lib/vision/read-pixels.ts";
 import { SERVER_URL } from "./config.ts";
 import { feed } from "./feed-instance.ts";
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
 
 // ─── Chat model ────────────────────────────────────────────────────────────
 
@@ -111,9 +114,11 @@ function describeAction(action: Action, targetLabel?: string): string {
   }
 }
 
-const ACTION_ICONS: Record<Action["type"], string> = {
-  click: "↖", type: "⌨", select: "☰", scroll: "↕", navigate: "→", extract: "⎘", wait: "◷", done: "✓",
+const ACTION_ICONS: Record<Action["type"], LucideIcon> = {
+  click: MousePointer2, type: Keyboard, select: ChevronsUpDown, scroll: ArrowDownUp, navigate: ArrowRight, extract: ScanText, wait: Clock, done: CircleCheck,
 };
+
+const ICON_SIZE = 16;
 
 function describeCounts(counts: RedactionCounts): string {
   const parts = Object.entries(counts)
@@ -141,34 +146,35 @@ function Tokenised({ text }: { text: string }) {
 // ─── Pieces ────────────────────────────────────────────────────────────────
 
 function ServerChip({ info, onRetry }: { info: ServerInfo | null | "checking"; onRetry: () => void }) {
-  if (info === "checking") return <span className="chip">Connecting…</span>;
+  if (info === "checking") return <span className="chip"><span className="chip-label">Connecting…</span></span>;
   if (!info) {
     return (
       <button className="chip chip-bad" type="button" onClick={onRetry} title={`No planning server at ${SERVER_URL}. Start it with: pnpm dev:server`}>
-        <span className="dot" /> Server offline · retry
+        <span className="dot" /> <span className="chip-label">Server offline · retry</span>
       </button>
     );
   }
   return (
     <span className="chip" title={`Planning server at ${SERVER_URL}`}>
-      <span className="dot dot-ok" /> {info.model.split("/").pop()} · {info.provider}
+      <span className="dot dot-ok" /> <span className="chip-label">{info.model.split("/").pop()} · {info.provider}</span>
     </span>
   );
 }
 
 function StepRow({ step }: { step: StepView }) {
+  const ActionIcon = ACTION_ICONS[step.action.type];
   const status = step.verified === undefined ? "pending" : step.verified ? "ok" : "warn";
   const reason = "reason" in step.action ? step.action.reason : undefined;
   return (
     <li className={`step step-${status}`}>
-      <span className="step-icon" aria-hidden="true">{ACTION_ICONS[step.action.type]}</span>
+      <span className="step-icon" aria-hidden="true"><ActionIcon className="icon" size={ICON_SIZE} /></span>
       <div className="step-body">
         <div className="step-title"><Tokenised text={describeAction(step.action, step.targetLabel)} /></div>
         {reason && <div className="step-reason"><Tokenised text={reason} /></div>}
         {step.verified === false && <div className="step-note">{step.message ?? "Not confirmed."}</div>}
       </div>
       <span className="step-meta">
-        {step.verified === undefined ? <span className="spinner" aria-label="Working" /> : step.verified ? "✓" : "!"}
+        {step.verified === undefined ? <span className="spinner" aria-label="Working" /> : step.verified ? <CircleCheck className="icon" size={ICON_SIZE} aria-label="Done" /> : <AlertTriangle className="icon" size={ICON_SIZE} aria-label="Not confirmed" />}
         <small>{(step.latencyMs / 1000).toFixed(1)} s</small>
       </span>
     </li>
@@ -181,22 +187,23 @@ function ResultCard({ finished }: { finished: Finished }) {
   const kept = describeCounts(finished.tokens);
   return (
     <div className={`result result-${finished.outcome}`}>
-      {finished.outcome === "completed" && <strong>✓ Done</strong>}
-      {finished.outcome === "cancelled" && <strong>Stopped</strong>}
-      {finished.outcome === "failed" && <strong>{ERROR_TITLES[finished.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? "Something went wrong"}</strong>}
+      {finished.outcome === "completed" && <div className="result-title"><CircleCheck className="icon" size={ICON_SIZE} aria-hidden="true" /> Done</div>}
+      {finished.outcome === "cancelled" && <div className="result-title"><Square className="icon" size={ICON_SIZE} aria-hidden="true" /> Stopped</div>}
+      {finished.outcome === "failed" && <div className="result-title"><AlertTriangle className="icon" size={ICON_SIZE} aria-hidden="true" /> {ERROR_TITLES[finished.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? "Something went wrong"}</div>}
       {finished.summary && <p><Tokenised text={finished.summary} /></p>}
       {finished.message && <p>{finished.message}</p>}
       <div className="result-foot">
         <small title={finished.errorCode}>
           {finished.steps} step{finished.steps === 1 ? "" : "s"}
         </small>
-        <button className="info-button" type="button" onClick={() => setShowPrivacy((shown) => !shown)} aria-expanded={showPrivacy} aria-label="What stayed on this device" title="What stayed on this device">
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 7.2v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /><circle cx="8" cy="4.9" r="0.9" fill="currentColor" /></svg>
+        <button className="info-button" type="button" onClick={() => setShowPrivacy((shown) => !shown)} aria-expanded={showPrivacy} title="What stayed on this device">
+          <ShieldCheck className="icon" size={14} aria-hidden="true" /> Privacy
         </button>
       </div>
       {showPrivacy && (
         <p className="privacy-detail">
-          {kept ? `Kept on this device: ${kept}. The server only saw placeholders.` : "No personal data found on these pages."}
+          <ShieldCheck className="icon" size={ICON_SIZE} aria-hidden="true" />
+          <span>{kept ? `Kept on this device: ${kept}. The server only saw placeholders.` : "No personal data found on these pages."}</span>
         </p>
       )}
     </div>
@@ -318,21 +325,22 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand"><span className="mark" aria-hidden="true">S</span><strong>Skrim</strong></div>
+        <div className="brand"><span className="mark" aria-hidden="true"><ShieldCheck className="icon" size={16} strokeWidth={2.25} /></span>Skrim</div>
         <ServerChip info={server} onRetry={() => void checkServer()} />
         <div className="topbar-actions">
-          <button className="icon-button" type="button" onClick={() => setItems([])} disabled={running || items.length === 0} title="Clear the chat" aria-label="Clear the chat">⌫</button>
+          <button className="icon-button" type="button" onClick={() => setItems([])} disabled={running || items.length === 0} title="Clear the chat" aria-label="Clear the chat"><Eraser className="icon" size={ICON_SIZE} /></button>
         </div>
       </header>
 
       <main className="chat">
         {items.length === 0 && (
           <div className="empty">
+            <div className="empty-mark" aria-hidden="true"><ShieldCheck className="icon" size={24} /></div>
             <h1>What should I do on this page?</h1>
             <p>Skrim reads the page on your device, swaps personal details for placeholders, and asks the planning server for one step at a time.</p>
             <div className="examples">
               {EXAMPLES.map((example) => (
-                <button key={example} type="button" onClick={() => { setDraft(example); inputRef.current?.focus(); }}>{example}</button>
+                <button key={example} type="button" onClick={() => { setDraft(example); inputRef.current?.focus(); }}>{example}<ArrowRight className="icon" size={14} aria-hidden="true" /></button>
               ))}
             </div>
             <p className="fine">Nothing is saved. Closing this panel stops the task and clears the chat.</p>
@@ -354,8 +362,8 @@ export default function App() {
           aria-label="Task for Skrim"
         />
         {running
-          ? <button className="send stop" type="button" onClick={stop} aria-label="Stop" title="Stop (Esc)">■</button>
-          : <button className="send" type="button" onClick={() => void start(draft)} disabled={!draft.trim()} aria-label="Send" title="Send (Enter)">↑</button>}
+          ? <button className="send stop" type="button" onClick={stop} aria-label="Stop" title="Stop (Esc)"><Square className="icon" size={14} fill="currentColor" /></button>
+          : <button className="send" type="button" onClick={() => void start(draft)} disabled={!draft.trim()} aria-label="Send" title="Send (Enter)"><ArrowUp className="icon" size={18} strokeWidth={2.25} /></button>}
       </footer>
     </div>
   );
