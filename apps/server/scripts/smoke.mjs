@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Smoke test for the planning server. Sends three hand-built requests to a
+ * Smoke test for the planning server. Sends four hand-built requests to a
  * running server and checks the model picks a sensible action for each.
  *
  *   pnpm dev:server       # terminal 1
@@ -20,7 +20,7 @@ const noRedactions = { regions: [], tokensInPlay: [] };
 /** Roughly what extractScreenGraph() produces for fixtures/pages/click-test.html. */
 const fixtureElements = (counterText) => [
   { id: "e1", role: "heading", label: "Skrim click test fixture", bbox: [16, 16, 600, 40], source: "dom" },
-  { id: "e2", role: "button", label: "Toggle panel", bbox: [16, 100, 120, 32], state: ["collapsed"], source: "dom" },
+  { id: "e2", role: "button", label: "Toggle panel", value: "Show Panel", bbox: [16, 100, 120, 32], state: ["collapsed"], source: "dom" },
   { id: "e3", role: "checkbox", label: "Accept terms", bbox: [16, 180, 16, 16], state: ["unchecked"], source: "dom" },
   { id: "e4", role: "button", label: "Increment counter", value: counterText, bbox: [16, 250, 120, 32], source: "dom" },
   { id: "e5", role: "button", label: "Details", bbox: [16, 320, 120, 32], state: ["collapsed"], source: "dom" },
@@ -70,6 +70,16 @@ const SCENARIOS = [
     },
     expect: (a) => a.type === "done" && a.success === true,
     expected: "done with success: true",
+  },
+  {
+    name: "visible text",
+    request: {
+      goal: "Click show panel",
+      graph: { cycle: 0, url, title: "Skrim click test fixture", viewport, elements: fixtureElements("Count: 0"), manifest: noRedactions },
+      history: [],
+    },
+    expect: (a) => a.type === "click" && a.target === "e2",
+    expected: 'click on e2, whose aria-label is "Toggle panel" but which shows "Show Panel"',
   },
 ];
 
