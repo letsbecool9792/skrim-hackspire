@@ -220,6 +220,9 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
       if (refused) {
         outcome = { verified: false, note: `not clicked: it would ${refused}, which the goal does not ask for. If the goal is met, answer done`, message: `Skipped: it would ${refused}, which you didn't ask for.` };
         log.info("agent.refusedCommitment", { taskId, step });
+      } else if (target?.source === "vision") {
+        // Text read from pixels has no element behind it in the page.
+        outcome = actOnPixelText(action, reading.observation.elements?.find((element) => element.id === target.id)?.label);
       } else {
         outcome = await act(link, taskId, step, action, { vault, names }, signal);
       }
@@ -337,6 +340,22 @@ const ERROR_NOTES: Partial<Record<ErrorCode, { note: string; message: string }>>
   MALFORMED_ACTION: { note: "the action was malformed", message: "The planner's step could not be carried out." },
   CONTENT_SCRIPT_ERROR: { note: "the action failed inside the page", message: "The page did not accept that step." },
 };
+
+/**
+ * An action on a line read from pixels (lib/vision/read-pixels.ts). The page
+ * has no element behind it, so the content script cannot resolve its id; the
+ * side panel holds the text it read, so it answers an extract itself.
+ * `rawText` is the line as read, before redaction: the loop redacts the
+ * extracted value like any other.
+ */
+function actOnPixelText(action: Action, rawText: string | undefined): ActOutcome {
+  if (action.type === "extract" && rawText) return { verified: true, extractedValue: rawText };
+  return {
+    verified: false,
+    note: "that is text read from an image of the screen: it can be read (quote it, or extract it), not clicked or typed into",
+    message: "That text is part of an image on the page, so Skrim can read it but not click it.",
+  };
+}
 
 /** States worth reporting after an action. "focused" is not: every click causes it. */
 const REPORTED_STATES = new Set(["checked", "unchecked", "expanded", "collapsed", "selected", "disabled", "invalid"]);

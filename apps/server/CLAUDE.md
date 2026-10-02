@@ -37,10 +37,17 @@ carry account ids.
 
 `src/prompts/builder.ts` renders the request as text, one line per element
 (`e4 button "Increment counter" = "Count: 0" [16,250,120,32] (collapsed)`), several times
-smaller than JSON. The screenshot is not sent. The history comes with each step's
-`verified` flag and note ("now it is expanded"), and the system prompt tells the model to
-answer `done` once the history shows the goal reached. Some models ignore that; measure
-with `pnpm test:agent` before choosing one.
+smaller than JSON. The screenshot is not sent; text read from pixels is marked `{vision}`.
+The history comes with each step's `verified` flag and note ("now it is expanded"), and
+the system prompt tells the model to answer `done` once the history shows the goal
+reached. Some models ignore that; measure with `pnpm test:agent` before choosing one.
+
+**Change the prompt only with `pnpm study` numbers in hand.** Every word is sent with every
+step, so a shorter prompt is fewer of Groq's 8,000 tokens a minute. But Qwen3-VL 4B, the
+offline planner, is sensitive to it: a tightened system prompt, a rule on answering
+questions, a rule on finding search boxes and element positions cut to the corner (or
+dropped) each cost it tasks it had passed every time. `pnpm study -- ollama:qwen3-vl:4b-instruct`
+runs the 16 tasks on the local model for free.
 
 ## Handling model output
 

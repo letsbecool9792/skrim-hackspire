@@ -11,6 +11,11 @@ import { SYSTEM_PROMPT } from './system.js';
  * The screenshot, when present, is not sent: every wired model is prompted as
  * text-only for now. Element `children` are left out; the list is in document
  * order, which carries most of the same structure.
+ *
+ * Positions cost about 10 tokens an element, but Qwen3-VL 4B needs them: with
+ * none it typed into a form's labels instead of its fields (1 of 4 runs
+ * passed), and with only the top-left corner it clicked a search box instead
+ * of typing into it (0 of 3). Measure before trimming this format again.
  */
 export function buildPrompt(request: PlanRequest): ChatMessage[] {
   return [
@@ -70,10 +75,9 @@ export function renderElement(element: ScreenElement): string {
   if (element.hint) line += ` hint ${JSON.stringify(element.hint)}`;
   line += ` [${element.bbox.join(',')}]`;
   if (element.state && element.state.length > 0) line += ` (${element.state.join(', ')})`;
-  if (element.source !== 'dom') {
-    const confidence = element.confidence === undefined ? '' : ` ${element.confidence.toFixed(2)}`;
-    line += ` {${element.source}${confidence}}`;
-  }
+  // Read from pixels: there is no element in the page to click. A "fused"
+  // element is a DOM element vision agreed with, and acts like one.
+  if (element.source === 'vision') line += ' {vision}';
   return line;
 }
 
