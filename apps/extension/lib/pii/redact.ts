@@ -1,4 +1,6 @@
-import { type PiiMatch, detectAccountNumbers, detectAadhaarNumbers, detectCards, detectEmails, detectIfscCodes, detectPanNumbers, detectPhones, detectUpiIds } from "./regex.js";
+import { type PiiCategory } from "@skrim/schema";
+
+import { type PiiCandidate, type PiiMatch, findRegexCandidates, tokenise } from "./regex.js";
 import { TokenVault } from "../vault/vault.js";
 
 export function detectPasswordValue(value: string, vault: TokenVault): PiiMatch | null {
@@ -16,29 +18,107 @@ export interface RedactedDomData {
   detections: PiiMatch[];
 }
 
-function detectText(text: string, vault: TokenVault): PiiMatch[] {
-  const candidates = [...detectEmails(text, vault), ...detectPhones(text, vault), ...detectCards(text, vault), ...detectPanNumbers(text, vault), ...detectIfscCodes(text, vault), ...detectUpiIds(text, vault), ...detectAadhaarNumbers(text, vault), ...detectAccountNumbers(text, vault)].sort((left, right) => left.start - right.start || right.end - left.end);
-  const accepted: PiiMatch[] = [];
-  for (const candidate of candidates) {
+/** Keeps the earliest, then longest, of any overlapping candidates. */
+function resolveOverlaps(candidates: PiiCandidate[]): PiiCandidate[] {
+  const ordered = [...candidates].sort((left, right) => left.start - right.start || right.end - left.end);
+  const accepted: PiiCandidate[] = [];
+  for (const candidate of ordered) {
     if (accepted.some((match) => candidate.start < match.end && candidate.end > match.start)) continue;
     accepted.push(candidate);
   }
   return accepted;
 }
 
-export function redactDomData(data: { label?: string; value?: string; inputType?: string }, vault: TokenVault): RedactedDomData {
+/**
+ * Detects PII in `text`. `context` is text that describes it, such as a form
+ * field's label: "123456789012" alone is not PII, but it is after "Aadhaar".
+ * Only matches inside `text` are returned.
+ */
+export function detectText(text: string, vault: TokenVault, context?: string): PiiMatch[] {
+  if (!context) return tokenise(resolveOverlaps(findRegexCandidates(text)), vault);
+  const prefix = `${context}: `;
+  const inText = findRegexCandidates(prefix + text)
+    .filter((candidate) => candidate.start >= prefix.length)
+    .map((candidate) => ({ ...candidate, start: candidate.start - prefix.length, end: candidate.end - prefix.length }));
+  return tokenise(resolveOverlaps(inText), vault);
+}
+
+/**
+ * What a form field says it holds, from its type and autocomplete tokens.
+ * A name field is the only way names get caught until GLiNER is wired in.
+ */
+const AUTOCOMPLETE_CATEGORIES: Record<string, PiiCategory> = {
+  name: "NAME",
+  "given-name": "NAME",
+  "additional-name": "NAME",
+  "family-name": "NAME",
+  nickname: "NAME",
+  "cc-name": "NAME",
+  username: "OTHER",
+  email: "EMAIL",
+  tel: "PHONE",
+  "tel-national": "PHONE",
+  "tel-local": "PHONE",
+  "street-address": "ADDRESS",
+  "address-line1": "ADDRESS",
+  "address-line2": "ADDRESS",
+  "address-line3": "ADDRESS",
+  "postal-code": "ADDRESS",
+  "cc-number": "CARD",
+  "cc-csc": "CARD",
+  bday: "DOB",
+  "one-time-code": "OTHER",
+};
+
+const INPUT_TYPE_CATEGORIES: Record<string, PiiCategory> = {
+  email: "EMAIL",
+  tel: "PHONE",
+};
+
+function fieldCategory(inputType?: string, autocomplete?: string): PiiCategory | undefined {
+  for (const token of autocomplete?.toLowerCase().split(/\s+/) ?? []) {
+    const category = AUTOCOMPLETE_CATEGORIES[token];
+    if (category) return category;
+  }
+  return inputType ? INPUT_TYPE_CATEGORIES[inputType.toLowerCase()] : undefined;
+}
+
+export interface DomData {
+  label?: string;
+  value?: string;
+  /** The input's `type` attribute. */
+  inputType?: string;
+  /** The input's `autocomplete` attribute. */
+  autocomplete?: string;
+}
+
+export function redactDomData(data: DomData, vault: TokenVault): RedactedDomData {
   const detections: PiiMatch[] = [];
   const redact = (text: string, matches: PiiMatch[]): string => {
     detections.push(...matches);
     return redactMatches(text, matches);
   };
   const labelMatches = data.label ? detectText(data.label, vault) : [];
-  const valueMatches = data.inputType === "password" || data.inputType === "new-password"
-    ? data.value ? [detectPasswordValue(data.value, vault)].filter((match): match is PiiMatch => match !== null) : []
-    : data.value ? detectText(data.value, vault) : [];
   return {
     label: data.label === undefined ? undefined : redact(data.label, labelMatches),
-    value: data.value === undefined ? undefined : redact(data.value, valueMatches),
+    value: data.value === undefined ? undefined : redact(data.value, detectValue(data, vault)),
     detections,
   };
+}
+
+function detectValue(data: DomData, vault: TokenVault): PiiMatch[] {
+  const value = data.value;
+  if (!value) return [];
+  const isPassword = data.inputType === "password" || /\b(current|new)-password\b/.test(data.autocomplete ?? "");
+  if (isPassword) {
+    const match = detectPasswordValue(value, vault);
+    return match ? [match] : [];
+  }
+  const matches = detectText(value, vault, data.label);
+  if (matches.length > 0) return matches;
+  // Nothing matched a pattern, but the field says what it holds: a name, or a
+  // phone number written without a country code. Trust the field.
+  const category = fieldCategory(data.inputType, data.autocomplete);
+  if (!category || value.trim().length === 0) return [];
+  return [{ token: vault.set(category, value), category, source: "dom-type", confidence: 0.9, text: value, start: 0, end: value.length }];
 }
