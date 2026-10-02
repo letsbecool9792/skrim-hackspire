@@ -30,17 +30,25 @@ function resolveOverlaps(candidates: PiiCandidate[]): PiiCandidate[] {
 }
 
 /**
+ * Names and addresses the NER model found in a text, looked up by the exact
+ * text. The model is async and runs once per page view over every text on it
+ * (lib/agent/loop.ts); redaction itself stays synchronous.
+ */
+export type NameLookup = (text: string) => PiiCandidate[];
+
+/**
  * Detects PII in `text`. `context` is text that describes it, such as a form
  * field's label: "123456789012" alone is not PII, but it is after "Aadhaar".
  * Only matches inside `text` are returned.
  */
-export function detectText(text: string, vault: TokenVault, context?: string): PiiMatch[] {
-  if (!context) return tokenise(resolveOverlaps(findRegexCandidates(text)), vault);
+export function detectText(text: string, vault: TokenVault, context?: string, names?: NameLookup): PiiMatch[] {
+  const found = names?.(text) ?? [];
+  if (!context) return tokenise(resolveOverlaps([...findRegexCandidates(text), ...found]), vault);
   const prefix = `${context}: `;
   const inText = findRegexCandidates(prefix + text)
     .filter((candidate) => candidate.start >= prefix.length)
     .map((candidate) => ({ ...candidate, start: candidate.start - prefix.length, end: candidate.end - prefix.length }));
-  return tokenise(resolveOverlaps(inText), vault);
+  return tokenise(resolveOverlaps([...inText, ...found]), vault);
 }
 
 /**
@@ -92,21 +100,21 @@ export interface DomData {
   autocomplete?: string;
 }
 
-export function redactDomData(data: DomData, vault: TokenVault): RedactedDomData {
+export function redactDomData(data: DomData, vault: TokenVault, names?: NameLookup): RedactedDomData {
   const detections: PiiMatch[] = [];
   const redact = (text: string, matches: PiiMatch[]): string => {
     detections.push(...matches);
     return redactMatches(text, matches);
   };
-  const labelMatches = data.label ? detectText(data.label, vault) : [];
+  const labelMatches = data.label ? detectText(data.label, vault, undefined, names) : [];
   return {
     label: data.label === undefined ? undefined : redact(data.label, labelMatches),
-    value: data.value === undefined ? undefined : redact(data.value, detectValue(data, vault)),
+    value: data.value === undefined ? undefined : redact(data.value, detectValue(data, vault, names)),
     detections,
   };
 }
 
-function detectValue(data: DomData, vault: TokenVault): PiiMatch[] {
+function detectValue(data: DomData, vault: TokenVault, names?: NameLookup): PiiMatch[] {
   const value = data.value;
   if (!value) return [];
   const isPassword = data.inputType === "password" || /\b(current|new)-password\b/.test(data.autocomplete ?? "");
@@ -114,7 +122,7 @@ function detectValue(data: DomData, vault: TokenVault): PiiMatch[] {
     const match = detectPasswordValue(value, vault);
     return match ? [match] : [];
   }
-  const matches = detectText(value, vault, data.label);
+  const matches = detectText(value, vault, data.label, names);
   if (matches.length > 0) return matches;
   // Nothing matched a pattern, but the field says what it holds: a name, or a
   // phone number written without a country code. Trust the field.

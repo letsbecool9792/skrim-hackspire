@@ -7,11 +7,31 @@ detection, and precision of redaction.
 
 | Detector | Catches | Cost |
 |---|---|---|
-| Regex bank | email, phone, card, PAN, Aadhaar, account numbers | free, exact |
-| GLiNER NER (`public/models/gliner-pii/`) | names, addresses, employers — what regex cannot | ~45 MB, WebGPU |
-| BlazeFace (`public/models/face/`) | faces in images and video | 224 KB |
+| Regex bank (`regex.ts`) | email, phone, card, PAN, Aadhaar, account numbers | free, exact |
+| GLiNER NER (`gliner*.ts`, `ner-*.ts`) | names and addresses in free text — what regex cannot | 45 MB model + 14 MB ONNX Runtime; ~5 ms a text |
+| BlazeFace (`public/models/face/`) | faces in images and video | 224 KB; not wired |
 
-Plus `type="password"` and friends from the DOM, which are free and certain.
+Plus `type="password"` and form-field `type`/`autocomplete` hints from the DOM, which are free
+and nearly certain.
+
+## How GLiNER runs
+
+`knowledgator/gliner-pii-edge-v1.0`, the token-level variant, quantised to uint8. There is
+no Transformers.js pipeline for GLiNER, so `gliner-model.ts` does the pre- and
+post-processing by hand (following the reference `TokenProcessor` and `TokenDecoder`), on
+`onnxruntime-web/wasm` in the side panel (`ner-browser.ts`) and `onnxruntime-node` in tests
+and scripts (`ner-node.ts`), with `@huggingface/tokenizers`.
+
+Measured, and fixed in `gliner.ts`:
+- Labels `person` and `address`, threshold **0.6**. At 0.5 it called "Friday" an address.
+- One text per batch row. Packing many texts into one sequence lost most names.
+- Misses: a name inside a long mixed sentence ("Hi, I'm Suparno. Email ..."), and a UK
+  postcode after the street. Organisations are not asked for on purpose: shop and brand
+  names are what the planner navigates by.
+
+The loop scans each page view's texts before redacting it, once per text per task. If the
+model cannot load, the task continues on the regex layer with a visible warning
+(fails open; see CLAUDE.md "Open findings").
 
 Run the cheap ones first and only escalate. Most of the latency win in this project comes
 from *not running a model* (brief §8), and that applies here as much as anywhere.
@@ -49,6 +69,7 @@ aggressive, because a false positive there costs a little context rather than th
 and over-redaction rate are numbers we have to put on a slide. Coordinate with workstream 5
 early — the fixtures need to exist before the numbers can.
 
-Also open: **GLiNER quint8 vs fp16**, accuracy per millisecond. That comparison is the
+Also open: **GLiNER quint8 vs fp16**, accuracy per millisecond. Measure with
+`pnpm demo:pii`-style runs through `ner-node.ts` once fixtures have ground truth. That comparison is the
 client half of the tradeoff curve the brief plans for (§9.6). Both variants are
 available; only quint8 is fetched today.
