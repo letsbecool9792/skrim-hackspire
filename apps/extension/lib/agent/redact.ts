@@ -59,10 +59,10 @@ export function labelBefore(elements: readonly ScreenElement[], index: number): 
 }
 
 /**
- * For a vision element (source="vision"), the useful context is the label of
- * the DOM element whose pixels were OCR'd — an image's alt text, a canvas's
- * aria-label — not the text of a sibling OCR line from the same region.
- * Walk back past any vision siblings to find the nearest non-vision element.
+ * For a vision element (source="vision"), the label of the DOM element whose
+ * pixels were OCR'd — an image's alt text, a canvas's aria-label — describes
+ * what was read ("Uploaded ID card"). Walk back past any vision siblings to
+ * find the nearest non-vision element.
  */
 function visionSourceLabel(elements: readonly ScreenElement[], index: number): string | undefined {
   for (let i = index - 1; i >= 0; i--) {
@@ -73,6 +73,20 @@ function visionSourceLabel(elements: readonly ScreenElement[], index: number): s
   return undefined;
 }
 
+/**
+ * What labels an element. A line read from pixels gets both the line before it
+ * ("Aadhaar No." above the number, as on a card) and what the image is
+ * ("Uploaded ID card"), the image's last: detectors look at the text just
+ * before a value. More context only ever hides more.
+ */
+function contextFor(elements: readonly ScreenElement[], index: number): string | undefined {
+  const before = labelBefore(elements, index);
+  if (elements[index]?.source !== "vision") return before;
+  const source = visionSourceLabel(elements, index);
+  const parts = [...new Set([before, source].filter((part): part is string => Boolean(part)))];
+  return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
 export function redactPage(observation: PageObservationMessage, cycle: number, vault: TokenVault, names?: NameLookup): RedactedPage {
   const redactions: RedactionCounts = {};
   const count = (category: PiiCategory) => { redactions[category] = (redactions[category] ?? 0) + 1; };
@@ -80,13 +94,7 @@ export function redactPage(observation: PageObservationMessage, cycle: number, v
   const raw = observation.elements ?? [];
   const elements: ScreenElement[] = raw.map((element, index) => {
     const field = observation.fields?.[element.id];
-    // For vision (OCR) elements, use the nearest non-vision ancestor's label as
-    // context: it is the image/canvas/iframe whose pixels were read, and its
-    // alt text or aria-label describes the content ("Uploaded ID card", etc.).
-    // For DOM elements, use the standard labelBefore (dt→dd, th→td, etc.).
-    const context = element.source === "vision"
-      ? visionSourceLabel(raw, index)
-      : labelBefore(raw, index);
+    const context = contextFor(raw, index);
     // OCR sometimes inserts a space inside an email local-part ("karan. mehta@…").
     // Normalise before detection; the element label itself is preserved.
     const detectLabel = element.source === "vision" && element.label ? normalizeOcrText(element.label) : element.label;
