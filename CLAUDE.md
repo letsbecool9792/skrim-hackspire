@@ -288,7 +288,7 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
 - [x] **Pick the default provider**: Groq's Qwen 3.8 27B, as the study
       ([`docs/provider-study.md`](docs/provider-study.md)) recommends (decided 2026-10-02)
-- [ ] **The dashboard in Chrome** ([`docs/testing.md`](docs/testing.md) section 7): run
+- [x] **The dashboard in Chrome** (reported working 2026-10-03; [`docs/testing.md`](docs/testing.md) section 7): run
       `pnpm models:fetch` once (it now writes the model sizes), start the dashboard, reload
       Skrim and the dashboard tab. With the side panel open the resource panel goes live and
       lists the planner and "Models on device · 68.3 MB"; a support-form task shows each step
@@ -320,7 +320,7 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [x] Eval harness, and 22 fixtures with ground truth
 - [ ] More fixtures, to 30–50: a face in a photo, pages in Hindi, long pages, real-site
       captures (see "Open findings": ours were written by the same hand as the fixes)
-- [x] Dashboard: split-screen wire view + resource panel (Chrome check pending)
+- [x] Dashboard: split-screen wire view + resource panel
 - [ ] Landing page
 - [ ] Tradeoff curve: GLiNER quint8 vs fp16; hosted vs local model accuracy and latency
 
