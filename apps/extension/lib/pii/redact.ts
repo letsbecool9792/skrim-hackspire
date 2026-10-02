@@ -62,12 +62,20 @@ const ADDRESS_PARTS_BEFORE = /^\s*(?:[^,.;:!?]{1,40},\s*)+$/;
  * among them, they are the rest of it.
  */
 function withWholeAddresses(text: string, candidates: PiiCandidate[]): PiiCandidate[] {
+  const BUSINESS_ADDRESS_WORDS = /\b(?:clinic|branch|hospital|bank|restaurant|store)\b/i;
+  
   return candidates.map((candidate) => {
     if (candidate.category !== "ADDRESS" || candidate.start === 0) return candidate;
     const before = text.slice(0, candidate.start);
     if (!ADDRESS_PARTS_BEFORE.test(before) || candidates.some((other) => other.end <= candidate.start)) return candidate;
     const start = before.search(/\S/);
     return { ...candidate, start, text: text.slice(start, candidate.end) };
+  }).filter(candidate => {
+    // If an address was expanded to include a business cue (e.g. "Apollo Clinic,"), drop it.
+    if (candidate.category === "ADDRESS" && BUSINESS_ADDRESS_WORDS.test(candidate.text.toLowerCase())) {
+      return false;
+    }
+    return true;
   });
 }
 
