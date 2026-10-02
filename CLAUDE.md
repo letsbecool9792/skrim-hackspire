@@ -150,10 +150,11 @@ skrim/
 │                          landing page, later). Change a value here, all of them follow.
 │
 ├── scripts/               Build-time tooling. Nothing here runs at extension runtime.
-│   ├── fetch-models.mjs   Populates public/models/. Node only, no deps, no Python.
-│   ├── artifacts/         Committed ONNX we export ourselves (see gitignore note).
+│   ├── fetch-models.mjs   Populates public/models/. Node, no deps; Python only for the
+│   │                      icon detector, which it sets up and exports itself if missing.
+│   ├── artifacts/         ONNX we export ourselves. Gitignored: made by fetch-models.
 │   ├── requirements.txt   Python pins for the ONNX export venv.
-│   └── .venv/             Python venv. ONLY workstream 3 needs this.
+│   └── .venv/             Python venv, made by fetch-models. Gitignored.
 │
 └── docs/
     └── decisions/         ADRs. Feed these straight into the PPT — the tradeoff
@@ -301,11 +302,12 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [x] **Run the eval in Chromium** once (2026-10-02; numbers under "What the eval finds")
 - [x] **Export the OmniParser icon detector** (done 2026-10-03: `scripts/.venv`, then
       `scripts/.venv/Scripts/python.exe scripts/export_icon_detector.py`, 10 s; its test passes)
-- [ ] **Decide what to do with the exported icon model** (`scripts/artifacts/omniparser-icon.onnx`,
-      81 MB, not committed). `.gitignore` says to commit it so nobody needs Python, but 81 MB
-      stays in the repo's history for good and GitHub warns above 50 MB. Options: commit it, keep
-      it local (each person runs the 10 s export), or shrink it first. The model is AGPL-3.0, and
-      with it the extension is 168 MB
+- [x] **The icon model stays out of git** (decided 2026-10-03). `pnpm models:fetch`, and every
+      production build (`build`, `zip`, and their Firefox forms), exports it if it is missing:
+      makes `scripts/.venv`, installs `requirements.txt` (first time only: a few GB, about ten
+      minutes), runs the 10 s export, copies the 81 MB file into place. No Python: it says so and
+      carries on, since nothing calls the detector yet. `--skip-icon` skips it. The model is
+      AGPL-3.0, and with it the extension is 168 MB
 - [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
 - [x] **Pick the default provider**: Groq's Qwen 3.8 27B, as the study
       ([`docs/provider-study.md`](docs/provider-study.md)) recommends (decided 2026-10-02)
@@ -492,16 +494,11 @@ cp .env.example .env     # then add your own Groq key
 **`.env` lives at the repo root**, not in `apps/server/`. One file for the whole monorepo.
 `GROQ_API_KEY` is the only value you must fill in — everything else has a working default.
 
-**Only if you own the model pipeline (workstream 3):**
-
-```powershell
-cd scripts
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-> Invoke the venv python by **full path**, always. Never bare `pip install`. Shell
-> activation silently failing is how the setup session nuked a global Python install.
+**The icon detector needs Python, and `pnpm models:fetch` sets that up itself** the first time:
+it makes `scripts/.venv`, installs `scripts/requirements.txt` into it (a few GB, about ten
+minutes) and exports the model. Add `--skip-icon` to leave it out. To run the venv's Python by
+hand, use its **full path** (`scripts\.venv\Scripts\python.exe`), never a bare `pip install`:
+shell activation silently failing is how the setup session nuked a global Python install.
 
 **Only if you own the air-gap path:** `winget install Ollama.Ollama` then
 `ollama pull qwen3-vl:4b-instruct` (3.3 GB). This is also the fallback when Groq's daily
