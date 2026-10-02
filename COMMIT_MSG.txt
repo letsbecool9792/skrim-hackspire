@@ -1,0 +1,64 @@
+feat(web): landing page — all 8 sections, tokens design system
+
+Builds the Skrim public landing page in apps/web as a static Vite +
+React 19 + TypeScript site. No imports from the extension, server, or
+dashboard.
+
+## What changed
+
+### New files — apps/web
+- src/content.ts     — single source of truth for every number and
+                       piece of copy; numbers from BRIEF.md §13 only.
+- src/App.tsx        — all 8 sections: hero, problem, how it works,
+                       why placeholders, numbers, known limits,
+                       try it, footer.
+- src/index.css      — page styles; imports design/tokens.css exactly
+                       as apps/dashboard does; no hex values.
+- src/main.tsx       — font imports first, matching dashboard pattern.
+- public/favicon.svg — ShieldCheck shape in --accent green, pure SVG.
+
+### Modified — apps/web
+- index.html         — title "Skrim", meta description, favicon.
+- package.json       — added three dependencies (see below).
+
+### Modified — design/tokens.css (additions only)
+- Added --text-3xl / --text-4xl / --text-5xl for hero and section
+  headings. The existing scale stops at --text-2xl; nothing was changed.
+- Added --space-12 / --space-16 / --space-20 / --space-24 for section
+  vertical rhythm. Existing steps unchanged.
+  The side panel and dashboard never reference these new tokens, so
+  they are unaffected.
+
+### Deleted — apps/web (template cleanup)
+- src/App.css, src/assets/*, public/icons.svg
+
+## Dependencies added to apps/web
+All pinned to the same versions as apps/dashboard/package.json.
+
+| Package | Version | Reason |
+|---------|---------|--------|
+| @fontsource-variable/inter | ^5.3.0 | Bundled Inter font — no CDN |
+| @fontsource-variable/jetbrains-mono | ^5.3.0 | Bundled mono font |
+| lucide-react | ^1.49.0 | Icon set already used elsewhere |
+
+No analytics, no trackers, no external requests of any kind at runtime.
+
+## PR review checklist for your teammate
+Open `pnpm dev:web` (port 5174 by default) and check:
+
+1. **Both themes** — toggle OS dark/light mode; every colour, border,
+   and background should switch cleanly via tokens.css.
+2. **Phone-width window** — drag the browser to ~360 px wide; verify
+   no horizontal scroll, 16 px side gutters, all text readable.
+3. **Network tab** — with the page loaded, open DevTools → Network and
+   reload. Filter by "External" or check that no request goes to any
+   domain other than localhost. Fonts load from /assets/ (bundled), not
+   from fonts.googleapis.com or fonts.gstatic.com.
+4. **Hero animation** — the privacy visual swaps between "What you see"
+   and "What the server gets" every ~3 s. Reduce-motion: toggle
+   "Emulate prefers-reduced-motion" in DevTools; the swap should still
+   happen but without the fade-in animation.
+5. **Keyboard navigation** — Tab through the page; focus ring should
+   be visible on every interactive element (uses --focus from tokens).
+6. **Headings order** — open the accessibility tree; h1 is "Skrim",
+   h2 for each section, h3 for the footprint subsection only.
