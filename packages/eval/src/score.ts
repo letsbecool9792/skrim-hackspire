@@ -73,9 +73,29 @@ function pairs(raw: PageTexts, redacted: PageTexts): { pairs: Pair[]; unaligned:
   return { pairs: result, unaligned };
 }
 
-function occurrences(text: string, value: string): number[] {
-  const found: number[] = [];
-  for (let at = text.indexOf(value); at >= 0; at = text.indexOf(value, at + 1)) found.push(at);
+interface Range { start: number; end: number }
+
+/** Where a value can only be read from pixels, by OCR. */
+const PIXEL_PLACES = new Set(["canvas", "image", "iframe"]);
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Where `value` appears in `text`. A value read from pixels is matched allowing
+ * OCR's usual slips around separators: Tesseract read the iframe fixture's
+ * "karan.mehta@example.com" as "karan mehta@example.com". What is scored is
+ * whether that text was hidden, not whether OCR spelled it right.
+ */
+function occurrences(text: string, value: string, fromPixels = false): Range[] {
+  const found: Range[] = [];
+  if (!fromPixels) {
+    for (let at = text.indexOf(value); at >= 0; at = text.indexOf(value, at + 1)) found.push({ start: at, end: at + value.length });
+    return found;
+  }
+  const pattern = new RegExp([...value].map((char) => (/[.,\s-]/.test(char) ? "[.,\\s-]{0,2}" : escapeRegExp(char))).join(""), "gi");
+  for (const match of text.matchAll(pattern)) {
+    if (match[0].length > 0) found.push({ start: match.index ?? 0, end: (match.index ?? 0) + match[0].length });
+  }
   return found;
 }
 
@@ -84,7 +104,7 @@ const overlap = (a: { start: number; end: number }, b: { start: number; end: num
 export function scoreFixture(truth: GroundTruth, reading: Reading): FixtureScore {
   const { pairs: texts, unaligned } = pairs(reading.raw, reading.redacted);
   // Every place PII sits, per text, to tell true from false positives.
-  const piiRanges = texts.map((pair) => truth.pii.flatMap((item) => occurrences(pair.raw, item.value).map((start) => ({ start, end: start + item.value.length }))));
+  const piiRanges = texts.map((pair) => truth.pii.flatMap((item) => occurrences(pair.raw, item.value, PIXEL_PLACES.has(item.where))));
 
   const items = truth.pii.map((item): ItemResult => {
     let seen = false;
@@ -93,12 +113,11 @@ export function scoreFixture(truth: GroundTruth, reading: Reading): FixtureScore
     let categoryRight = true;
     const ious: number[] = [];
     texts.forEach((pair) => {
-      for (const start of occurrences(pair.raw, item.value)) {
+      for (const truthSpan of occurrences(pair.raw, item.value, PIXEL_PLACES.has(item.where))) {
         seen = true;
-        const truthSpan = { start, end: start + item.value.length };
         const touching = pair.spans.filter((span) => overlap(span, truthSpan) > 0);
         const covered = touching.reduce((sum, span) => sum + overlap(span, truthSpan), 0);
-        if (covered < item.value.length) caught = false;
+        if (covered < truthSpan.end - truthSpan.start) caught = false;
         if (covered > 0) anyHidden = true;
         if (!touching.some((span) => span.categories.includes(item.category))) categoryRight = false;
         const union = touching.reduce((low, span) => ({ start: Math.min(low.start, span.start), end: Math.max(low.end, span.end) }), truthSpan);
@@ -138,9 +157,9 @@ export function scoreFixture(truth: GroundTruth, reading: Reading): FixtureScore
     let seen = false;
     let hidden = false;
     for (const pair of texts) {
-      for (const start of occurrences(pair.raw, value)) {
+      for (const range of occurrences(pair.raw, value)) {
         seen = true;
-        if (pair.spans.some((span) => overlap(span, { start, end: start + value.length }) > 0)) hidden = true;
+        if (pair.spans.some((span) => overlap(span, range) > 0)) hidden = true;
       }
     }
     return { value, seen, hidden };
