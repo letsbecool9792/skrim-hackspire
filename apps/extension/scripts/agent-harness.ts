@@ -171,9 +171,9 @@ const FIXTURES = fileURLToPath(new URL("../../../fixtures/pages/", import.meta.u
 function standInOcr(lines: string[]): PixelReader {
   return async (targets) => {
     const [target] = targets;
-    if (!target) return [];
+    if (!target) return { lines: [], faces: 0 };
     const [x, y] = target.bbox;
-    return lines.map((text, index) => ({ targetId: target.id, bbox: [x + 24, y + 20 + index * 40, 200, 24], text, confidence: 0.9 }));
+    return { faces: 0, lines: lines.map((text, index) => ({ targetId: target.id, bbox: [x + 24, y + 20 + index * 40, 200, 24], text, confidence: 0.9 })) };
   };
 }
 

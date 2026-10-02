@@ -38,7 +38,7 @@ export function isBigEnoughForFace(width: number, height: number): boolean {
  * is too small, avoiding loading the model entirely.
  */
 export async function detectFaces(
-  image: HTMLImageElement | HTMLCanvasElement | ImageData,
+  image: HTMLImageElement | HTMLCanvasElement | ImageBitmap | ImageData,
   width: number,
   height: number
 ): Promise<VisionFace[]> {

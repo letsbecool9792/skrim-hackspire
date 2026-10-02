@@ -299,7 +299,7 @@ describe("runAgentTask", () => {
 
   test("answers an extract of a line read from pixels itself: the page has no element behind it", async () => {
     await page(`<h1>Your digital ID</h1><canvas aria-label="ID card" width="420" height="200"></canvas><button>Download PDF</button>`);
-    const readPixels: PixelReader = async (targets) => targets.map((target) => ({ targetId: target.id, bbox: [20, 120, 200, 24], text: "PAN ABCDE1234F", confidence: 0.9 }));
+    const readPixels: PixelReader = async (targets) => ({ faces: 0, lines: targets.map((target) => ({ targetId: target.id, bbox: [20, 120, 200, 24], text: "PAN ABCDE1234F", confidence: 0.9 })) });
     const { planner, requests } = scripted((request, step) => {
       const line = request.graph.elements.find((e) => e.source === "vision");
       assert.ok(line, "no line read from pixels");
@@ -318,7 +318,7 @@ describe("runAgentTask", () => {
 
   test("tells the planner a line read from pixels can be read, not clicked", async () => {
     await page(`<canvas aria-label="ID card" width="420" height="200"></canvas>`);
-    const readPixels: PixelReader = async (targets) => targets.map((target) => ({ targetId: target.id, bbox: [20, 120, 200, 24], text: "Verify now", confidence: 0.9 }));
+    const readPixels: PixelReader = async (targets) => ({ faces: 0, lines: targets.map((target) => ({ targetId: target.id, bbox: [20, 120, 200, 24], text: "Verify now", confidence: 0.9 })) });
     const { planner, requests } = scripted((request, step) =>
       step === 0 ? { type: "click", target: request.graph.elements.find((e) => e.source === "vision")!.id } : { type: "done", success: true, summary: "ok" });
     const events: AgentEvent[] = [];

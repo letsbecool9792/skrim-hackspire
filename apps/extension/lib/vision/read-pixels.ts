@@ -1,7 +1,9 @@
 import type { BBox, ScreenElement } from "@skrim/schema";
+import { log } from "@skrim/shared";
 
 import { captureTab } from "../capture/screenshot.ts";
 import { shouldEscalateToVision } from "./escalation.ts";
+import { detectFaces } from "./face-detector.ts";
 
 /**
  * Text that exists only as pixels: drawn on a canvas, printed in an image (a
@@ -28,12 +30,20 @@ export interface PixelLine {
   confidence: number;
 }
 
+/** What was in the regions: the text read from them, and how many faces they show. */
+export interface PixelReading {
+  lines: PixelLine[];
+  /** Faces found. Only the count is kept: no face leaves the device, and none is stored. */
+  faces: number;
+}
+
 /**
- * Reads the text in the given regions of the page as it is on screen now.
- * Resolves null when the page cannot be captured at the moment: its tab is
- * not the one showing, or it is a page the browser keeps extensions off.
+ * Reads the text in the given regions of the page as it is on screen now, and
+ * counts the faces. Resolves null when the page cannot be captured at the
+ * moment: its tab is not the one showing, or it is a page the browser keeps
+ * extensions off.
  */
-export type PixelReader = (targets: readonly PixelTarget[], viewport: { width: number; height: number }) => Promise<PixelLine[] | null>;
+export type PixelReader = (targets: readonly PixelTarget[], viewport: { width: number; height: number }) => Promise<PixelReading | null>;
 
 /** At most this many regions a view: each costs an OCR pass of 0.1-0.5 s. */
 const MAX_TARGETS = 4;
@@ -73,7 +83,7 @@ export function withPixelText(elements: readonly ScreenElement[], lines: readonl
 /** Reads pixels from one tab, and only while it is the tab on screen. */
 export function tabPixelReader(tabId: number): PixelReader {
   return async (targets, viewport) => {
-    if (targets.length === 0 || viewport.width <= 0) return [];
+    if (targets.length === 0 || viewport.width <= 0) return { lines: [], faces: 0 };
     const tab = await browser.tabs.get(tabId).catch(() => undefined);
     // The browser captures a window's active tab. If the user switched tabs,
     // the pixels would be another page's: never read those as this one's.
@@ -91,6 +101,7 @@ export function tabPixelReader(tabId: number): PixelReader {
       // Screen text is small for OCR; reading at twice device size helps.
       const zoom = scale < 2 ? 2 / scale : 1;
       const lines: PixelLine[] = [];
+      let faces = 0;
       for (const target of targets) {
         const [x, y, width, height] = target.bbox;
         const sx = Math.max(0, Math.round(x * scale));
@@ -100,6 +111,7 @@ export function tabPixelReader(tabId: number): PixelReader {
         if (sw <= 0 || sh <= 0) continue;
         const canvas = new OffscreenCanvas(Math.round(sw * zoom), Math.round(sh * zoom));
         canvas.getContext("2d")!.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        faces += await countFaces(image, sx, sy, sw, sh);
         const found = await recognizeLines(await canvas.convertToBlob({ type: "image/png" }));
         const factor = scale * zoom;
         for (const line of found) {
@@ -111,10 +123,25 @@ export function tabPixelReader(tabId: number): PixelReader {
           });
         }
       }
-      return lines;
+      return { lines, faces };
     } finally {
       // The capture lives only for this reading (lib/capture/CLAUDE.md).
       image.close();
     }
   };
+}
+
+/** Faces in one region of the capture, at its own size. 0 when the face model cannot run: nothing is sent either way. */
+async function countFaces(image: ImageBitmap, sx: number, sy: number, sw: number, sh: number): Promise<number> {
+  const region = new OffscreenCanvas(sw, sh);
+  region.getContext("2d")!.drawImage(image, sx, sy, sw, sh, 0, 0, sw, sh);
+  const bitmap = await createImageBitmap(region);
+  try {
+    return (await detectFaces(bitmap, sw, sh)).length;
+  } catch (error) {
+    log.warn("vision.faces.failed", { reason: error instanceof Error ? error.name : "unknown" });
+    return 0;
+  } finally {
+    bitmap.close();
+  }
 }
