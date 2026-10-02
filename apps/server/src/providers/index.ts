@@ -17,6 +17,8 @@ export class ProviderError extends Error {
     readonly detail?: string,
     /** The provider's HTTP status, when it answered at all. */
     readonly status?: number,
+    /** For a rate limit: how long the provider said to wait, when it said. */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = 'ProviderError';
@@ -52,7 +54,42 @@ export interface Completion {
   usage?: { promptTokens: number; completionTokens: number };
 }
 
+/**
+ * Free tiers limit tokens a minute: Groq's 8,000 is 4-5 planning steps. The
+ * provider study (docs/provider-study.md) hit that limit 125 times in 42 tasks
+ * with Groq's Qwen, and each time Groq said to wait 2-3 s. So a rate limit is
+ * waited out when the provider says how long and it is short; a long one still
+ * fails the step, with a message saying why.
+ */
+const MAX_RATE_LIMIT_WAIT_MS = 20_000;
+const MAX_RATE_LIMIT_WAITING_MS = 30_000;
+
+/** How long a 429 asks to wait: the Retry-After header, or Groq's "try again in 1m2.5s". */
+export function rateLimitWaitMs(retryAfter: string | null, body: string): number | undefined {
+  const seconds = Number(retryAfter);
+  if (retryAfter !== null && retryAfter.trim() !== '' && Number.isFinite(seconds)) return Math.ceil(seconds * 1000);
+  const said = /try again in (?:(\d+)m)?(\d+(?:\.\d+)?)s/i.exec(body);
+  if (!said) return undefined;
+  return Math.ceil((Number(said[1] ?? 0) * 60 + Number(said[2])) * 1000);
+}
+
 export async function createChatCompletion(config: ProviderConfig, messages: ChatMessage[]): Promise<Completion> {
+  let waited = 0;
+  for (;;) {
+    try {
+      return await requestWithOneRetry(config, messages);
+    } catch (error) {
+      if (!(error instanceof ProviderError) || error.kind !== 'rate_limited' || error.retryAfterMs === undefined) throw error;
+      const wait = error.retryAfterMs + 250;
+      if (error.retryAfterMs > MAX_RATE_LIMIT_WAIT_MS || waited + wait > MAX_RATE_LIMIT_WAITING_MS) throw error;
+      console.warn(`[plan] ${config.provider} rate limit; waiting ${(wait / 1000).toFixed(1)} s as it asked`);
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      waited += wait;
+    }
+  }
+}
+
+async function requestWithOneRetry(config: ProviderConfig, messages: ChatMessage[]): Promise<Completion> {
   try {
     return await requestCompletion(config, messages);
   } catch (error) {
@@ -93,9 +130,11 @@ async function requestCompletion(config: ProviderConfig, messages: ChatMessage[]
   }
 
   if (!response.ok) {
-    const detail = (await response.text()).slice(0, 500);
+    const body = await response.text();
+    const detail = body.slice(0, 500);
     if (response.status === 429) {
-      throw new ProviderError('rate_limited', `The ${config.provider} rate limit was reached. Wait a minute and retry.`, detail, 429);
+      const retryAfterMs = rateLimitWaitMs(response.headers.get('retry-after'), body);
+      throw new ProviderError('rate_limited', `The ${config.provider} rate limit was reached. Wait a minute and retry.`, detail, 429, retryAfterMs);
     }
     throw new ProviderError('http', `The ${config.provider} provider returned HTTP ${response.status} for ${config.model}`, detail, response.status);
   }
