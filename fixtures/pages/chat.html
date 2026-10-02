@@ -17,6 +17,18 @@
   <div class="message">Great, see you there. Meera</div>
   <p>Today 9:41</p>
   <textarea aria-label="Type a message"></textarea>
-  <button>Send</button>
+  <button id="send">Send</button>
+  <script>
+    // For the agent tasks: sending posts the message into the chat.
+    document.getElementById("send").addEventListener("click", () => {
+      const box = document.querySelector("textarea");
+      if (!box.value.trim()) return;
+      const sent = document.createElement("div");
+      sent.className = "message sent";
+      sent.textContent = box.value.trim();
+      box.before(sent);
+      box.value = "";
+    });
+  </script>
 </body>
 </html>

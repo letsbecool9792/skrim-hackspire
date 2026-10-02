@@ -11,16 +11,25 @@
 <body>
   <input type="search" aria-label="Search" value="best biryani in bengaluru">
   <div class="result">
-    <h3><a href="#">Meghana Foods - Residency Road</a></h3>
+    <h3><a href="#meghana">Meghana Foods - Residency Road</a></h3>
     <p>Rated 4.5 by 12,000 diners. Open 11 am to 11 pm. Call +91 80 4567 8900 for table bookings.</p>
   </div>
   <div class="result">
-    <h3><a href="#">Chef Ranveer Brar's biryani guide</a></h3>
+    <h3><a href="#ranveer">Chef Ranveer Brar's biryani guide</a></h3>
     <p>Ranveer Brar ranks the city's ten best biryanis, from Donne to Hyderabadi.</p>
   </div>
   <div class="result">
-    <h3><a href="#">Empire Restaurant - Church Street</a></h3>
+    <h3><a href="#empire">Empire Restaurant - Church Street</a></h3>
     <p>Late-night favourite since 1966.</p>
   </div>
+  <p id="opened" role="status"></p>
+  <script>
+    // For the agent tasks: opening a result shows which one, as a new page would.
+    for (const link of document.querySelectorAll(".result a")) {
+      link.addEventListener("click", () => {
+        document.getElementById("opened").textContent = `Now showing: ${link.textContent}`;
+      });
+    }
+  </script>
 </body>
 </html>

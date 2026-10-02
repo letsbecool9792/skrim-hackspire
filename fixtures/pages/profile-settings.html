@@ -33,6 +33,14 @@
     <select id="language"><option selected>English</option><option>हिन्दी</option></select>
     <button type="submit">Save changes</button>
   </form>
+  <p id="status" role="status"></p>
+  <script>
+    // For the agent tasks: saving says so.
+    document.querySelector("form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      document.getElementById("status").textContent = "Profile saved.";
+    });
+  </script>
   <h2>Notification settings</h2>
 </body>
 </html>

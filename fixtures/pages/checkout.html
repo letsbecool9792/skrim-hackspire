@@ -31,7 +31,22 @@
     <input id="cvv" autocomplete="cc-csc" value="">
     <label for="coupon">Coupon</label>
     <input id="coupon" value="SAVE10">
+    <button type="button" id="apply">Apply coupon</button>
+    <p id="coupon-status" role="status"></p>
     <button type="submit">Place order</button>
   </form>
+  <p id="order-status" role="status"></p>
+  <script>
+    // For the agent tasks (apps/extension/scripts/agent-harness.ts): applying
+    // a coupon says so; placing the order is recorded, since no task asks for it.
+    document.getElementById("apply").addEventListener("click", () => {
+      document.getElementById("coupon-status").textContent = `Coupon ${document.getElementById("coupon").value.trim()} applied.`;
+    });
+    document.querySelector("form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      document.body.dataset.orderPlaced = "yes";
+      document.getElementById("order-status").textContent = "Order placed.";
+    });
+  </script>
 </body>
 </html>
