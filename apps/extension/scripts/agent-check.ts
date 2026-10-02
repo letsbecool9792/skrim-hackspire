@@ -5,6 +5,7 @@
  *   pnpm dev:server      # terminal 1
  *   pnpm test:agent      # terminal 2: the six quick goals
  *   pnpm test:agent -- --all   # all fourteen, as the provider study runs them
+ *   pnpm test:agent -- --tasks result,signup   # just these, step by step
  *
  * What is real and what is simulated: scripts/agent-harness.ts. It is not the
  * eval harness (that drives a real browser; see packages/eval). Set
@@ -15,7 +16,16 @@ import { createHarness, SCENARIOS } from "./agent-harness.ts";
 const { createServerPlanner, fetchServerInfo } = await import("../lib/agent/server-planner.ts");
 
 const SERVER_URL = (process.env.SKRIM_SERVER_URL ?? "http://localhost:3000").replace(/\/$/, "");
-const scenarios = process.argv.includes("--all") ? SCENARIOS : SCENARIOS.filter((scenario) => scenario.quick);
+const args = process.argv.slice(2);
+// Commas or spaces: PowerShell turns "a,b" into "a b".
+const onlyTasks = args.includes("--tasks") ? args[args.indexOf("--tasks") + 1]?.split(/[\s,]+/) : undefined;
+const scenarios = onlyTasks
+  ? SCENARIOS.filter((scenario) => onlyTasks.includes(scenario.id))
+  : args.includes("--all") ? SCENARIOS : SCENARIOS.filter((scenario) => scenario.quick);
+if (scenarios.length === 0) {
+  console.error(`No such task. The tasks are: ${SCENARIOS.map((scenario) => scenario.id).join(", ")}`);
+  process.exit(1);
+}
 
 const info = await fetchServerInfo(SERVER_URL);
 if (!info) {
