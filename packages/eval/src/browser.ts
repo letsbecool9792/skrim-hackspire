@@ -4,6 +4,7 @@
  *   pnpm eval              # builds the eval extension, then runs this
  *   pnpm eval -- --headed  # watch it
  *   pnpm eval -- --save    # also write SUMMARY.md, the committed copy for the slide
+ *   pnpm eval -- --show-text iframe-form.html   # print what a page was read as, and sent as
  *
  * Once, before the first run (downloads Playwright's Chromium, ~150 MB):
  *   pnpm --filter @skrim/eval exec playwright install chromium
@@ -38,6 +39,23 @@ const RESULTS = join(ROOT, "packages", "eval", "results");
 
 /** Tall enough that no fixture has elements left out below the view: this scores detection. */
 const VIEWPORT = { width: 1280, height: 2400 };
+
+/**
+ * The page whose texts to print, raw and as sent: what OCR made of a canvas or
+ * a frame is the first thing to see when a miss is "not in the page's text".
+ * The fixtures are synthetic, so their text may be printed.
+ */
+const SHOW_TEXT = process.argv.includes("--show-text") ? process.argv[process.argv.indexOf("--show-text") + 1] : undefined;
+
+function printTexts(page: string, reading: Reading): void {
+  console.log(`\n${page}, as read (raw) -> as sent:`);
+  reading.raw.elements.forEach((element, index) => {
+    const sent = reading.redacted.elements[index] ?? {};
+    for (const key of ["label", "value", "hint"] as const) {
+      if (element[key]) console.log(`  ${JSON.stringify(element[key])}  ->  ${JSON.stringify(sent[key])}`);
+    }
+  });
+}
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -107,7 +125,9 @@ async function main(): Promise<void> {
     await read(truths[0]!.page);
     const scores: FixtureScore[] = [];
     for (const truth of truths) {
-      scores.push(scoreFixture(truth, await read(truth.page)));
+      const reading = await read(truth.page);
+      if (truth.page === SHOW_TEXT) printTexts(truth.page, reading);
+      scores.push(scoreFixture(truth, reading));
       process.stdout.write(".");
     }
     process.stdout.write("\n\n");

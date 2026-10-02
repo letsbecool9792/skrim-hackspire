@@ -69,6 +69,28 @@ describe("scoreFixture", () => {
     assert.equal(canvasName?.seen, false);
   });
 
+  test("finds a value read from pixels despite OCR's slips, and scores it caught when hidden", () => {
+    const framed = parseGroundTruth("frame.json", {
+      page: "frame.html",
+      about: "An email inside a frame.",
+      pii: [{ category: "EMAIL", value: "karan.mehta@example.com", where: "iframe" }],
+      notPii: [],
+    });
+
+    // Tesseract read the dot as a space; the whole of it was hidden.
+    const score = scoreFixture(framed, reading([["Email: karan mehta@example.com", "Email: <PII:EMAIL:1>"]]));
+
+    assert.equal(score.items[0]?.seen, true);
+    assert.equal(score.items[0]?.caught, true);
+    assert.deepEqual(score.falsePositives, []);
+  });
+
+  test("still needs the exact value for text in the page itself", () => {
+    const score = scoreFixture(truth, reading([["Mail asha example.com", "Mail asha example.com"]]));
+
+    assert.equal(score.items[1]?.seen, false);
+  });
+
   test("counts hidden text that is not PII, and hidden near-misses", () => {
     const score = scoreFixture(truth, reading([
       ["Order #4567890 by Asha Rao", "Order <PII:ACCOUNT:1> by <PII:NAME:1>"],
