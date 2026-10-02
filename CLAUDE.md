@@ -242,20 +242,18 @@ face detection and the icon detector can plug into `lib/agent/read-page.ts` now.
 Things only a person at the browser, or the project owner, can do. Keep this list current:
 add to it whenever a change needs a manual check, and tick items off when reported.
 
-- [ ] **Retest the fixes on `fix/retest-bugs`** before merging it. Rebuild
-      (`pnpm --filter @skrim/extension build`), reload Skrim on `chrome://extensions`, and
-      restart `pnpm dev:server`:
-  - [ ] `fixtures/pages/canvas-card.html`, `what is my pan number`: one step reading
+- [ ] **Retest the fixes on `fix/retest-bugs`** (merged 2026-10-02; reported working):
+  - [x] `fixtures/pages/canvas-card.html`, `what is my pan number`: one step reading
     "Read “PAN ID number 1”", then ✓ Done with an "ID number 1" pill in the answer.
     "Download PDF" is not clicked
-  - [ ] `fixtures/pages/checkout.html`, `Change the coupon code to SAVE20`: the refused step
+  - [x] `fixtures/pages/checkout.html`, `Change the coupon code to SAVE20`: the refused step
     says "Skipped: it would place an order or pay, which you didn't ask for."; no step says
     "Not confirmed:"; the result's footer says "3 steps" with no error code
-  - [ ] a step that did nothing says "Nothing changed on the page."; scrolling past the end
+  - [x] a step that did nothing says "Nothing changed on the page."; scrolling past the end
     says "Already at the bottom of the page."
   - [ ] Wikipedia, `Search for Alan Turing`: if it fails again, copy the chat's steps (only
     placeholders in them) and the server's `[plan]` lines into "Open findings"
-  - [ ] the form fixture still hides the name, email, phone and address (ⓘ)
+  - [x] the form fixture still hides the name, email, phone and address (ⓘ)
   - [ ] put `FALLBACK_PROVIDER=ollama` in `.env`: `pnpm dev:server` prints "When it says to
     come back later: ollama"; when Groq's day runs out, the log says "this step goes to
     ollama" and the task carries on
