@@ -1,2 +1,2 @@
-# skrim
+# Skrim
 
