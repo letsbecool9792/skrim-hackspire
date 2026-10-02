@@ -12,6 +12,7 @@ import {
  */
 export function extractScreenElements(): ScreenElement[] {
   const elements: ScreenElement[] = [];
+  const includedElements = new Map<Element, ScreenElement>();
   const candidates = document.querySelectorAll("*");
 
   for (const element of candidates) {
@@ -37,13 +38,42 @@ export function extractScreenElements(): ScreenElement[] {
     };
 
     elements.push(screenElement);
+    includedElements.set(element, screenElement);
   }
+
+  addChildren(includedElements);
 
   for (const element of elements) {
     ScreenElementSchema.parse(element);
   }
 
   return elements;
+}
+
+function addChildren(includedElements: Map<Element, ScreenElement>): void {
+  const childIdsByParent = new Map<ScreenElement, Set<ScreenElement["id"]>>();
+
+  for (const [element, screenElement] of includedElements) {
+    let ancestor = element.parentElement;
+
+    while (ancestor) {
+      const parent = includedElements.get(ancestor);
+      if (parent) {
+        if (parent !== screenElement) {
+          const childIds = childIdsByParent.get(parent) ?? new Set();
+          childIds.add(screenElement.id);
+          childIdsByParent.set(parent, childIds);
+        }
+        break;
+      }
+
+      ancestor = ancestor.parentElement;
+    }
+  }
+
+  for (const [parent, childIds] of childIdsByParent) {
+    parent.children = [...childIds];
+  }
 }
 
 function createElementId(index: number): string {
