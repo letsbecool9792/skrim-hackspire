@@ -130,6 +130,16 @@ export const SCENARIOS: Scenario[] = [
     expected: "the answer gives the PAN as a token, and nothing was clicked",
     secrets: ["ABCDE1234F", "Asha Rao", "12/03/1994"],
   },
+  {
+    id: "wiki-search",
+    quick: true,
+    page: "encyclopedia-home.html",
+    // The search box is folded into an icon link, as on Wikipedia beside the side panel.
+    goal: "Search for Alan Turing",
+    check: () => /alan turing/i.test(value("searchInput")),
+    expected: "the search box holds Alan Turing",
+    secrets: ["Alan Turing"],
+  },
 ];
 
 export interface ScenarioResult {
