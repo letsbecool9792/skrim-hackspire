@@ -15,6 +15,8 @@ export class ProviderError extends Error {
     readonly kind: 'timeout' | 'rate_limited' | 'http' | 'network' | 'bad_response',
     message: string,
     readonly detail?: string,
+    /** The provider's HTTP status, when it answered at all. */
+    readonly status?: number,
   ) {
     super(message);
     this.name = 'ProviderError';
@@ -28,12 +30,33 @@ export class ProviderError extends Error {
  * over 60 s for qwen3-vl:4b on a 6 GB laptop GPU.
  */
 const TIMEOUT_MS: Record<ProviderConfig['provider'], number> = {
-  nvidia: 60_000,
-  groq: 60_000,
+  nvidia: 40_000,
+  groq: 40_000,
   ollama: 120_000,
 };
 
+/**
+ * Hosted free tiers sometimes sit on one request and answer the next at once:
+ * NVIDIA's Llama 3.2 11B usually replied in about 1 s but left
+ * 2 of about 50 requests unanswered for a minute. So a timeout or a 5xx from a
+ * hosted provider is retried once. Ollama is local; retrying it only doubles
+ * the wait.
+ */
+function isRetryable(error: ProviderError): boolean {
+  return error.kind === 'timeout' || (error.kind === 'http' && error.status !== undefined && error.status >= 500);
+}
+
 export async function createChatCompletion(config: ProviderConfig, messages: ChatMessage[]): Promise<string> {
+  try {
+    return await requestCompletion(config, messages);
+  } catch (error) {
+    if (config.provider === 'ollama' || !(error instanceof ProviderError) || !isRetryable(error)) throw error;
+    console.warn(`[plan] ${error.message}; retrying once`);
+    return requestCompletion(config, messages);
+  }
+}
+
+async function requestCompletion(config: ProviderConfig, messages: ChatMessage[]): Promise<string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -66,16 +89,18 @@ export async function createChatCompletion(config: ProviderConfig, messages: Cha
   if (!response.ok) {
     const detail = (await response.text()).slice(0, 500);
     if (response.status === 429) {
-      throw new ProviderError('rate_limited', `The ${config.provider} rate limit was reached. Wait a minute and retry.`, detail);
+      throw new ProviderError('rate_limited', `The ${config.provider} rate limit was reached. Wait a minute and retry.`, detail, 429);
     }
-    throw new ProviderError('http', `The ${config.provider} provider returned HTTP ${response.status} for ${config.model}`, detail);
+    throw new ProviderError('http', `The ${config.provider} provider returned HTTP ${response.status} for ${config.model}`, detail, response.status);
   }
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
-  if (!content) {
+  if (typeof content !== 'string') {
     throw new ProviderError('bad_response', `The ${config.provider} provider returned no message`);
   }
-
+  // An empty string is a model problem, not a provider one: a thinking model
+  // can spend its whole reply on reasoning. The planner re-asks, like any
+  // unparseable output.
   return content;
 }
