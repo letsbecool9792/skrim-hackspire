@@ -9,10 +9,10 @@ Read [`/CLAUDE.md`](../../CLAUDE.md) for current status and locked decisions.
 
 | Path | Runs where | Purpose |
 |---|---|---|
-| `entrypoints/background.ts` | Chrome: service worker. Firefox: event page | Orchestrator. The agent loop, task state, server calls |
+| `entrypoints/background/` | Chrome: service worker. Firefox: event page | Orchestrator. The agent loop, task state, server calls |
 | `entrypoints/offscreen/` | Chrome only, hidden document | **All model inference.** Nothing else |
-| `entrypoints/content.ts` | Injected into the page | WS2 graph integration, action execution |
-| `entrypoints/sidepanel/` | Extension UI | Task input, progress |
+| `entrypoints/content/` | Injected into the page | WS2 graph integration, action execution |
+| `entrypoints/popup/` | Extension UI | Task input, status, page capture |
 | `lib/*` | Imported by the above | The actual logic. Each has its own CLAUDE.md |
 
 ## Rules that are not negotiable
