@@ -13,7 +13,7 @@ const app = new Hono();
 app.get('/', (c) => {
   return c.json({
     status: 'ok',
-    message: 'Skrim Server Agent is running.',
+    message: 'Skrim server is running.',
     provider: config.providerConfig.provider,
     model: config.providerConfig.model
   });

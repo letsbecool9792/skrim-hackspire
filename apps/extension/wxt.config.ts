@@ -17,7 +17,7 @@ export default defineConfig({
     // Set explicitly. Without this WXT derives it from package.json and the
     // extension shows up as "@skrim/extension" on chrome://extensions,
     // which a judge will see.
-    name: "SKRIM",
+    name: "Skrim",
     description:
       "An agent that reads your screen and does tasks for you, while the server " +
       "doing the thinking never receives anything that identifies you.",

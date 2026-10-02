@@ -157,7 +157,7 @@ export default function App() {
       <div className="popup-content">
         <header className="topbar">
           <div className="brand-mark" aria-hidden="true"><span>S</span></div>
-          <div className="brand-copy"><strong>SKRIM</strong><p>Privacy at peak</p></div>
+          <div className="brand-copy"><strong>Skrim</strong><p>Privacy at peak</p></div>
           <span className={`status-dot ${isActive ? "is-active" : ""}`} title={statusLabel} aria-label={statusLabel} />
           <div className="theme-switcher" title={isLightMode ? "Switch to night mode" : "Switch to day mode"}>
             <span aria-hidden="true">☾</span>
@@ -178,13 +178,13 @@ export default function App() {
 
         {(goal || isActive || status === "completed" || status === "failed" || status === "cancelled") && <section className="activity-feed" aria-label="Task activity">
           {goal && <div className="feed-message"><small>You</small><p>{goal}</p></div>}
-          {isActive && <div className="feed-message assistant-message"><small>SKRIM</small><p>{status === "waiting" ? "Verifying the result..." : "Working through the visible page..."}</p><span className="feed-progress">{stepCount} / {maxSteps || "--"} steps</span></div>}
+          {isActive && <div className="feed-message assistant-message"><small>Skrim</small><p>{status === "waiting" ? "Verifying the result..." : "Working through the visible page..."}</p><span className="feed-progress">{stepCount} / {maxSteps || "--"} steps</span></div>}
           {status === "completed" && <div className="feed-result success-text">✓ Task complete <span>{stepCount} step{stepCount === 1 ? "" : "s"}</span></div>}
           {(status === "failed" || status === "cancelled") && <div className="feed-result danger-text">! Task stopped<span>{errorCode || "The next action was not completed safely."}</span></div>}
         </section>}
 
         <section className="composer" aria-label="Task composer">
-          <textarea id="goal" value={goal} onChange={(event) => setGoal(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Tell SKRIM what to do..." disabled={isActive} aria-label="Task prompt" />
+          <textarea id="goal" value={goal} onChange={(event) => setGoal(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Tell Skrim what to do..." disabled={isActive} aria-label="Task prompt" />
           <div className="composer-toolbar">
             <input ref={fileInputRef} type="file" multiple hidden onChange={(event) => event.target.files && addFiles(event.target.files)} />
             <button className={`context-button ${currentPage ? "is-selected" : ""}`} type="button" onClick={() => setCurrentPage((value) => !value)} aria-pressed={currentPage}><span aria-hidden="true">◉</span> Current page</button>
