@@ -8,6 +8,7 @@ Each element is one line, for example:
 - After "=", the current value of a field, or the visible text when it differs from the name. Users often describe an element by its visible text.
 - [x,y,width,height] is the position in the viewport, in CSS pixels.
 - States in parentheses: checked, unchecked, expanded, collapsed, selected, disabled, editable, readonly, required, invalid, focused, offscreen (outside the visible area; scroll to reach it).
+- Only the part of the page in and near the view is listed. "Not listed" says how many more elements lie above and below; scroll to reach them when what the goal needs is not in the list.
 
 ## Personal data is replaced by tokens
 Text like <PII:EMAIL:1> stands for personal data that stayed on the user's device. You never see the real value and must never invent one. To enter it, type the token exactly as written, e.g. "value": "<PII:EMAIL:1>"; the device puts the real value in. "Known values" lists tokens you may use even if they are not on the page.

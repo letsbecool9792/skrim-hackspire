@@ -97,6 +97,41 @@ describe("extractScreenGraph", () => {
     assert.equal(elements.find((element) => element.role === "region")?.value, "More detailed information here.");
   });
 
+  test("lists only elements in or near the view, and counts the rest", () => {
+    const box = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      return new DOMRect(10, Number(this.getAttribute("data-y") ?? 10), 100, 20);
+    };
+    try {
+      const { elements, beyondView } = extract(
+        `<button data-y="-3000">Far above</button><button data-y="-100">Just above</button><button data-y="300">In view</button><button data-y="5000">Far below</button>`
+      );
+
+      assert.deepEqual(elements.map((element) => element.label), ["Just above", "In view"]);
+      assert.ok(elements[0]?.state?.includes("offscreen"));
+      assert.deepEqual(beyondView, { above: 1, below: 1 });
+    } finally {
+      Element.prototype.getBoundingClientRect = box;
+    }
+  });
+
+  test("lists at most 120 elements, the nearest to the view first", () => {
+    const box = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      return new DOMRect(10, Number(this.getAttribute("data-y") ?? 10), 100, 20);
+    };
+    try {
+      const inView = Array.from({ length: 120 }, (_, index) => `<button data-y="100">In view ${index}</button>`).join("");
+      const { elements, beyondView } = extract(`<button data-y="-150">Just above</button>${inView}<button data-y="${window.innerHeight + 50}">Just below</button>`);
+
+      assert.equal(elements.length, 120);
+      assert.ok(elements.every((element) => element.label?.startsWith("In view")));
+      assert.deepEqual(beyondView, { above: 1, below: 1 });
+    } finally {
+      Element.prototype.getBoundingClientRect = box;
+    }
+  });
+
   test("maps every id back to the element it describes", () => {
     const { elements, registry } = extract(`<button>One</button><button>Two</button>`);
 

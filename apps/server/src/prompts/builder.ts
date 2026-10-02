@@ -31,6 +31,10 @@ export function renderRequest(request: PlanRequest): string {
   lines.push('Elements:');
   if (graph.elements.length === 0) lines.push('(none found)');
   for (const element of graph.elements) lines.push(renderElement(element));
+  const beyond = graph.beyondView;
+  if (beyond && beyond.above + beyond.below > 0) {
+    lines.push(`Not listed: ${beyond.above} more elements above the view and ${beyond.below} below. Scroll to reach them.`);
+  }
 
   if (graph.manifest.regions.length > 0) {
     const regions = graph.manifest.regions.map((r) => `${r.category} at [${r.bbox.join(',')}]`);

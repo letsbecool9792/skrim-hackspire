@@ -16,6 +16,8 @@ export interface ScreenGraphSnapshot {
   hasVisualCapture: boolean;
   /** Element id -> field type and autocomplete hint, for PII detection. */
   fields?: Record<string, { inputType?: string; autocomplete?: string }>;
+  /** Elements left out for being far above or below the view. */
+  beyondView?: { above: number; below: number };
 }
 
 export type ScreenGraphProvider = () => ScreenGraphSnapshot | Promise<ScreenGraphSnapshot>;
