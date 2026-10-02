@@ -12,9 +12,10 @@ architectural decision, add it to "Locked decisions" with a one-line reason.
 
 ## Where the project stands
 
-Next milestone: **close the agent loop end to end** (DOM graph → PII redaction → server →
-one action → verify). Everything else layers onto a working loop; nothing works without one
-(brief §10). What is still missing is listed under "Open findings".
+The agent loop is closed end to end (DOM graph → PII redaction → server → one action →
+verify), in a chat side panel. Next milestone: **see it work in a real browser, and pick a
+planning model that finishes tasks**; the NVIDIA default does not. Then perception beyond the
+DOM. See "Status" and "Open findings".
 
 ---
 
@@ -28,27 +29,29 @@ Settled in the setup session. Do not reopen without a reason.
 | **WXT** for the extension | Only framework treating Firefox as first-class; handles manifest-version and API polyfill differences from one codebase. Plasmo is Chrome-first, CRXJS means hand-wrangling Firefox at 2am |
 | **Transformers.js v3** for local inference | Pipelines + tokenisers included. Drop to raw `onnxruntime-web` only for the YOLO icon detector, where preprocessing is a resize and there is no pipeline anyway |
 | **Hono on Node 22** for the server | Thin: prompt build, schema validation, retry. No ML in the server |
-| **Qwen3-VL** as the server brain | Apache 2.0, strong GUI grounding, available both hosted and via Ollama, so demo beat 8 is a base-URL swap. **Under review:** NVIDIA does not host Qwen; hosted default is Llama 3.2 11B Vision for now (see "Open findings") |
+| **Qwen** as the server brain | Apache 2.0, strong GUI grounding, available both hosted and via Ollama, so demo beat 8 is a base-URL swap. NVIDIA hosts no Qwen; the free hosted Qwen is `qwen/qwen3.8-27b` on Groq, and local is Qwen3-VL 4B. The NVIDIA default, Llama 3.2 11B, never finishes a task (see "Open findings") |
 | **NVIDIA Build** as the dev provider | Free, no credit card, ~40 RPM, no daily token cap, OpenAI-compatible |
 | **MV3 on both browsers** | Firefox MV3 event pages keep DOM access, so we get the offscreen-free path *and* "MV3 everywhere" on the slide. WXT defaults Firefox to MV2 — override it |
 | **Eval runs in a real browser** via Playwright | The rubric scores precision/recall on the shipped path. Node-side numbers would measure different code than we demo |
-| Ollama `qwen3-vl:4b` for air-gap | 6 GB VRAM ceiling. See "Hardware reality" |
-| **WS1 exposes registration hooks instead of owning perception/privacy/planning** | WS2 supplies the graph, WS3 supplies token resolution, and WS4 supplies one action per cycle; this prevents duplicate extractors and keeps browser execution independent |
+| Ollama `qwen3-vl:4b-instruct` for air-gap | 6 GB VRAM ceiling. See "Hardware reality". The instruct build, not the plain tag, which is the much slower thinking build |
+| **WS1 exposes registration hooks instead of owning perception/privacy/planning** | WS2 registers the graph provider (content script) and WS4 the planner (side panel); this prevents duplicate extractors and keeps browser execution independent. Token resolution needs no hook: the loop owns one vault per task |
+| **The agent loop runs in the side panel, not the background** | Chrome terminates an extension service worker when one `fetch()` takes over 30 s, and a local model takes up to ~40 s a step. The side panel is an ordinary page with no such limit; the task, its vault and the chat live exactly as long as the panel. Closing it stops the task |
 
 ### Provider config
 
 All four speak OpenAI-compatible chat completions, so the server holds **one adapter** with a
 swapped `baseURL`. Never add a second code path.
 
-**Only `nvidia` and `ollama` are wired right now.** We are proceeding on the assumption that
-NVIDIA's free tier is sufficient. The other two are documented so we know where to go if it
-stops being sufficient — do not add them to `.env.example` until they are actually needed.
+**`nvidia`, `groq` and `ollama` are wired.** The other two are documented so we know where to
+go if those stop being sufficient — do not add them to `.env.example` until they are
+actually needed.
 
 | Profile | Status | Use | Cost |
 |---|---|---|---|
-| `nvidia` | **wired** | dev default | free, no card, ~40 RPM |
+| `nvidia` | **wired** | dev default; fast, but its only reliable model (Llama 3.2 11B) cannot finish tasks | free, no card, ~40 RPM |
+| `groq` | **wired** | hosted Qwen (`qwen/qwen3.8-27b`) | free, no card, 30 RPM, **8,000 tokens/min**, 200k tokens/day |
 | `ollama` | **wired** | air-gap demo, offline dev | free, local |
-| `cloudflare` | not wired | if NVIDIA rate-limits become a problem | free, no card, 10k neurons/day |
+| `cloudflare` | not wired | also hosts `qwen3.8-27b` | free, no card, 10k neurons/day |
 | `openrouter` | not wired | last resort | **50 req/day** without credits — unusable as a daily driver |
 
 Each teammate needs **their own** NVIDIA key. The 40 RPM is per account; teammates sharing
@@ -63,7 +66,7 @@ The product is **Skrim**; the team is **tropical crush**.
 
 | Where | Spelling |
 |---|---|
-| Anything a person reads: extension name, popup, landing page, docs | `Skrim` |
+| Anything a person reads: extension name, side panel, landing page, docs | `Skrim` |
 | GitHub repo, npm scope `@skrim/*`, message strings like `skrim:offscreen:ping` | `skrim` |
 | Firefox add-on id (`wxt.config.ts`) | `skrim@tropical-crush` |
 
@@ -96,13 +99,15 @@ skrim/
 ├── apps/
 │   ├── extension/         WXT. The product. Chrome MV3 + Firefox MV3.
 │   │   ├── entrypoints/
-│   │   │   ├── background/    Orchestrator: agent loop, task state, server calls.
-│   │   │   │                  Chrome = service worker, so NO inference here.
-│   │   │   ├── offscreen/     Chrome only. ALL model inference lives here —
-│   │   │   │                  WebGPU and WASM are unavailable in a service worker.
-│   │   │   ├── content/       DOM extraction + action execution. Runs in the page.
-│   │   │   └── popup/         Task UI: goal input, status, page capture.
+│   │   │   ├── sidepanel/     The chat UI, and where the agent loop runs.
+│   │   │   ├── background/    Opens the side panel. Nothing else: Chrome kills a
+│   │   │   │                  service worker whose fetch() takes over 30 s.
+│   │   │   ├── offscreen/     Chrome only, for model inference. Unused so far;
+│   │   │   │                  see "Open findings".
+│   │   │   └── content/       Answers the side panel: page graph, actions. Runs in the page.
 │   │   ├── lib/
+│   │   │   ├── agent/         The loop: observe → redact → plan → act → verify.
+│   │   │   │                  Task vault, server client, tab link.
 │   │   │   ├── dom/           Element graph: roles, labels, bboxes, a11y tree walk.
 │   │   │   ├── vision/        Model loading, WebGPU/WASM device selection.
 │   │   │   ├── pii/           Regex bank, NER, face detect, fusion, confidence.
@@ -161,158 +166,103 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 18 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify`, 5 invariant rules, CI on every PR, PR template, nested `CLAUDE.md`s
+- [x] Guardrails: `pnpm verify` (111 tests), 5 invariant rules, CI on every PR, PR template,
+      nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       before the OmniParser detector
-- [x] WXT config: MV3 on both browsers, name Skrim, per-browser permissions
+- [x] WXT config: MV3 on both browsers, name Skrim, per-browser permissions, WebAssembly
+      allowed by the CSP
+
+**The loop is closed**: goal → DOM graph → redaction against a per-task vault →
+server → one action → verify → repeat, in a chat side panel. Tested in Node against
+happy-dom with the real server and models (`pnpm test:agent`); **not yet tried in a real
+browser**.
 
 Built, by workstream:
-- [x] **WS1 shell:** task lifecycle, popup, all 8 actions implemented, replies from the page
-      routed back into the loop, `done` ends the task and honours `success`
-- [x] **WS2 perception:** DOM extraction registered as the screen-graph provider, with an
-      id → element registry. OCR, DOM + vision fusion and escalation modules exist (16 tests)
-- [x] **WS3 privacy:** regex PII detectors and the token vault (38 tests). Not yet used by
-      the extension
-- [x] **WS4 server:** `/plan` with one provider adapter, prompt, JSON repair, 60 s provider timeout
-- [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, a temporary `click <text>`
-      planner, a popup OCR button. All in [`docs/testing.md`](docs/testing.md)
+- [x] **WS1 shell:** side panel chat, the agent loop (`lib/agent/`), all 8 actions, click
+      verification that ignores focus, page loads followed, 25-step and 5-minute limits,
+      stops for no progress and for going in circles, the tab fixed per task
+- [x] **WS2 perception:** DOM extraction with visible text, field values and dropdown
+      options. OCR works on demand (header button); fusion and escalation modules exist but
+      are not in the loop
+- [x] **WS3 privacy:** regex detectors (precision bugs fixed), form-field hints for names and
+      phones, one vault per task, every page view and the goal redacted, tokens resolved
+      only at typing time, tripwire on the whole request
+- [x] **WS4 server:** `/plan` with one adapter and three profiles (NVIDIA, Groq, Ollama),
+      compact prompt that reads the history, JSON repair, timeouts with one retry, errors
+      that do not leak provider detail
+- [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, `pnpm test:agent`, and the
+      OCR button. All in [`docs/testing.md`](docs/testing.md)
 
 ### What's left, in order
 
-**1. Close the loop.** Nothing else matters until one real task runs end to end.
-- [ ] Settle the server model (see "Open findings")
-- [ ] Redact the screen graph inside the extension: run WS3's detectors over each element's
-      label and value, with one vault per task in the background
-- [ ] Register that vault as the token resolver, so `type` actions can fill real values
-- [ ] A planner that calls the server: build the PlanRequest (sanitised URL, title,
-      viewport, redacted elements, manifest), `assertOutboundSafe()`, POST `/plan`. It needs
-      `host_permissions` for the server's origin. It replaces
-      `entrypoints/background/dev-planner.ts`
-- [ ] Make click verification mean something (see "Open findings")
-- [ ] Enforce the task timeout in the extension
+**1. Prove it in a real browser, and pick the model.**
+- [ ] Run [`docs/testing.md`](docs/testing.md) sections 5 and 6 in Chrome, then Firefox
+- [ ] Settle the model (see "Open findings"): measure Groq's Qwen 3.8 with `pnpm test:agent`
+- [ ] Page loads: `activeTab` ends when the tab navigates, so OCR after a navigation will fail
 
 **2. Perception beyond the DOM** (WS2, WS3)
-- [ ] Create the offscreen document; run OCR there; keep one screenshot helper
-- [ ] GLiNER inference for names and addresses (only post-processing exists)
+- [ ] GLiNER inference for names and addresses in free text (only post-processing exists)
 - [ ] Face detection (the BlazeFace model is fetched; no code yet)
 - [ ] OmniParser icon detector: export (`scripts/artifacts/omniparser-icon.onnx`) and inference
-- [ ] Wire vision fusion into the live graph
-- [ ] Fix the regex detector bugs (see "Open findings")
+- [ ] Wire OCR and vision fusion into the loop, for canvas and image-only pages
+- [ ] Decide where inference runs: the side panel can now host it (see "Open findings")
 
 **3. Measure and show it** (WS5, WS6)
-- [ ] Eval harness + 30–50 fixtures with ground truth
+- [ ] Eval harness + 30–50 fixtures with ground truth (two fixture pages exist)
 - [ ] Dashboard: split-screen wire view + resource panel
 - [ ] Landing page
-- [ ] Tradeoff curve: GLiNER quint8 vs fp16; hosted vs local model latency
+- [ ] Tradeoff curve: GLiNER quint8 vs fp16; hosted vs local model accuracy and latency
 
 **4. Platform**
-- [ ] Firefox: run the tests in [`docs/testing.md`](docs/testing.md); declare
-      `data_collection_permissions`
-- [ ] Permissions: `tabs` is probably removable; `activeTab` ends on navigation (see findings)
-- [ ] Cloudflare fallback provider (deferred; only if NVIDIA's limits bite)
+- [ ] Firefox: run the tests in [`docs/testing.md`](docs/testing.md)
+- [ ] Cloudflare fallback provider (deferred; only if Groq's and NVIDIA's limits bite)
 
 ---
 
 ## Open findings — revisit later
 
-Collected while merging the team's first PRs and while adding test harnesses.
+Collected while merging the team's first PRs and while testing and closing the loop.
 Each needs a decision or a follow-up. Delete an entry once it is dealt with.
 
-**Decide the hosted model; Qwen is not on NVIDIA.** Checked with the
-account's own key: NVIDIA hosts no Qwen models, so the locked "Qwen3-VL as the server brain"
-only holds locally. Every listed vision model was tried with `pnpm smoke:server`:
+**Pick the planning model. Llama 3.2 11B cannot finish a task.** Measured
+with `pnpm test:agent` (the fixture goals through the real loop) and `pnpm smoke:server`:
 
 | Model | Result |
 |---|---|
-| `qwen/qwen2-vl-72b-instruct` (the old fallback) | 404: does not exist |
-| `meta/llama-3.2-90b-vision-instruct` | no reply within 60 s, every time |
-| `google/gemma-3-12b-it`, `google/gemma-3-4b-it`, `microsoft/phi-3-vision-128k-instruct` | listed, but "not found for account" |
-| **`meta/llama-3.2-11b-vision-instruct`** | **works:** 2 of 3, 1.5–6 s per step |
-| `qwen3-vl:4b` on Ollama (local) | 3 of 3, but 6–57 s per step |
+| `meta/llama-3.2-11b-vision-instruct`, NVIDIA (default) | Right first action, about 1 s a step, but **never answers done**: clicked the counter 25 times while its history said "now it shows Count: 25". 0 of 5 fixture goals |
+| `qwen3-vl:4b` on Ollama (the thinking build; the plain tag) | Answers done after one click on 3 of 4 click goals, but 5–40 s a step, and twice spent its whole reply thinking and returned nothing. Its thinking cannot be switched off through the OpenAI-compatible API |
+| **`qwen3-vl:4b-instruct` on Ollama (local)** | **Best so far.** 4 of 5 fixture goals, including the whole form (email typed via its token, submitted, no raw PII sent); 4 of 4 smoke checks; **0.3–0.9 s a step** on the dev laptop after an ~8 s first load. Missed "Click show panel": the button then says "Hide Panel" and it kept toggling, until the loop's circle guard stopped it |
+| `qwen/qwen3.8-27b` on Groq | Not measured: needs a `GROQ_API_KEY` |
+| Other NVIDIA models (Gemma 4, gpt-oss-20b, GLM, DeepSeek, Nemotron) | Most never reply within 60 s on the free tier; Mistral Large and one Nemotron are "not found". Nemotron 3.5 Lightning got the stop case right but took 20–70 s |
 
-Before this check every real `/plan` call failed, because the old fallback does not exist.
-`config.ts` and `.env.example` now both default to Llama 3.2 11B Vision so the server works.
-It is open-weight (Llama 3.2 Community License) but not Qwen. Still to decide: keep it, find
-another free host for Qwen3-VL, or treat local Qwen as the quality option and hosted Llama as
-the fast one. That is the brief's tradeoff curve with real numbers.
+NVIDIA hosts no Qwen at all (81 models listed). Groq's free tier has
+`qwen/qwen3.8-27b` (open weights, vision-capable, no card), limited to 8,000 tokens a minute:
+one step is about 700 tokens plus ~20 per element. Cloudflare Workers AI hosts it too.
 
-**The planner ignores its own history.** Given a history showing the counter click already
-succeeded, Llama 3.2 11B clicks again instead of answering `done`. Local Qwen3-VL gets it right.
-The system prompt (`apps/server/src/prompts/system.ts`) never tells the model to check the
-history before acting. Add that, then rerun `pnpm smoke:server`. On a real page this means
-repeating the last action until the 25-step limit.
+So: local Qwen3-VL 4B instruct is the working planner today, and fast on this laptop.
+Still to decide: whether hosted Qwen 3.8 27B on Groq beats it (measure with
+`pnpm test:agent`), and whether NVIDIA stays the default provider for teammates without a
+GPU, given that its only fast model cannot finish tasks.
 
-**Provider error bodies reach the client verbatim.** On failure, `/plan` returns the provider's
-raw response text as `error`. For NVIDIA 404s that includes internal function and account
-identifiers. Return the status and a short message instead, and keep the detail in the
-server log.
+**Not yet tried in a real browser.** The side panel, tab messaging, page-load following and
+host permission were built and tested against happy-dom, not in Chrome or Firefox.
+[`docs/testing.md`](docs/testing.md) sections 5 and 6 are the checklist.
 
-**`openai` is an unused dependency in `apps/server`.** The provider adapter calls `fetch`
-directly.
+**The offscreen document may be unnecessary now.** It exists because Chrome's service
+worker cannot run WebAssembly or WebGPU. The loop now lives in the side panel, an ordinary
+page that can run models itself (OCR already runs there), in a Worker so the UI stays
+responsive. Dropping the offscreen document would also drop the `offscreen` permission.
+Decide before wiring GLiNER.
 
-**The agent loop does not close yet.** WS1's hooks in `apps/extension/lib/integration.ts`:
-- `registerScreenGraphProvider`: wired (DOM extractor, WS2).
-- `registerTokenResolver`: empty. The WS3 vault exists but is never registered.
-- `registerActionPlanner`: only the **temporary** local `click <text>` planner
-  (`entrypoints/background/dev-planner.ts`), for testing. Nothing calls the server's `/plan`.
+**URL paths can carry names.** `sanitizeUrl()` masks long digit runs, uuids, hex and anything
+with `@`, but keeps word segments, so `/users/asha-rao/orders` reaches the server as is.
+Consider running the PII detectors over path segments too.
 
-That remaining wiring *is* the vertical slice. Delete the test planner when the real one lands.
-
-**Click verification always passes on buttons, links and checkboxes.** `lib/actions/click.ts`
-calls `element.focus()` and then counts `document.activeElement === element` as proof the
-click changed something. Every native control takes focus, so for those the check cannot fail,
-even when the click did nothing. Found while writing `docs/testing.md`. Focus should not count;
-a same-page link jump then needs its own signal (URL hash or scroll position), or it will fail
-verification.
-
-**The regex PII detectors have precision bugs.** Found with `pnpm demo:pii`:
-- Every detector writes to the vault *before* overlapping matches are resolved, so rejected
-  candidates still get tokens. The UPI pattern also matches every email address, so an email
-  gets an `ACCOUNT` token nobody sees, the first visible `ACCOUNT` token is `:2`, and
-  `vault.stats()` over-counts. Allocate tokens only for accepted matches.
-- The Aadhaar detector accepts any 12 digits with "Aadhaar" in the 48 characters *before*
-  them, so "account number 123456789012" after an Aadhaar number becomes `GOV_ID`.
-- The UPI pattern should require a handle without a top-level domain (`name@okaxis`, not
-  `name@example.com`).
-
-Fixing them touches WS3's tests, so it is WS3 work rather than a quick patch.
-
-**Screen-graph labels are not redacted.** `extractScreenGraph()` puts raw accessible names and
-text content into `label`, and no PII pass sits between extraction and the background.
-Nothing leaves the extension yet. Before a planner sends the graph to `/plan`, run WS3
-detection over labels, and call `assertOutboundSafe()` right before the request.
-
-**The task timeout is not enforced.** `task-manager.ts` records `startedAt` and
-`timeoutMs` (120 s), but nothing checks them. A task that stalls for any reason other than a
-missing content script stays "running" until the user presses Stop. The server side now has
-one: each provider call gives up after 60 s. Before that, a stalled model (Llama 3.2 90B on
-NVIDIA) hung the server indefinitely.
-
-**Nothing creates the offscreen document.** WS2 ships `ensureOffscreenDocument()` and an OCR
-handler in `entrypoints/offscreen/`, but nothing calls it. Vision and OCR are unreachable
-until the background does.
-
-**Two screenshot helpers.** WS2's `lib/vision/capture.ts` duplicates WS1's
-`lib/capture/screenshot.ts`, is never called, and still contains a commented-out earlier
-version. Keep one. Separate helpers would each rate-limit themselves against Chrome's
-~2 captures/sec cap, and could exceed it together.
-
-**Firefox `data_collection_permissions`.** `pnpm build:firefox` warns that new Firefox add-ons
-must declare data collection (since 3 Nov 2025). Declaring none under
-`browser_specific_settings.gecko` would satisfy it, and doubles as a privacy claim.
-
-**Screenshot capture only works right after the user clicks the extension icon.** WS1 cut
-the permissions to `tabs`, and capture then failed on `https://example.com`. The `<all_urls>`
-content script does not count for `captureVisibleTab`, which needs `activeTab` or `<all_urls>`
-host access. Fixed by adding `activeTab`, which adds no install warning. The catch: `activeTab`
-ends when the tab navigates. Once the agent loop clicks through to a new page, background
-captures will fail again. At that point, either request `<all_urls>` host access or re-grant
-per page.
-
-**`tabs` looks unnecessary.** It only unlocks reading a tab's URL and title, and nothing in
-the extension reads them; `tabs.query`, `tabs.sendMessage` and `captureVisibleTab` all work
-without it. It also shows users a "Read your browsing history" install warning. Try removing it
-once the loop is wired and tested.
+**OCR capture needs a fresh click after navigation.** `captureVisibleTab` needs `activeTab`,
+which Chrome grants on the toolbar click and revokes when the tab navigates. The loop does not
+capture yet, but once vision is wired in, a task that clicks through to a new page will lose
+capture. Then either request `<all_urls>` host access or re-grant per page.
 
 **Re-run `pnpm models:fetch` after pulling.** The file set changes: WS3's PR saves GLiNER's config as
 `config.json`, and Tesseract now ships only the two core files it actually loads. The script
@@ -347,7 +297,8 @@ python -m venv .venv
 > activation silently failing is how the setup session nuked a global Python install.
 
 **Only if you own the air-gap path:** `winget install Ollama.Ollama` then
-`ollama pull qwen3-vl:4b` (3.3 GB). Most of the team never needs this.
+`ollama pull qwen3-vl:4b-instruct` (3.3 GB). Today this is also the planner that works best
+(see "Open findings"); with Ollama running, start the server with `MODEL_PROVIDER=ollama`.
 
 ---
 
