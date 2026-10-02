@@ -182,7 +182,7 @@ and tasks a day each free tier allows. The findings are in
 
 1. Start the server (`pnpm dev:server`) and check the side panel's header shows the model's
    name, not "Server offline".
-2. Open `file:///D:/Programming/skrim/fixtures/pages/click-test.html`.
+2. Open `file:///D:/Programming/skrim-hackspire/fixtures/pages/click-test.html`.
 3. Click the Skrim icon. In the side panel, type a goal and press Enter.
 
 Each goal should take one click, then **✓ Done**:
