@@ -9,6 +9,15 @@ export const SITE = {
   tagline: "An AI agent that does tasks on your behalf — and never shows the server your data.",
   githubUrl: "https://github.com/letsbecool9792/skrim-hackspire",
   team: "tropical crush",
+  /**
+   * Direct link to the latest release .zip on GitHub Releases.
+   * Format: https://github.com/letsbecool9792/skrim-hackspire/releases/download/v0.1.0/skrim-chrome-v0.1.0.zip
+   * Leave empty ("") until the first GitHub Release is published; the
+   * landing page falls back to build-from-source instructions when empty.
+   */
+  downloadUrl: "",
+  /** Link to the GitHub Releases page (always shown). */
+  releasesUrl: "https://github.com/letsbecool9792/skrim-hackspire/releases",
 } as const;
 
 // ─── Hero visual — fictional data from fixtures/pages/checkout.html ────────────

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Brain,
+  Download,
   ExternalLink,
   Eye,
   MousePointerClick,
@@ -307,8 +308,70 @@ export default function App() {
         <Section id="try-it">
           <SectionHeading>Try it</SectionHeading>
           <p className="section-body">
-            Skrim is not on the Chrome Web Store yet. Firefox is not supported yet. Build from source:
+            Skrim is not on the Chrome Web Store yet. Firefox is not supported yet. Chrome only for now.
           </p>
+
+          {/* Download or Releases link */}
+          <div className="download-row">
+            {SITE.downloadUrl ? (
+              <a
+                href={SITE.downloadUrl}
+                className="btn btn--primary btn--download"
+                download
+                aria-label="Download Skrim extension zip"
+              >
+                <Download size={18} aria-hidden="true" />
+                Download for Chrome (.zip)
+              </a>
+            ) : (
+              <a
+                href={SITE.releasesUrl}
+                className="btn btn--ghost"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink size={16} aria-hidden="true" />
+                GitHub Releases
+              </a>
+            )}
+            <span className="download-note">
+              {SITE.downloadUrl
+                ? "Download → unzip → chrome://extensions → Load unpacked"
+                : "No release yet — build from source below, or watch releases for the first zip"}
+            </span>
+          </div>
+
+          {/* Install after download */}
+          {SITE.downloadUrl && (
+            <div className="install-steps">
+              <div className="install-step">
+                <span className="install-num" aria-hidden="true">1</span>
+                <span>Unzip the downloaded file.</span>
+              </div>
+              <div className="install-step">
+                <span className="install-num" aria-hidden="true">2</span>
+                <span>Open <code className="inline-code">chrome://extensions</code> in Chrome.</span>
+              </div>
+              <div className="install-step">
+                <span className="install-num" aria-hidden="true">3</span>
+                <span>Enable <strong>Developer mode</strong> (toggle, top-right).</span>
+              </div>
+              <div className="install-step">
+                <span className="install-num" aria-hidden="true">4</span>
+                <span>Click <strong>Load unpacked</strong> and select the unzipped folder.</span>
+              </div>
+              <div className="install-step">
+                <span className="install-num" aria-hidden="true">5</span>
+                <span>
+                  Start the server: <code className="inline-code">pnpm dev:server</code> (requires a{" "}
+                  <a href="https://console.groq.com" className="text-link" target="_blank" rel="noopener noreferrer">free Groq key</a>).
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Build from source (always shown as secondary path) */}
+          <h3 className="subsection-heading">Build from source</h3>
           <div className="build-steps">
             {BUILD_STEPS.map(({ step, code }, i) => (
               <div key={step} className="build-step">
