@@ -174,7 +174,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (225 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (232 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       without the OmniParser detector (+77 MB once exported: the built extension is
@@ -235,7 +235,7 @@ Built, by workstream:
 |---|---|---|
 | Suparno | The Chrome retest's fixes, the dashboard, the design language (all merged); next, the real-site tests, then the demo | Ollama |
 | Aritra (WS1) | The dashboard (PR #15): built, then finished by Suparno; Aritra has stopped. The offline rehearsal (demo beat 8) is under "Waiting on Suparno" | Ollama |
-| Ayushi (WS3) | Her five detection PRs are merged (OCR leaks, false positives, names in URLs, faces counted). Next: the eval's seven misses (passport and patient-ID numbers, names on pages that do not look personal) | `pnpm eval`; Groq when needed |
+| Ayushi (WS3) | Her six detection PRs are merged (OCR leaks, false positives, names in URLs, faces counted, and PR 24: labelled ids, names in email addresses, a face makes a page personal), which took recall to 99.0%. Next: not assigned yet (a landing-page prompt is ready for whoever takes it) | `pnpm eval`; Groq when needed |
 | Dhruba (WS2) | Fixtures and the icon detector are merged. Next: run the icon detector in the pixel reader and fuse it with the DOM, and a click at a position for what it finds | `pnpm eval`; Groq when needed |
 
 **The look is one language, in `design/tokens.css`.** The side panel and the dashboard use it
@@ -432,10 +432,10 @@ task. Known gaps:
   hidden: the eval's search results page loses a celebrity chef and "biryani".
 - The cue words are English.
 
-**What the eval finds** (`pnpm eval` in Chromium, 37 fixtures, 2026-10-03): **92.9% recall
-on all PII** (91 of 98), **86.8% precision**, 8 of 183 near-misses hidden, 1.9% of non-PII
-characters hidden. The first 22 fixtures scored 100% recall; Dhruba's 15 harder ones found
-the gaps below, so 92.9% is the honest number. OCR reads the canvas, the ID card image and the cross-origin iframe, and
+**What the eval finds** (`pnpm eval` in Chromium, 37 fixtures, 2026-10-03, after PR 24): **99.0%
+recall on all PII** (97 of 98), **87.5% precision**, 8 of 183 near-misses hidden, 1.9% of
+non-PII characters hidden, span IoU 0.97. The first 22 fixtures scored 100% recall; Dhruba's 15
+harder ones took it to 92.9%, and PR 24 fixed six of their seven misses. OCR reads the canvas, the ID card image and the cross-origin iframe, and
 everything on them is hidden; the Node check (`pnpm eval:node`) cannot capture those and gives
 87.7% recall. Name detection takes a median 250 ms a page view in the browser, against 38 ms
 in Node. The last two misses were fixed with Ayushi (PR 18):
@@ -447,11 +447,15 @@ in Node. The last two misses were fixed with Ayushi (PR 18):
   `pnpm eval -- --show-text <page>` prints what a page was read as. Values that exist only
   as pixels are scored allowing OCR's slips, since what counts is whether they were hidden.
 
-The seven misses: a passport number ("P4829017") and a patient ID ("HP-482901") after their
-labels; four names on pages that do not look personal (the group photo's three and the
-profile photo's: the known gap above); and "Ananya Shah" in an inbox, which GLiNER did not
-find. Hindi is out of scope. A plain 10-digit mobile number with no +91 was missed on a
-Hindi page; it is untested in English.
+The one miss left: GLiNER does not find "Meera Iyer" at the head of "Meera Iyer, Rohan Iyer
+and Tara Iyer" (group photo). PR 24 fixed the other six: a passport number and a patient ID
+after their labels (an id after "Patient ID", "Member ID", "Policy number" or "MRN" must hold
+a digit); the photo captions' names, since a face in view now makes a page personal (so a
+public portrait, such as an encyclopedia biography, loses its names: privacy wins); and
+"Ananya Shah", now taken from her address, ananya.shah@ (only a local part of two or more
+plain words names a person: orders@ and no-reply@ do not). The face count once read 1 of 5
+instead of 4 of 5; not looked into. Hindi is out of scope. A plain 10-digit mobile number with
+no +91 is not caught (decided: leave it).
 
 The false positives: single capitalised words taken for names ("Aadhaar", "biryani",
 "Koramangala"), business addresses on personal pages ("Apollo Clinic, Bannerghatta Road", "MG

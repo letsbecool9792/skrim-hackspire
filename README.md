@@ -115,18 +115,18 @@ the page and a list of look-alikes that must stay readable.
 | | |
 |---|---|
 | Fixtures / private values / look-alikes | 37 / 98 / 183 |
-| Recall (hidden everywhere they appear) | **92.9%** (91 of 98) |
-| Precision (hidden spans that were private) | **86.8%** |
-| Right category | 90 of 91 |
-| Span IoU | 0.91 |
+| Recall (hidden everywhere they appear) | **99.0%** (97 of 98) |
+| Precision (hidden spans that were private) | **87.5%** |
+| Right category | 96 of 97 |
+| Span IoU | 0.97 |
 | Look-alikes hidden (order numbers, ISBNs, public names) | 8 of 183 |
 | Ordinary characters hidden | 1.9% |
 | Faces counted | 4 of 5 |
 
-By category: ACCOUNT 5/5, ADDRESS 12/12, CARD 2/2, DOB 8/8, EMAIL 12/12, PHONE 14/14, GOV_ID 7/8,
-NAME 31/36, OTHER 0/1. By where it sits: in a field 17/17, in a canvas 3/3, an image 3/3, an iframe
-2/2, in the page's text 66/73. The first 22 fixtures scored 100% recall; 15 harder ones found the
-gaps, which are listed under Known limits. The fixtures are ours, written by the same hands as the
+By category: ACCOUNT 5/5, ADDRESS 12/12, CARD 2/2, DOB 8/8, EMAIL 12/12, PHONE 14/14, GOV_ID 8/8,
+NAME 35/36, OTHER 1/1. By where it sits: in a field 17/17, in a canvas 3/3, an image 3/3, an iframe
+2/2, in the page's text 72/73. The first 22 fixtures scored 100% recall; 15 harder ones took it to
+92.9%, and fixing what they found brought it to 99.0%. The one miss is under Known limits. The fixtures are ours, written by the same hands as the
 fixes: expect lower on pages we did not write ([`docs/real-site-tests.md`](docs/real-site-tests.md)
 is the plan for that).
 
@@ -192,12 +192,13 @@ Said plainly, because a judge will find them:
 
 - **English only.** Names, labels and cue words ("Welcome back") are English; Hindi was tried
   and dropped.
-- **Seven eval misses:** a labelled passport number and a patient ID, four names on pages that do
-  not look personal (photo captions), and one name in an inbox that the NER model did not find.
+- **One eval miss:** the NER model does not find "Meera Iyer" at the head of "Meera Iyer, Rohan
+  Iyer and Tara Iyer". The false positives are mostly street and place names taken for addresses
+  or names, and a search results page where a business phone makes everything look personal.
   Plain 10-digit mobile numbers with no country code are not caught by the regex bank (only
   `+91...` and `tel` fields are).
-- **A private name on a public-looking page is readable** unless it is in the goal or follows a
-  cue word.
+- **A private name on a public-looking page is readable** unless it is in the goal, follows a
+  cue word, is in an email address on the page, or sits beside a face.
 - **The planner sees text only.** A task that needs to look at a picture (a chart, a CAPTCHA) is
   out of reach until a redacted-screenshot path exists; OCR covers text in images.
 - **Free tiers are the bottleneck.** Groq allows about 4-5 steps a minute and real pages cost
@@ -206,8 +207,8 @@ Said plainly, because a judge will find them:
 
 ## Tests
 
-`pnpm verify` runs the invariants, typechecks all 7 packages, and 225 tests: the wire contract
-(35), the server's parsing, prompt and limits (20), the scorer (11), and the extension (159:
+`pnpm verify` runs the invariants, typechecks all 7 packages, and 232 tests: the wire contract
+(35), the server's parsing, prompt and limits (20), the scorer (11), and the extension (166:
 detectors, the loop with a scripted planner, redaction of text read from pixels, which names are
 private, URL handling, vision, DOM extraction). CI runs it on every PR. `pnpm test:agent` runs
 the whole loop against a real planner on fixture pages; `pnpm study` measures a model on 16
