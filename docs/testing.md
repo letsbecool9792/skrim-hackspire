@@ -56,17 +56,17 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 176 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 195 tests:
 
 | Tests | Covers |
 |---|---|
-| 21 in `@skrim/schema` | The wire contract: PII tokens, URL sanitising, action validation, the "beyond the view" counts, token usage, the outbound PII tripwire (ISBNs are not cards) |
+| 35 in `@skrim/schema` | The wire contract: PII tokens, URL sanitising, action validation, the "beyond the view" counts, token usage, the outbound PII tripwire (ISBNs are not cards), and the dashboard's message format |
 | 20 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks), the prompt format, how long a rate limit asks to wait, and the provider settings (the default, the fallback, which key each needs) |
 | 9 in `@skrim/eval` | Scoring: lining redacted text up with the original, recall, precision, IoU, over-redaction |
 | 59 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection (birth dates, labels from the element before), form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), whole addresses, the token vault |
 | 19 in `lib/vision` | DOM + vision fusion, the escalation policy, and which regions to read with OCR |
 | 17 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons, only what is near the view) and click verification, in a simulated DOM |
-| 31 in `lib/agent` | The whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order, text read from pixels, a step repeated for nothing, a click whose change shows late, the end of the page, stopping when name detection cannot start), which names are private, and which clicks commit the user |
+| 36 in `lib/agent` | The dashboard feed (its format, what it holds back, the heartbeat), and the whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order, text read from pixels, a step repeated for nothing, a click whose change shows late, the end of the page, stopping when name detection cannot start), which names are private, and which clicks commit the user |
 
 The same command runs in CI on every PR.
 
@@ -275,11 +275,45 @@ canvas, an image or an iframe), 77.3% precision, and 8 of 137 near-misses hidden
 
 ---
 
+## 7. The dashboard (what the server sees, live)
+
+Three terminals and two tabs. Run `pnpm models:fetch` once first if you have not since this
+was added: it now also writes the model sizes the dashboard lists.
+
+```powershell
+pnpm dev:server                          # terminal 1
+pnpm --filter @skrim/dashboard dev       # terminal 2: prints http://localhost:5173
+pnpm --filter @skrim/extension build     # once; then reload Skrim on chrome://extensions
+```
+
+1. In the Chrome window with Skrim, open http://localhost:5173 in one tab. It says
+   "Waiting for a task…". If the tab was open before you reloaded Skrim, reload the tab too:
+   Skrim's content script, which passes messages to it, joins a page when the page loads.
+2. Open the Skrim side panel. Within about 2 s the dashboard's resource panel turns live (a
+   green dot, no "disconnected") and fills in: the planner's provider and model, and "Models on
+   device · 68.3 MB" with gliner-pii and the Tesseract folders on `wasm` and the rest "not
+   loaded".
+3. In another tab open `fixtures/pages/form-test.html`, and run the support-form goal in the
+   side panel (section 5). Every step appears in the dashboard's live feed as it happens.
+   "What the server received" shows the request: the email only as `<PII:EMAIL:1>`, and the
+   name, phone and address only as tokens. "On this device, last page view" shows the
+   milliseconds for reading the page, OCR, finding names and redacting.
+4. Compare with the request itself: right-click the side panel → Inspect → Network → the last
+   `plan` request → Payload. It is the same request.
+5. Close the side panel. Within about 6 s the dashboard says "disconnected" and keeps
+   showing the last task.
+
+Nothing reaches the dashboard that the server could not see: each message is checked
+against the schema and scanned for raw personal data before it leaves the side panel, and
+only the dashboard's own page gets it.
+
+---
+
 ## What cannot be tested yet
 
 | Part | Why |
 |---|---|
 | Face detection | Not built; it matters once a screenshot goes to the server, and today none does. No eval fixture has a face yet |
 | Icon detection, vision fusion | The OmniParser model is not exported; fusion waits for it. (OCR is in the loop: text in a canvas, image or frame is read and redacted) |
-| Dashboard, landing page | Still the Vite templates |
+| Landing page | Still the Vite template |
 | Firefox | Builds, but nothing has been tried in it yet |
