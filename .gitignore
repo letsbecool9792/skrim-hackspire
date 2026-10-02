@@ -35,12 +35,9 @@ __pycache__/
 *.tflite
 apps/extension/public/models/
 
-# ...except artifacts we export ourselves and must ship, because nobody
-# should need the Python venv just to run the extension. Git cannot negate
-# a path inside an ignored directory, so these live outside public/models/
-# and fetch-models.mjs copies them into place.
-!scripts/artifacts/
-!scripts/artifacts/*.onnx
+# Models we export ourselves (the icon detector, 81 MB) are exported by
+# fetch-models.mjs into scripts/artifacts/ and copied from there. They are
+# ignored too (*.onnx above): big files do not belong in git history.
 
 # editor / os
 .vscode/*

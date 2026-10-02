@@ -2,18 +2,25 @@
 /**
  * Populates apps/extension/public/models/ with every local model asset.
  *
- *   pnpm models:fetch            # skip anything already present
- *   pnpm models:fetch --force    # re-download everything
+ *   pnpm models:fetch                # skip anything already present
+ *   pnpm models:fetch --force        # re-download everything
+ *   pnpm models:fetch --skip-icon    # without the icon detector (no Python needed)
  *
- * Run this after `pnpm install` on a fresh clone. Model weights are
- * gitignored, so without this the extension has nothing to load.
+ * Run this after `pnpm install` on a fresh clone; the extension's production
+ * builds run it too. Model weights are gitignored, so without this the
+ * extension has nothing to load.
  *
- * Requires only Node 22+. Deliberately has no dependencies and needs no
- * Python: the one artifact that does require Python (the OmniParser icon
- * detector) is exported once by scripts/export_icon_detector.py and
- * committed to scripts/artifacts/, then copied into place from here.
+ * Needs Node 22+ and no dependencies, except for one model: the OmniParser
+ * icon detector has to be exported with Python. When it is missing, this
+ * script makes scripts/.venv, installs scripts/requirements.txt into it (the
+ * first time only: a few GB, about ten minutes), runs
+ * scripts/export_icon_detector.py (ten seconds), and copies the result into
+ * place. The 81 MB file stays out of git (the exported copy lives in
+ * scripts/artifacts/, ignored). If Python is not there, it says so and the
+ * rest still works: nothing calls the icon detector yet.
  */
 
+import { spawnSync } from "node:child_process";
 import { mkdir, stat, writeFile, cp, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +28,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEST = join(ROOT, "apps", "extension", "public", "models");
 const FORCE = process.argv.includes("--force");
+const SKIP_ICON = process.argv.includes("--skip-icon");
 
 const HF = "https://huggingface.co/knowledgator/gliner-pii-edge-v1.0/resolve/main";
 
@@ -99,12 +107,13 @@ const VENDOR = [
   },
 ];
 
-/** Artifacts we export ourselves and commit, so teammates never need Python. */
+/** Artifacts we export ourselves with Python. Gitignored: exported on the first run, then copied into place. */
 const LOCAL = [
   {
     from: join(ROOT, "scripts", "artifacts", "omniparser-icon.onnx"),
     to: "ui-detect/omniparser-icon.onnx",
-    hint: "run: scripts/.venv/Scripts/python.exe scripts/export_icon_detector.py",
+    skip: SKIP_ICON,
+    exporter: "export_icon_detector.py",
   },
 ];
 
@@ -181,12 +190,39 @@ async function vendor({ pkg, from, to, files }) {
   return bytes;
 }
 
-async function local({ from, to, hint }) {
-  if (!(await exists(from))) {
-    console.warn(`  MISSING ${to}`);
-    console.warn(`          ${from} is not committed yet.`);
-    console.warn(`          ${hint}`);
+const run = (command, args) => spawnSync(command, args, { stdio: "inherit", cwd: ROOT }).status === 0;
+const works = (command, args) => spawnSync(command, args, { stdio: "ignore" }).status === 0;
+
+/** Exports an artifact with the venv's Python, making the venv and installing its packages first if need be. */
+async function exportArtifact(exporter) {
+  const venv = join(ROOT, "scripts", ".venv");
+  const python = join(venv, process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+  if (!(await exists(python))) {
+    const system = ["python", "python3", "py"].find((command) => works(command, ["--version"]));
+    if (!system) return "Python 3 is not installed";
+    console.log("  python creating scripts/.venv");
+    if (!run(system, ["-m", "venv", venv])) return "could not make scripts/.venv";
+  }
+  if (!works(python, ["-c", "import ultralytics, onnx, huggingface_hub"])) {
+    console.log("  python installing scripts/requirements.txt into scripts/.venv (first time only: a few GB, about ten minutes)");
+    if (!run(python, ["-m", "pip", "install", "-q", "-r", join(ROOT, "scripts", "requirements.txt")])) return "pip could not install the requirements";
+  }
+  console.log(`  python running scripts/${exporter}`);
+  return run(python, [join(ROOT, "scripts", exporter)]) ? null : `scripts/${exporter} failed`;
+}
+
+async function local({ from, to, skip, exporter }) {
+  if (skip && !(await exists(from))) {
+    console.log(`  skip   ${to}  (--skip-icon)`);
     return 0;
+  }
+  if (!(await exists(from))) {
+    const problem = await exportArtifact(exporter);
+    if (problem || !(await exists(from))) {
+      console.warn(`  MISSING ${to}: ${problem ?? "the export did not make the file"}.`);
+      console.warn("          Nothing uses it yet, so the extension still builds. To skip this: --skip-icon.");
+      return 0;
+    }
   }
   const target = join(DEST, to);
   await mkdir(dirname(target), { recursive: true });
