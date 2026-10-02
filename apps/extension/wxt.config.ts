@@ -1,10 +1,9 @@
 import { defineConfig } from "wxt";
 
-// Where the planning server runs. Baked in at build time, together with the
-// host permission to reach it. To point a build elsewhere:
+// Where the planning server runs, baked in at build time. To point a build
+// elsewhere:
 //   $env:SKRIM_SERVER_URL = "https://planner.example"; pnpm --filter @skrim/extension build
 const SERVER_URL = (process.env.SKRIM_SERVER_URL ?? "http://localhost:3000").replace(/\/$/, "");
-const server = new URL(SERVER_URL);
 
 // https://wxt.dev/api/config.html
 export default defineConfig({
@@ -45,11 +44,10 @@ export default defineConfig({
     // "Read your browsing history" warning. WXT adds "sidePanel" on Chrome,
     // for the side panel the agent runs in; it has no install warning.
     permissions: [
-      // captureVisibleTab requires activeTab or <all_urls>. The <all_urls>
-      // content script does NOT count - capture failed with "tabs" alone.
-      // activeTab is granted when the user clicks the extension icon, lasts
-      // until that tab navigates or closes, and adds no install warning.
-      "activeTab",
+      // Starts the content script in tabs that were already open when Skrim
+      // was installed or reloaded, instead of asking the user to reload the
+      // page. No install warning of its own.
+      "scripting",
       // Model inference on Chrome needs an offscreen document, because WebGPU
       // and WASM are unavailable in its service worker. Chrome only: Firefox
       // has no offscreen API (its event page keeps DOM access) and reports the
@@ -57,10 +55,13 @@ export default defineConfig({
       ...(browser === "chrome" ? ["offscreen"] : []),
     ],
 
-    // The planning server, and nothing else. Lets the side panel call it
-    // without CORS. No port: Firefox does not support ports in match
-    // patterns, and Chrome treats a missing port as any port.
-    host_permissions: [`${server.protocol}//${server.hostname}/*`],
+    // Every site. The <all_urls> content script already gives Skrim this
+    // reach, and the same "read and change all your data on all websites"
+    // install warning, but only as host permission does it cover
+    // captureVisibleTab (OCR), injecting the content script, and the planning
+    // server. It replaces "activeTab", which the side panel never gets:
+    // capture failed with "click the icon again" on every page.
+    host_permissions: ["<all_urls>"],
 
     // Every on-device model (Tesseract, and later GLiNER, BlazeFace and the
     // icon detector) is WebAssembly. The default MV3 policy is

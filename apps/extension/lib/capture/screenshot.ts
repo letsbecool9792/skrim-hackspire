@@ -20,25 +20,44 @@ function base64ToUint8Array(dataUri: string): Uint8Array {
   return bytes;
 }
 
-export async function captureIfNeeded(tabId: number): Promise<CaptureResult | null> {
+/**
+ * Captures the visible tab of the current window. Throws when the browser
+ * refuses: on its own pages, and on local files until file access is allowed.
+ * Waits out the cooldown instead of skipping, so a user's click always gets
+ * a capture.
+ */
+export async function captureTab(tabId: number): Promise<CaptureResult> {
+  const wait = lastCaptureAt + CAPTURE_COOLDOWN_MS - Date.now();
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
   const startedAt = Date.now();
-  if (startedAt - lastCaptureAt < CAPTURE_COOLDOWN_MS) return null;
 
   return timed("capture", async () => {
+    let dataUri: string;
     try {
-      const dataUri = await browser.tabs.captureVisibleTab({ format: "png" });
-      const data = base64ToUint8Array(dataUri);
-      lastCaptureAt = Date.now();
-      let width = 0;
-      let height = 0;
-      if (data.length >= 24 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) {
-        width = (((data[16]! << 24) | (data[17]! << 16) | (data[18]! << 8) | data[19]!) >>> 0);
-        height = (((data[20]! << 24) | (data[21]! << 16) | (data[22]! << 8) | data[23]!) >>> 0);
-      }
-      return { data, dataUri, capturedAt: lastCaptureAt, durationMs: lastCaptureAt - startedAt, width, height };
+      dataUri = await browser.tabs.captureVisibleTab({ format: "png" });
     } catch (error) {
-      log.warn("capture.failed", { tabId, error: String(error) });
-      return null;
+      // The browser's message names the page's URL; log only that it failed.
+      log.warn("capture.failed", { tabId });
+      throw error;
     }
+    const data = base64ToUint8Array(dataUri);
+    lastCaptureAt = Date.now();
+    let width = 0;
+    let height = 0;
+    if (data.length >= 24 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) {
+      width = (((data[16]! << 24) | (data[17]! << 16) | (data[18]! << 8) | data[19]!) >>> 0);
+      height = (((data[20]! << 24) | (data[21]! << 16) | (data[22]! << 8) | data[23]!) >>> 0);
+    }
+    return { data, dataUri, capturedAt: lastCaptureAt, durationMs: lastCaptureAt - startedAt, width, height };
   });
+}
+
+/** For the frame-diff pipeline: skips instead of waiting, and never throws. */
+export async function captureIfNeeded(tabId: number): Promise<CaptureResult | null> {
+  if (Date.now() - lastCaptureAt < CAPTURE_COOLDOWN_MS) return null;
+  try {
+    return await captureTab(tabId);
+  } catch {
+    return null;
+  }
 }

@@ -171,7 +171,9 @@ Foundations:
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       before the OmniParser detector
 - [x] WXT config: MV3 on both browsers, name Skrim, per-browser permissions, WebAssembly
-      allowed by the CSP
+      allowed by the CSP. Permissions: `<all_urls>` host access (the reach the content script
+      already had, now also covering capture, injection and the server), `scripting`,
+      `sidePanel`, and `offscreen` on Chrome
 
 **The loop is closed**: goal → DOM graph → redaction against a per-task vault →
 server → one action → verify → repeat, in a chat side panel. Tested in Node against
@@ -199,7 +201,6 @@ Built, by workstream:
 **1. Prove it in a real browser, and pick the model.**
 - [ ] Run [`docs/testing.md`](docs/testing.md) sections 5 and 6 in Chrome, then Firefox
 - [ ] Settle the model (see "Open findings"): measure Groq's Qwen 3.8 with `pnpm test:agent`
-- [ ] Page loads: `activeTab` ends when the tab navigates, so OCR after a navigation will fail
 
 **2. Perception beyond the DOM** (WS2, WS3)
 - [ ] GLiNER inference for names and addresses in free text (only post-processing exists)
@@ -258,11 +259,6 @@ Decide before wiring GLiNER.
 **URL paths can carry names.** `sanitizeUrl()` masks long digit runs, uuids, hex and anything
 with `@`, but keeps word segments, so `/users/asha-rao/orders` reaches the server as is.
 Consider running the PII detectors over path segments too.
-
-**OCR capture needs a fresh click after navigation.** `captureVisibleTab` needs `activeTab`,
-which Chrome grants on the toolbar click and revokes when the tab navigates. The loop does not
-capture yet, but once vision is wired in, a task that clicks through to a new page will lose
-capture. Then either request `<all_urls>` host access or re-grant per page.
 
 **Re-run `pnpm models:fetch` after pulling.** The file set changes: WS3's PR saves GLiNER's config as
 `config.json`, and Tesseract now ships only the two core files it actually loads. The script
