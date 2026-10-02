@@ -22,7 +22,7 @@ export function renderReport(title: string, totals: Totals, scores: FixtureScore
   lines.push(`| Span IoU, PII in the text | ${totals.iou.toFixed(2)} |`);
   lines.push(`| Near-misses hidden | ${totals.nearMissesHidden} of ${totals.nearMisses} (order numbers, ISBNs, public names: should be 0) |`);
   lines.push(`| Over-redaction | ${percent(totals.overRedaction)} of non-PII characters hidden |`);
-  lines.push(`| Median time per page view | observe ${ms(totals.medianMs.observe)}, names ${ms(totals.medianMs.names)}, redact ${ms(totals.medianMs.redact)} |`);
+  lines.push(`| Median time per page view | observe ${ms(totals.medianMs.observe)}, pixels ${ms(totals.medianMs.vision)}, names ${ms(totals.medianMs.names)}, redact ${ms(totals.medianMs.redact)} |`);
   if (totals.unaligned > 0) lines.push(`| Texts that could not be aligned | ${totals.unaligned} (counted as wholly hidden; a harness bug) |`);
   lines.push("");
 
@@ -32,12 +32,12 @@ export function renderReport(title: string, totals: Totals, scores: FixtureScore
   for (const [where, count] of Object.entries(totals.byLocation)) lines.push(`| ${where} | ${count!.caught} of ${count!.pii} |`);
   lines.push("");
 
-  lines.push("## Per page", "", "| Page | Personal | Caught | False positives | Near-misses hidden | Names ms |", "|---|---|---|---|---|---|");
+  lines.push("## Per page", "", "| Page | Personal | Caught | False positives | Near-misses hidden | Pixels ms | Names ms |", "|---|---|---|---|---|---|---|");
   for (const score of scores) {
     const caught = score.items.filter((item) => item.caught).length;
     const hiddenMisses = score.nearMisses.filter((miss) => miss.hidden).length;
     const model = score.nameModel === "on" ? "" : ` (model ${score.nameModel})`;
-    lines.push(`| ${score.page} | ${score.personal ? "yes" : "no"} | ${caught} of ${score.items.length} | ${score.falsePositives.length} | ${hiddenMisses} of ${score.nearMisses.length} | ${ms(score.timings.namesMs)}${model} |`);
+    lines.push(`| ${score.page} | ${score.personal ? "yes" : "no"} | ${caught} of ${score.items.length} | ${score.falsePositives.length} | ${hiddenMisses} of ${score.nearMisses.length} | ${ms(score.timings.visionMs)} | ${ms(score.timings.namesMs)}${model} |`);
   }
   lines.push("");
 

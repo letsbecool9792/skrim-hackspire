@@ -22,7 +22,8 @@ export interface Reading {
   personal: boolean;
   /** Elements left out for being far above or below the view. */
   beyondView: { above: number; below: number };
-  timings: { observeMs: number; namesMs: number; redactMs: number };
+  /** visionMs: reading text from pixels (capture and OCR), 0 when nothing needed it. */
+  timings: { observeMs: number; visionMs: number; namesMs: number; redactMs: number };
   /** Whether the name model ran: "failed" means names were only caught by rules. */
   nameModel: "on" | "failed" | "off";
 }

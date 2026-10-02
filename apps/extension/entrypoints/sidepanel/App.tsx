@@ -7,6 +7,7 @@ import type { RedactionCounts } from "@/lib/agent/redact.ts";
 import type { NameFinder } from "@/lib/pii/gliner.ts";
 import { fetchServerInfo, type ServerInfo } from "@/lib/agent/server-planner.ts";
 import { tabLink } from "@/lib/agent/tab-link.ts";
+import { tabPixelReader } from "@/lib/vision/read-pixels.ts";
 import { SERVER_URL } from "./config.ts";
 
 // ─── Chat model ────────────────────────────────────────────────────────────
@@ -294,7 +295,7 @@ export default function App() {
     controllerRef.current = controller;
     setRunning(true);
     try {
-      await runAgentTask({ goal, planner, link: tabLink(tab.id), signal: controller.signal, onEvent: update, findNames });
+      await runAgentTask({ goal, planner, link: tabLink(tab.id), signal: controller.signal, onEvent: update, findNames, readPixels: tabPixelReader(tab.id) });
     } finally {
       controllerRef.current = null;
       setRunning(false);

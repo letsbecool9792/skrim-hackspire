@@ -9,6 +9,7 @@ import type { NameFinder } from "../pii/gliner.js";
 import { redactDomData } from "../pii/redact.js";
 import { DEFAULT_MAX_STEPS, DEFAULT_TIMEOUT_MS, MAX_CONSECUTIVE_UNVERIFIED } from "../task-state.ts";
 import { TokenVault } from "../vault/vault.js";
+import type { PixelReader } from "../vision/read-pixels.ts";
 import { PrivateNames } from "./private-names.ts";
 import { readPage } from "./read-page.ts";
 import { redactText, resolveTokens, type RedactionCounts } from "./redact.ts";
@@ -78,6 +79,11 @@ export interface AgentOptions {
    * detectors and form-field hints run, which miss names in free text.
    */
   findNames?: NameFinder;
+  /**
+   * Reads text that exists only as pixels (a canvas, an image, a cross-origin
+   * frame) with on-device OCR. Without it such text is invisible to the agent.
+   */
+  readPixels?: PixelReader;
   maxSteps?: number;
   timeoutMs?: number;
 }
@@ -141,7 +147,7 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     let previousGraph: ScreenGraph | undefined;
 
     for (step = 0; step < maxSteps; step++) {
-      const reading = await readPage(link, taskId, signal, names, vault, step);
+      const reading = await readPage(link, taskId, signal, names, vault, step, options.readPixels);
       if (!reading) {
         const reason = (await link.whyUnreachable?.()) ?? "Skrim cannot read this tab. Reload the page and try again.";
         return finish({ outcome: "failed", errorCode: "CONTENT_SCRIPT_ERROR", message: reason });

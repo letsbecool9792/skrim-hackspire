@@ -110,6 +110,24 @@ describe("shouldEscalateToVision", () => {
     assert.deepEqual(result.reasons, []);
   });
 
+  it("escalates for a labelled image big enough to hold text, like a scanned ID card", () => {
+    const result = shouldEscalateToVision([
+      element({
+        id: "e9",
+        role: "image",
+        label: "Uploaded ID card",
+        bbox: [0, 0, 420, 220],
+      }),
+    ]);
+
+    assert.deepEqual(result.reasons, [
+      {
+        elementId: "e9",
+        reason: "large-image",
+      },
+    ]);
+  });
+
   it("reports all escalation reasons in one pass", () => {
     const result = shouldEscalateToVision([
       element({ id: "e1", role: "button" }),
