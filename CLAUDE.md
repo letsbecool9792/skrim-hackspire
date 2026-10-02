@@ -36,7 +36,7 @@ Settled in the setup session. Do not reopen without a reason.
 | **Groq** (`qwen/qwen3.8-27b`) as the default provider | Free, no credit card, OpenAI-compatible. Did all 42 runs of the provider study, fastest and in the fewest steps. Its cost is the free tier: 4–5 steps a minute (the server waits these out) and a daily cap; when the day runs out, `FALLBACK_PROVIDER` (Ollama, or NVIDIA) plans the steps. NVIDIA stays wired: no daily cap |
 | **MV3 on both browsers** | Firefox MV3 event pages keep DOM access, so we get the offscreen-free path *and* "MV3 everywhere" on the slide. WXT defaults Firefox to MV2 — override it |
 | **Eval runs in a real browser** via Playwright | The rubric scores precision/recall on the shipped path. Node-side numbers would measure different code than we demo |
-| Ollama `qwen3-vl:4b-instruct` for air-gap | 6 GB VRAM ceiling. See "Hardware reality". The instruct build, not the plain tag, which is the much slower thinking build |
+| Ollama `skrim-planner` (`qwen3-vl:4b-instruct` with a 16k context) for air-gap | 6 GB VRAM ceiling. See "Hardware reality". The instruct build, not the plain tag, which is the much slower thinking build |
 | **WS1 exposes registration hooks instead of owning perception/privacy/planning** | WS2 registers the graph provider (content script) and WS4 the planner (side panel); this prevents duplicate extractors and keeps browser execution independent. Token resolution needs no hook: the loop owns one vault per task |
 | **The agent loop runs in the side panel, not the background** | Chrome terminates an extension service worker when one `fetch()` takes over 30 s, and a local model takes up to ~40 s a step. The side panel is an ordinary page with no such limit; the task, its vault and the chat live exactly as long as the panel. Closing it stops the task |
 
@@ -284,6 +284,10 @@ add to it whenever a change needs a manual check, and tick items off when report
   - [ ] with the default provider (Groq), several tasks in a row: steps slow down to ~14 s when
     the minute's tokens run out, but no task fails with "rate limit reached". Not confirmed:
     Groq limited so fast that testing moved to Ollama
+- [ ] **Make the local planner's bigger context**: `pnpm ollama:setup`, then restart `pnpm dev:server`.
+      If your root `.env` sets `OLLAMA_MODEL=qwen3-vl:4b-instruct`, change it to `skrim-planner`
+      (or delete the line). Then re-run the Ollama goals that failed on real sites: the local model
+      was being fed a request cut to its last 2,000 tokens
 - [ ] **Run the real-site tests** ([`docs/real-site-tests.md`](docs/real-site-tests.md)): 14 goals on
       Wikipedia, Amazon.in and Gmail, on Groq and on Ollama; fill in the table and copy the
       failures and leaks into "Open findings"
@@ -501,7 +505,7 @@ hand, use its **full path** (`scripts\.venv\Scripts\python.exe`), never a bare `
 shell activation silently failing is how the setup session nuked a global Python install.
 
 **Only if you own the air-gap path:** `winget install Ollama.Ollama` then
-`ollama pull qwen3-vl:4b-instruct` (3.3 GB). This is also the fallback when Groq's daily
+`ollama pull qwen3-vl:4b-instruct` (3.3 GB), then `pnpm ollama:setup` (the 16k context: see Gotchas). This is also the fallback when Groq's daily
 limit runs out: with Ollama running, start the server with `MODEL_PROVIDER=ollama`.
 
 ---
@@ -611,6 +615,15 @@ Run the air-gap beat with the extension's WebGPU path idle, or accept it being s
 
 ## Gotchas
 
+- **Ollama cuts a long request from the front.** Its default context is 4096 tokens and, over the
+  OpenAI-compatible API, it cannot be raised per request (`options.num_ctx` is ignored). A real
+  page's request is 3,000 to 12,000 tokens, so the system prompt went first and the local model
+  answered a different question: a 14,000-token request kept 2,050 tokens and ignored its
+  system message. This is the likeliest reason the local planner looked "stupid" on real sites
+  while passing the small fixtures. Fix: `pnpm ollama:setup` makes `skrim-planner`, the same
+  model with a 16k context (`scripts/ollama/Modelfile`), and it is the server's default now.
+  All local-model numbers in `docs/provider-study.md` were measured before this and are
+  probably too low. Re-run `pnpm study -- ollama:skrim-planner` before quoting them.
 - **No inference in the Chrome service worker.** Transformers.js cannot reach WebGPU *or*
   WASM there ([#787](https://github.com/huggingface/transformers.js/issues/787)). Every
   model runs in the side panel, an ordinary extension page on both browsers. The offscreen

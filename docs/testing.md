@@ -126,11 +126,11 @@ From the provider study ([`provider-study.md`](provider-study.md), 14 tasks x 3 
 | Setup | How | Result |
 |---|---|---|
 | **Groq, Qwen 3.8 27B (hosted), the default** | `GROQ_API_KEY` in `.env`, then `pnpm dev:server` | **Best: 42 of 42**, 0.5 s a step. The free tier allows about 4–5 steps a minute (8,000 tokens); the server waits out Groq's short "try again in 2 s" instead of failing. It also has a daily cap |
-| **Ollama, Qwen3-VL 4B instruct (local)**: offline, and when Groq's day runs out | `ollama pull qwen3-vl:4b-instruct`, then `$env:MODEL_PROVIDER = "ollama"; pnpm dev:server` | 31 of 42, 0.6 s a step after an ~8 s first load. Overreaches: it placed an order when asked to change a coupon, which the loop now refuses (37 of 42 with that guard) |
+| **Ollama, Qwen3-VL 4B instruct (local)**: offline, and when Groq's day runs out | `ollama pull qwen3-vl:4b-instruct`, `pnpm ollama:setup` (a 16k context: Ollama's 4k default cuts real pages), then `$env:MODEL_PROVIDER = "ollama"; pnpm dev:server` | 31 of 42, 0.6 s a step after an ~8 s first load. Overreaches: it placed an order when asked to change a coupon, which the loop now refuses (37 of 42 with that guard) |
 | NVIDIA, Nemotron 3 Super 120B (NVIDIA's default model) | `NVIDIA_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "nvidia"` | 31 of 42 (37 with the prompt rule), 2.6 s a step; 40 requests a minute and no daily cap. Llama 3.2 11B, the old default, did 0 of 42: it never says done |
 
 `$env:...` settings last until you close that terminal. To make one permanent, set
-`MODEL_PROVIDER` (and `OLLAMA_MODEL=qwen3-vl:4b-instruct`, if your `.env` names a model) in
+`MODEL_PROVIDER` (and `OLLAMA_MODEL=skrim-planner`, if your `.env` names a model) in
 the root `.env`; a `MODEL_PROVIDER` line there overrides the Groq default. The plain
 `qwen3-vl:4b` tag is the "thinking" build: 5–40 s a step.
 
@@ -176,7 +176,7 @@ free tier allows:
 pnpm --filter @skrim/server probe                  # which free models answer, and Groq's limits
 pnpm study -- groq:qwen/qwen3.8-27b                # one model per terminal; several can run at once
 pnpm study -- nvidia:openai/gpt-oss-20b
-pnpm study -- ollama:qwen3-vl:4b-instruct
+pnpm study -- ollama:skrim-planner
 pnpm study:report                                  # all results so far, side by side
 ```
 

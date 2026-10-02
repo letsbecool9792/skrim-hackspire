@@ -3,6 +3,10 @@
 **Question.** Which free, open-weight model should be Skrim's default planner, weighing how
 well it does tasks against how much work its free tier allows?
 
+> **Caveat, found 2026-10-03.** Every local-model number here was measured with Ollama's
+> default 4k context, which cut the request from the front (see CLAUDE.md, Gotchas). They are
+> probably too low. The Groq and NVIDIA numbers are unaffected.
+
 **Short answer.** Groq's `qwen/qwen3.8-27b`: it did every task, fastest and in the fewest
 steps. Its free tier is the catch: 4–5 steps a minute, and a daily cap that two study runs
 in a row ran into. Today's default, NVIDIA's Llama 3.2 11B, did none. The study also found
