@@ -239,7 +239,9 @@ pnpm eval -- --save                                           # also writes pack
 
 It prints a report and writes it to `packages/eval/results/browser-latest.md`
 (gitignored). Chromium, not Chrome: branded Chrome no longer loads unpacked extensions
-from the command line.
+from the command line. On the 21 fixtures it gave 96.9% recall on all PII (OCR reads the
+canvas, image and iframe), 98.4% on PII in the page's text, 79.0% precision, and 8 of 127
+near-misses hidden.
 
 **A quick check while changing detection**, in Node, no browser:
 

@@ -15,9 +15,10 @@ architectural decision, add it to "Locked decisions" with a one-line reason.
 The agent loop is closed end to end (DOM graph → PII redaction → server → one action →
 verify), in a chat side panel, and works in Chrome on the fixture pages. Both
 Qwen planners finish all six fixture goals. The eval harness scores detection on 21
-annotated fixtures. The default planner is Groq's Qwen 3.8 27B. Next: **retest in Chrome
-and run the eval there**, then perception beyond the DOM, starting with what the eval
-misses. See "Status" and "Open findings".
+annotated fixtures, in Chromium too. The default planner is Groq's Qwen 3.8 27B. Next: **fix
+what the Chrome retest found** (Wikipedia search, the canvas question, the step text, Groq's
+per-minute limit), then perception beyond the DOM, starting with what the eval misses. See
+"Status" and "Open findings".
 
 ---
 
@@ -216,30 +217,33 @@ Built, by workstream:
 Things only a person at the browser, or the project owner, can do. Keep this list current:
 add to it whenever a change needs a manual check, and tick items off when reported.
 
-- [ ] **Retest in Chrome** what changed since the first Chrome test (none of it tried in a browser
-      yet), reloading Skrim on `chrome://extensions` first:
-  - `Click show panel`, `Open the details section` and `Go to section 2` on the click
+- [ ] **Retest in Chrome** what changed since the first Chrome test, reloading Skrim on
+      `chrome://extensions` first. Reported 2026-10-02, mostly on Ollama:
+  - [x] `Click show panel`, `Open the details section` and `Go to section 2` on the click
     fixture take one click each, then ✓ Done
-  - the ⓘ button under a result shows what stayed on the device; the input box has no
+  - [x] the ⓘ button under a result shows what stayed on the device; the input box has no
     scroll arrows
-  - Wikipedia, `Search for Alan Turing`: "Sent to the server as: search for name 1", and
+  - [ ] Wikipedia, `Search for Alan Turing`: "Sent to the server as: search for name 1", and
     the first step comes quickly; "Alan Turing" is hidden on the pages too, other names
-    are not; a link that opens a new page continues the task
-  - the form fixture still hides the name, email, phone and address (ⓘ)
-  - `fixtures/pages/canvas-card.html`, `What is the PAN on my ID?`: the answer shows an
-    "ID number 1" pill (read from the canvas by OCR, then hidden)
-  - `fixtures/pages/checkout.html`, `Change the coupon code to SAVE20`: no order is placed;
-    if the model tries, its step says "not clicked: it would place an order or pay"
-  - with the default provider (Groq), several tasks in a row: steps slow down to ~14 s when
-    the minute's tokens run out, but no task fails with "rate limit reached"
+    are not; a link that opens a new page continues the task. **Failed**: see "Open findings"
+  - [x] the form fixture still hides the name, email, phone and address (ⓘ)
+  - [ ] `fixtures/pages/canvas-card.html`, `What is the PAN on my ID?`: the answer shows an
+    "ID number 1" pill (read from the canvas by OCR, then hidden). **Failed**: see "Open
+    findings"
+  - [x] `fixtures/pages/checkout.html`, `Change the coupon code to SAVE20`: no order is placed;
+    if the model tries, its step says "not clicked: it would place an order or pay". Works;
+    the step text is ugly (see "Open findings")
+  - [ ] with the default provider (Groq), several tasks in a row: steps slow down to ~14 s when
+    the minute's tokens run out, but no task fails with "rate limit reached". Not confirmed:
+    Groq limited so fast that testing moved to Ollama
 - [ ] **Groq is the default now**: with no `$env:MODEL_PROVIDER` set, `pnpm dev:server` and
       the side panel's header show `qwen/qwen3.8-27b`. If they show another model, the root
       `.env` still sets `MODEL_PROVIDER` (it overrides the default): change it to `groq` or
       delete the line. Needs `GROQ_API_KEY` in `.env`
-- [ ] **Run the eval in Chromium** once: `pnpm --filter @skrim/eval exec playwright install
-      chromium` (~150 MB, once), then `pnpm eval`; compare with `pnpm eval:node`
+- [x] **Run the eval in Chromium** once (2026-10-02; numbers under "What the eval finds")
 - [ ] **Export the OmniParser icon detector** (Python venv, `scripts/`): the one-time setup in
-      "Setup — fresh clone"
+      "Setup — fresh clone". The export script, `scripts/export_icon_detector.py`, has to be
+      written first: `fetch-models.mjs` names it, but it does not exist
 - [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
 - [x] **Pick the default provider**: Groq's Qwen 3.8 27B, as the study
       ([`docs/provider-study.md`](docs/provider-study.md)) recommends (decided 2026-10-02)
@@ -282,6 +286,21 @@ Collected while merging the team's first PRs, while testing and closing the loop
 the first Chrome test. Each needs a decision or a follow-up. Delete an entry once it is
 dealt with.
 
+**Bugs from the Chrome retest (2026-10-02), being fixed by Suparno.** Not investigated yet:
+- *Wikipedia, `Search for Alan Turing`*: the planner never found the search box or button.
+  It scrolled down until it reached the bottom of the page and ran out of scrolls.
+- *`canvas-card.html`, `what is my pan number`*: the planner clicked "Download PDF", which
+  the goal did not ask for (the commit guard only stops paying, ordering and the like). It
+  then tried to `extract` the line OCR had read ("PAN ID number 1") and got "no such element
+  on the page any more", and gave up (`GOAL_NOT_ACHIEVED`). First guess: elements read from
+  pixels exist only in the side panel's reading, not in the content script's registry, so
+  an action on one can never resolve.
+- *Step text*: a step's note is written for the planner and shown to the user as is, e.g.
+  "Not confirmed: not clicked: it would place an order or pay, which the goal does not ask
+  for. If the goal is met, answer done".
+- *Groq's per-minute limit* bites quickly in hand testing (about 1,650 tokens a step against
+  8,000 a minute), so testing moved to Ollama.
+
 **Groq is the default; moving off it when its day runs out is by hand.** Groq's
 `qwen/qwen3.8-27b` did all 42 runs of the provider study
 ([`docs/provider-study.md`](docs/provider-study.md)), twice as fast as the runner-up. Its
@@ -312,15 +331,20 @@ task. Known gaps:
   hidden: the eval's search results page loses a celebrity chef and "biryani".
 - The cue words are English.
 
-**What the eval finds** (`pnpm eval:node`, 21 fixtures): 100% recall on PII in the
-page's text, 87.7% on all PII, 77.3% precision, 8 of 127 near-misses hidden. The misses are
-all inside a canvas, an image or a cross-origin iframe, which the Node check cannot capture;
-the loop now reads those with OCR, which only the browser run can score. The false positives:
-single capitalised words taken for names ("Skrim", "Aadhaar", "biryani", "Koramangala"),
-business addresses on personal pages ("Apollo Clinic, Bannerghatta Road", "MG Road
-branch"), and the search results page above. The fixtures were written by the same hand as
-the fixes, so expect lower numbers on pages we did not write; the browser run
-(`pnpm eval`) has not been done yet.
+**What the eval finds** (`pnpm eval` in Chromium, 21 fixtures, 2026-10-02): **96.9% recall
+on all PII**, 98.4% on PII in the page's text (63 of 64), **79.0% precision**, 8 of 127
+near-misses hidden, 3.9% of non-PII characters hidden. OCR now reads the canvas (3 of 3), the
+ID card image (2 of 3) and the cross-origin iframe (1 of 2); the Node check (`pnpm eval:node`)
+cannot capture those and gives 87.7% recall. Name detection takes a median 250 ms a page view
+in the browser, against 38 ms in Node. Two misses:
+- the Aadhaar number on the ID card image is read but not hidden;
+- the iframe's email is read as "mehta@example.com": that part is hidden, but "karan." is
+  left readable, so part of a name leaks.
+
+The false positives: single capitalised words taken for names ("Aadhaar", "biryani",
+"Koramangala"), business addresses on personal pages ("Apollo Clinic, Bannerghatta Road", "MG
+Road branch"), and the search results page above. The fixtures were written by the same hand
+as the fixes, so expect lower numbers on pages we did not write.
 
 **Name detection is slow on big personal pages.** ONNX Runtime's WASM on one thread takes
 about 12 ms a text, and each text is its own model call (batching changed the scores and
