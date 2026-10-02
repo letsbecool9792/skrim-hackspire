@@ -2,13 +2,14 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { PlanRequestSchema } from '@skrim/schema';
 import { getConfig } from './config.js';
-import { planAction } from './planner/index.js';
+import { planAction, UnparseableOutputError } from './planner/index.js';
+import { ProviderError } from './providers/index.js';
 
 const config = getConfig();
 const app = new Hono();
 
-// Note: Ensure cors is imported if needed, but keeping it minimal based on requirements.
-// You might need to add `import { cors } from 'hono/cors'` and `app.use('*', cors())` if browser clients access directly without proxy.
+// No CORS: the only client is the extension, and an extension page with host
+// permission for this origin is not subject to CORS.
 
 app.get('/', (c) => {
   return c.json({
@@ -21,56 +22,49 @@ app.get('/', (c) => {
 
 app.post('/plan', async (c) => {
   const start = performance.now();
-  
+
+  let body: unknown;
   try {
-    const body = await c.req.json();
-    const validation = PlanRequestSchema.safeParse(body);
-    
-    if (!validation.success) {
-      return c.json({
-        error: 'Invalid request body',
-        code: 'invalid_request',
-        details: validation.error.format()
-      }, 400);
-    }
-    
-    const request = validation.data;
-    
-    // Call the planner
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Request body is not JSON', code: 'invalid_request' }, 400);
+  }
+
+  const validation = PlanRequestSchema.safeParse(body);
+  if (!validation.success) {
+    console.warn(`[plan] rejected: invalid request (${validation.error.issues.length} issues)`);
+    return c.json({
+      error: 'Invalid request body',
+      code: 'invalid_request',
+      details: validation.error.format()
+    }, 400);
+  }
+
+  const request = validation.data;
+  // Counts only. Never log the request body: even redacted, "should be free of
+  // PII" is not a logging policy.
+  const shape = `step ${request.graph.cycle}, ${request.graph.elements.length} elements, ${request.history.length} in history`;
+
+  try {
     const result = await planAction(config.providerConfig, request);
-    
     const latencyMs = Math.round(performance.now() - start);
-    
-    // Privacy claim: NEVER log the request body
-    console.log(`[Plan] Action: ${result.action.type}, Latency: ${latencyMs}ms, Repairs: ${result.repairs}, Model: ${result.model}`);
-    
-    return c.json({
-      ...result,
-      latencyMs
-    });
-    
-  } catch (err: any) {
-    const errorMsg = err.message || 'Unknown error';
-    let code = 'internal';
-    let status = 500;
-    
-    if (errorMsg === 'unparseable_model_output') {
-      code = 'unparseable_model_output';
-      status = 502;
-    } else if (errorMsg.includes('Provider error')) {
-      code = 'provider_error';
-      status = 502;
-    } else if (errorMsg.includes('429')) {
-      code = 'provider_rate_limited';
-      status = 429;
+    const target = 'target' in result.action && result.action.target ? ` ${result.action.target}` : '';
+    console.log(`[plan] ${shape} -> ${result.action.type}${target} in ${latencyMs} ms, ${result.repairs} repairs`);
+    return c.json({ ...result, latencyMs });
+  } catch (err) {
+    const latencyMs = Math.round(performance.now() - start);
+    if (err instanceof ProviderError) {
+      const code = err.kind === 'rate_limited' ? 'provider_rate_limited' : 'provider_error';
+      // The detail stays in this log; the client gets the short message.
+      console.error(`[plan] ${shape} -> ${code} after ${latencyMs} ms: ${err.message}${err.detail ? `\n       provider said: ${err.detail}` : ''}`);
+      return c.json({ error: err.message, code }, code === 'provider_rate_limited' ? 429 : 502);
     }
-    
-    console.error(`[Plan] Error: ${code} - ${errorMsg}`);
-    
-    return c.json({
-      error: errorMsg,
-      code
-    }, status as any);
+    if (err instanceof UnparseableOutputError) {
+      console.error(`[plan] ${shape} -> no valid action after ${err.attempts} attempts, ${latencyMs} ms`);
+      return c.json({ error: err.message, code: 'unparseable_model_output' }, 502);
+    }
+    console.error(`[plan] ${shape} -> internal error after ${latencyMs} ms:`, err);
+    return c.json({ error: 'Internal server error', code: 'internal' }, 500);
   }
 });
 
@@ -78,6 +72,7 @@ serve({
   fetch: app.fetch,
   port: config.port
 }, (info) => {
-  console.log(`Server is running on http://localhost:${info.port}`);
-  console.log(`Provider: ${config.providerConfig.provider} (${config.providerConfig.model})`);
+  console.log(`Skrim server on http://localhost:${info.port}`);
+  console.log(`Provider: ${config.providerConfig.provider}, model: ${config.providerConfig.model}`);
+  console.log('Each /plan request logs one line here (counts only, never content).');
 });
