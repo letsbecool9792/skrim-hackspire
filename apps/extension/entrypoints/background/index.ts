@@ -76,6 +76,15 @@ async function handleObservation(message: PageObservationMessage): Promise<void>
     await finishTask();
     return;
   }
+  if (action.type === "done") {
+    // Nothing to execute in the page. Ending here also honours `success`:
+    // routed through the content script, done(success: false) came back as
+    // a plain completion and the task showed as succeeded.
+    if (action.success) taskManager.complete();
+    else taskManager.fail("GOAL_NOT_ACHIEVED");
+    await finishTask();
+    return;
+  }
   await askContent(tabId, { type: "action.execute", action, actionId: newActionId(task.stepCount), taskId: task.taskId });
 }
 

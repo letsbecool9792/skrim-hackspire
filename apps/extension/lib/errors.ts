@@ -18,6 +18,8 @@ export const ERROR_CODES = [
   "CONTENT_SCRIPT_ERROR",
   "OBSERVATION_FAILED",
   "NAVIGATION_BLOCKED",
+  // The planner ended the task with { type: "done", success: false }.
+  "GOAL_NOT_ACHIEVED",
 ] as const;
 
 export const ErrorCodeSchema = z.enum(ERROR_CODES);
