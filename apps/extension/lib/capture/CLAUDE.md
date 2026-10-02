@@ -34,6 +34,9 @@ was covered so the server is not staring at an unexplained black rectangle.
 primary transport. Send a screenshot only when the DOM genuinely cannot answer the question —
 canvas, cross-origin iframe, embedded document.
 
+WS1 owns capture mechanics, cooldowns, and cheap change gating. WS2 owns visual
+interpretation and fusion. WS1 must not inspect pixels for UI meaning.
+
 ## Time everything
 
 Use `timed()` from `@skrim/shared` with the stage names it defines. The resource panel and

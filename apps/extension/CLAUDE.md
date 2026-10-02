@@ -11,7 +11,7 @@ Read [`/CLAUDE.md`](../../CLAUDE.md) for current status and locked decisions.
 |---|---|---|
 | `entrypoints/background.ts` | Chrome: service worker. Firefox: event page | Orchestrator. The agent loop, task state, server calls |
 | `entrypoints/offscreen/` | Chrome only, hidden document | **All model inference.** Nothing else |
-| `entrypoints/content.ts` | Injected into the page | DOM extraction, action execution |
+| `entrypoints/content.ts` | Injected into the page | WS2 graph integration, action execution |
 | `entrypoints/sidepanel/` | Extension UI | Task input, progress |
 | `lib/*` | Imported by the above | The actual logic. Each has its own CLAUDE.md |
 
@@ -34,9 +34,15 @@ enforces this.
 team has seen (brief §4.6). If your code contains `.checkout-button` or `#login-form`, it will
 fail on the day no matter how well the demo went.
 
+**Do not implement a second DOM extractor.** WS2 owns the canonical screen graph. WS1
+consumes its graph and keeps only the element references needed to execute actions.
+
 **Redact before it leaves the client.** Anything read from the DOM is real user data until
 the PII pipeline has tokenised it. The last line of defence is `assertOutboundSafe()` from
 `@skrim/schema` — call it in the one place that makes the network request.
+
+WS1 does not detect, redact, or store PII. Type actions accept a token resolver supplied by
+WS3 and fail closed when a token cannot be resolved.
 
 ## Writing for both browsers
 

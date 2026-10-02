@@ -25,23 +25,14 @@ export default defineConfig({
     // read this list in ten seconds. Every entry must be justifiable out loud.
     // Do not add one without saying why in the PR.
     permissions: [
-      "activeTab", // read/act on the tab the user pointed us at
-      "scripting", // inject the content script on demand
       "tabs", // captureVisibleTab for the vision pass
-      "sidePanel", // the task UI
     ],
 
-    // OPEN DECISION - workstream 1 owns this.
-    //
-    // There is no host_permissions entry, but entrypoints/content.ts currently
-    // declares a static content script matching <all_urls>, and Chrome grants
-    // host access from those matches regardless. So the install prompt today
-    // still reads "read and change all your data on all websites".
-    //
-    // The stronger story is to drop the static match and inject on demand with
-    // chrome.scripting + activeTab, which needs a user gesture per tab. That is
-    // more work and changes how the loop starts, so it is a deliberate call
-    // rather than a cleanup. Decide it before the demo - the permissions
-    // screen is something a judge can see without being shown.
+    browser_specific_settings: {
+      gecko: {
+        id: "skrim@tropical-crush",
+        strict_min_version: "128.0",
+      },
+    },
   },
 });
