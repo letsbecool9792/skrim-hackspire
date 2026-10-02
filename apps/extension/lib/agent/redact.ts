@@ -121,10 +121,26 @@ export function redactPage(observation: PageObservationMessage, cycle: number, v
     }
   }
 
+  const sanitizedUrl = sanitizeUrl(observation.url ?? "");
+  sanitizedUrl.pathTemplate = sanitizedUrl.pathTemplate
+    .split("/")
+    .map((segment) => {
+      if (!segment || segment.startsWith("{")) return segment;
+      // Replace URL hyphens with spaces ("asha-rao" -> "asha rao") so the 
+      // known-name lookup matches it against names found in the page text.
+      const spaced = segment.replace(/-/g, " ");
+      const matches = detectText(spaced, vault, undefined, names);
+      if (matches.some((m) => m.category === "NAME")) {
+        return "{name}";
+      }
+      return segment;
+    })
+    .join("/");
+
   return {
     graph: {
       cycle,
-      url: sanitizeUrl(observation.url ?? ""),
+      url: sanitizedUrl,
       title,
       viewport: observation.viewport ?? { width: 0, height: 0 },
       elements,
