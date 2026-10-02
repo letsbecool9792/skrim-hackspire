@@ -27,16 +27,37 @@ Measured, and fixed in `gliner.ts`:
 - One text per model call. Packing many texts into one sequence lost most names; padded
   batch rows made each text's scores depend on its neighbours ("Signed in as
   Priya" scored 0.64 alone, 0.44 in a batch) and were no faster on WASM.
-- About 12 ms a text on WASM, one thread: a page as big as Wikipedia's main page (~600
-  texts) takes ~8 s on its first view. See CLAUDE.md "Open findings".
-- It cannot tell the user's name from a public figure's: it hides both.
+- About 12 ms a text on WASM, one thread.
+- It cannot tell the user's name from a public figure's, even when asked for "famous
+  person" too. Which names to hide is decided outside the model (below).
+- It often finds only the end of an address ("Koramangala, Bengaluru 560034"); `redact.ts`
+  takes in the comma-separated parts before it.
 - Misses: a name inside a long mixed sentence ("Hi, I'm Suparno. Email ..."), and a UK
-  postcode after the street. Organisations are not asked for on purpose: shop and brand
-  names are what the planner navigates by.
+  postcode after the street. False positives: single capitalised words ("Skrim",
+  "Aadhaar", "biryani"). Organisations are not asked for on purpose: shop and brand names
+  are what the planner navigates by.
 
-The loop scans each page view's texts before redacting it, once per text per task. If the
-model cannot load, the task continues on the regex layer with a visible warning
-(fails open; see CLAUDE.md "Open findings").
+## Which names are hidden
+
+`lib/agent/private-names.ts`, not this folder, decides which of the model's names are the
+user's: all of them on a page that shows the user's data (found by the regex bank and field
+hints, no model), a name right after words addressing the user ("Welcome back", "Deliver
+to"), and any name already hidden in the task. Public names stay readable, which the eval
+scores as not over-redacting. The model runs only where its answer can matter, so a public
+page costs no model time. If the model cannot load, the task continues on the regex layer
+with a visible warning (fails open; see CLAUDE.md "Open findings").
+
+## Other rules learnt from the eval
+
+- A field that says what it holds (`autocomplete`, `type`) is hidden whole, even when a
+  detector matched only part of it.
+- A value's label can be the element before it (`<dt>`/`<dd>`, `<th>`/`<td>`): the agent's
+  `redact.ts` passes it as `context`, which only the label-needing numbers use (Aadhaar,
+  account numbers, birth dates).
+- A birth date is a date labelled as one ("DOB", "Date of birth", "born"); other dates stay.
+- An ISBN-13 passes the card checksum; it is not a card. Same rule in the schema tripwire.
+
+Measure changes with `pnpm eval:node` (quick) and `pnpm eval` (the real numbers).
 
 Run the cheap ones first and only escalate. Most of the latency win in this project comes
 from *not running a model* (brief §8), and that applies here as much as anywhere.
@@ -74,7 +95,7 @@ aggressive, because a false positive there costs a little context rather than th
 and over-redaction rate are numbers we have to put on a slide. Coordinate with workstream 5
 early — the fixtures need to exist before the numbers can.
 
-Also open: **GLiNER quint8 vs fp16**, accuracy per millisecond. Measure with
-`pnpm demo:pii`-style runs through `ner-node.ts` once fixtures have ground truth. That comparison is the
+Also open: **GLiNER quint8 vs fp16**, accuracy per millisecond. Measure with `pnpm eval`
+on the annotated fixtures, once with each model file. That comparison is the
 client half of the tradeoff curve the brief plans for (§9.6). Both variants are
 available; only quint8 is fetched today.

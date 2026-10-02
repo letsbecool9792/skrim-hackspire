@@ -14,9 +14,10 @@ architectural decision, add it to "Locked decisions" with a one-line reason.
 
 The agent loop is closed end to end (DOM graph → PII redaction → server → one action →
 verify), in a chat side panel, and works in Chrome on the fixture pages. Both
-Qwen planners finish all six fixture goals. Next: **settle the default provider** (Groq's
-free tier allows only 4–5 steps a minute), then the eval harness, then perception beyond
-the DOM. See "Status" and "Open findings".
+Qwen planners finish all six fixture goals. The eval harness scores detection on 21
+annotated fixtures. Next: **retest in Chrome and run the eval there**, settle the default
+provider (Groq's free tier allows only 4–5 steps a minute), then perception beyond the DOM,
+starting with what the eval misses. See "Status" and "Open findings".
 
 ---
 
@@ -165,9 +166,9 @@ skrim/
 Foundations:
 - [x] Monorepo: 7 workspace packages, all `@skrim/*`, TypeScript 6.0.3, shared strictness
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
-      RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 18 tests.
+      RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (126 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (156 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       before the OmniParser detector. The built extension is 86.6 MB, including ONNX
@@ -188,24 +189,39 @@ Built, by workstream:
       unloads before it can answer), 25-step and 5-minute limits, stops for no progress
       and for going in circles, the tab fixed per task
 - [x] **WS2 perception:** DOM extraction with visible text, field values, dropdown options,
-      and names from images and icons (alt text, svg titles). The OCR module works in
-      Chrome; fusion and escalation modules exist but are not in the loop
-- [x] **WS3 privacy:** regex detectors (precision bugs fixed), form-field hints for names and
-      phones, **GLiNER for names and addresses in free text** (side panel, ~12 ms a text),
-      one vault per task (one token per value however it is written), every page view and
-      the goal redacted, tokens resolved only at typing time, tripwire on the whole request
+      and names from images and icons (alt text, svg titles); only what is in and near the
+      view, at most 120 elements, with a count of the rest. The OCR module works in Chrome;
+      fusion and escalation modules exist but are not in the loop
+- [x] **WS3 privacy:** regex detectors (birth dates and labels from the element before
+      included; ISBNs are not cards), form-field hints, **GLiNER for names and addresses in
+      free text** (side panel, ~12 ms a text), and **a rule for which names are private**
+      (`lib/agent/private-names.ts`): public names stay readable. One vault per task (one
+      token per value however it is written), every page view and the goal redacted, tokens
+      resolved only at typing time, tripwire on the whole request
+- [x] **WS5 eval:** `packages/eval` scores recall, precision, span IoU, near-misses and
+      over-redaction on 21 annotated fixtures, through the same `readPage()` the agent uses.
+      `pnpm eval` drives the real extension in Chromium (**not run yet**: needs Playwright's
+      Chromium, [`docs/testing.md`](docs/testing.md) section 6); `pnpm eval:node` is a quick
+      check in Node
 - [x] **WS4 server:** `/plan` with one adapter and three profiles (NVIDIA, Groq, Ollama),
       compact prompt that reads the history, JSON repair, timeouts with one retry, errors
       that do not leak provider detail. The history tells the planner what each action
       changed on screen ("appeared: ...")
-- [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, `pnpm test:agent`. All in
-      [`docs/testing.md`](docs/testing.md)
+- [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, `pnpm test:agent`,
+      `pnpm eval:node`. All in [`docs/testing.md`](docs/testing.md)
 
 ### What's left, in order
 
 **1. Prove it in a real browser, and pick the model.**
 - [x] Run [`docs/testing.md`](docs/testing.md) section 5 in Chrome (its bugs fixed)
 - [x] Measure Groq's Qwen 3.8 with `pnpm test:agent`: 6 of 6 (see "Open findings")
+- [ ] **Retest in Chrome** what changed after the first Chrome test, none of it tried in a browser
+      yet: `Click show panel`, `Open the details section` and `Go to section 2` take one
+      click each; the ⓘ button under a result; the input box has no scroll arrows; Wikipedia
+      `Search for Alan Turing` is sent as written and starts quickly, and a link that
+      opens a new page continues the task; the form fixture still hides the name, email,
+      phone and address
+- [ ] Run `pnpm eval` once (Playwright's Chromium first) and compare with `pnpm eval:node`
 - [ ] Settle the default provider, given Groq's rate limit (see "Open findings")
 
 **2. Perception beyond the DOM** (WS2, WS3)
@@ -216,7 +232,9 @@ Built, by workstream:
 - [ ] Decide where inference runs: the side panel can now host it (see "Open findings")
 
 **3. Measure and show it** (WS5, WS6)
-- [ ] Eval harness + 30–50 fixtures with ground truth (two fixture pages exist)
+- [x] Eval harness, and 21 fixtures with ground truth
+- [ ] More fixtures, to 30–50: a face in a photo, pages in Hindi, long pages, real-site
+      captures (see "Open findings": ours were written by the same hand as the fixes)
 - [ ] Dashboard: split-screen wire view + resource panel
 - [ ] Landing page
 - [ ] Tradeoff curve: GLiNER quint8 vs fp16; hosted vs local model accuracy and latency
@@ -256,19 +274,38 @@ NVIDIA hosts no Qwen at all (81 models listed); Cloudflare Workers AI hosts Qwen
 Still to decide: the default provider for teammates without a GPU. NVIDIA's only fast
 model cannot finish tasks; Groq's can but is rate limited.
 
-**Public names are hidden too.** GLiNER cannot tell the user's name from anyone else's. On
-Wikipedia's main page it tokenised 52 names; "Search for alan turing" goes to the server as
-"search for <PII:NAME:1>". Tasks still work (the token is typed back as the real name, and
-the goal's "alan turing" and the page's "Alan Turing" share one token), but the planner
-reads a news page full of placeholders. That is over-redaction, which is scored. Open: how
-to keep public names while hiding the user's.
+**Which names are private is a rule, and it has gaps.** GLiNER cannot tell the user's name
+from a public figure's (it hid 52 names on Wikipedia's main page), and asking it for
+"famous person" did not help. So `lib/agent/private-names.ts` decides by where a name
+appears: every name on a page that shows the user's data, a name after words addressing
+the user ("Welcome back", "Deliver to"), in the goal a name after "email", "call" and the
+like, and any name already hidden in the task. Known gaps:
+- A private name in the goal with none of those words, on a public page ("find Rahul
+  Sharma's profile"), is sent as written.
+- A business phone number makes a page count as personal, so everything named on it is
+  hidden: the eval's search results page loses a celebrity chef and "biryani".
+- The cue words are English.
 
-**Name detection is slow on big pages.** ONNX Runtime's WASM on one thread takes about
-12 ms a text, and each text is its own model call (batching changed the scores and was no
-faster). Wikipedia's main page has about 600 texts: **about 8 s** before the first step;
-later steps only scan new texts. Options: threads (needs the side panel cross-origin
-isolated), WebGPU, skipping texts that cannot hold a name, or a Worker so the chat does
-not freeze meanwhile.
+**What the eval finds** (`pnpm eval:node`, 21 fixtures): 100% recall on PII in the
+page's text, 87.7% on all PII, 77.3% precision, 8 of 127 near-misses hidden. The misses are
+all inside a canvas, an image or a cross-origin iframe: vision's job. The false positives:
+single capitalised words taken for names ("Skrim", "Aadhaar", "biryani", "Koramangala"),
+business addresses on personal pages ("Apollo Clinic, Bannerghatta Road", "MG Road
+branch"), and the search results page above. The fixtures were written by the same hand as
+the fixes, so expect lower numbers on pages we did not write; the browser run
+(`pnpm eval`) has not been done yet.
+
+**Name detection is slow on big personal pages.** ONNX Runtime's WASM on one thread takes
+about 12 ms a text, and each text is its own model call (batching changed the scores and
+was no faster). It now runs only on pages that show the user's data, and only on the part
+in and near the view (at most 120 elements), so a personal page costs about 1–1.5 s on its
+first view. Faster options: threads (needs the side panel cross-origin isolated), WebGPU,
+or a Worker so the chat does not freeze meanwhile.
+
+**The view is a window.** Only elements in the view and a quarter of a view above and below
+are listed, at most 120, and the prompt says how many more lie above and below. The planner
+must scroll to reach the rest, and a long paragraph is cut at 200 characters. Untried in
+Chrome: whether Qwen scrolls when what it needs is not listed.
 
 **The offscreen document is probably unnecessary now.** It exists because Chrome's service
 worker cannot run WebAssembly or WebGPU. The loop lives in the side panel, an ordinary page,

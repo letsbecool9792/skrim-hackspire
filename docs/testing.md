@@ -55,16 +55,17 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 126 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 156 tests:
 
 | Tests | Covers |
 |---|---|
-| 18 in `@skrim/schema` | The wire contract: PII tokens, URL sanitising, action validation, the outbound PII tripwire |
-| 11 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks) and the prompt format |
-| 53 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection, form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), the token vault |
+| 20 in `@skrim/schema` | The wire contract: PII tokens, URL sanitising, action validation, the "beyond the view" counts, the outbound PII tripwire (ISBNs are not cards) |
+| 12 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks) and the prompt format |
+| 9 in `@skrim/eval` | Scoring: lining redacted text up with the original, recall, precision, IoU, over-redaction |
+| 59 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection (birth dates, labels from the element before), form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), whole addresses, the token vault |
 | 16 in `lib/vision` | DOM + vision fusion and the escalation policy |
-| 15 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons) and click verification, in a simulated DOM |
-| 13 in `lib/agent` | The whole loop with a scripted planner: redaction (names included), typing via tokens, what appeared after each action, an action whose reply never comes, the no-progress and going-in-circles stops, tripwire, cancel |
+| 17 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons, only what is near the view) and click verification, in a simulated DOM |
+| 23 in `lib/agent` | The whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel), and which names are private |
 
 The same command runs in CI on every PR.
 
@@ -89,6 +90,11 @@ tokenised: the Aadhaar as `GOV_ID`, the account number as `ACCOUNT`. "Order #456
 
 Try your own sentences to see what the model misses: a name tucked into a long sentence full
 of other data ("Hi, I'm Suparno. Email ...") often slips through.
+
+The demo shows everything the detectors find. In a task, names and addresses are hidden only
+where they are private (`lib/agent/private-names.ts`): on a page that shows the user's data,
+after words like "Welcome back" or "Deliver to", and wherever a name already hidden appears
+again. Names in articles, news and search results stay readable.
 
 ---
 
@@ -169,13 +175,47 @@ pill, and the page gets the real address. The name and phone fields may stay emp
 form does not need them and the goal did not ask. The **ⓘ** button under the result says
 what stayed on the device: here a name, an email address, a phone number and an address.
 
-Then a real site, for example Wikipedia with `Search for Alan Turing`. Expect a pause of
-several seconds before the first step: name detection reads every text on a page that big
-(see "Open findings" in `CLAUDE.md`). "Alan Turing" goes to the server as a name token.
-Clicking a link that opens a new page continues the task on that page.
+Then a real site, for example Wikipedia with `Search for Alan Turing`. There should be no
+"Sent to the server as" line: a public name stays as written. The first step should come
+quickly: only the part of the page in and near the view is read, and name detection does
+not run on a page that shows none of your data. Clicking a link that opens a new page
+continues the task on that page.
 
 The chat stays for as long as the panel is open. Closing the panel stops a running task and
 clears everything.
+
+---
+
+## 6. Detection on the fixtures (the eval)
+
+`fixtures/pages/` holds 21 synthetic pages with PII in known places, and
+`fixtures/ground-truth/` says what on each is PII and what only looks like it. The eval
+scores what Skrim hid: recall, precision, span IoU, near-misses hidden, over-redaction and
+time per stage, then lists every miss and false positive by name.
+
+**The numbers to report** come from the real extension in Chromium:
+
+```powershell
+pnpm --filter @skrim/eval exec playwright install chromium   # once: Playwright's Chromium, ~150 MB
+pnpm eval                                                     # builds the eval extension, then scores
+pnpm eval -- --headed                                         # to watch it
+pnpm eval -- --save                                           # also writes packages/eval/SUMMARY.md
+```
+
+It prints a report and writes it to `packages/eval/results/browser-latest.md`
+(gitignored). Chromium, not Chrome: branded Chrome no longer loads unpacked extensions
+from the command line.
+
+**A quick check while changing detection**, in Node, no browser:
+
+```powershell
+pnpm eval:node
+```
+
+Same detection code and scoring, but happy-dom instead of a browser and onnxruntime-node
+instead of the WASM build, so its numbers are not the ones to report. On the 21 fixtures it gave
+100% recall on PII in the page's text (57 of 57), 87.7% on all PII (the rest is inside a
+canvas, an image or an iframe), 77.3% precision, and 8 of 127 near-misses hidden.
 
 ---
 
@@ -186,5 +226,5 @@ clears everything.
 | Face detection, OmniParser icon detection | Not built. The OmniParser model has not been exported |
 | Vision in the loop (OCR, fusion) | The modules exist, but the loop observes the DOM only. OCR itself read the fixtures in Chrome in 0.1–0.4 s, through a test button since removed |
 | Dashboard, landing page | Still the Vite templates |
-| Eval harness | Empty package, no ground truth yet |
+| Eval: faces | No fixture with a face yet; BlazeFace is not wired either |
 | Firefox | Builds, but nothing has been tried in it yet |
