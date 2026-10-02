@@ -9,6 +9,8 @@
     "dev:server": "pnpm --filter @skrim/server dev",
     "dev:dashboard": "pnpm --filter @skrim/dashboard dev",
     "dev:web": "pnpm --filter @skrim/web dev",
+    "smoke:server": "pnpm --filter @skrim/server smoke",
+    "demo:pii": "pnpm --filter @skrim/extension demo:pii",
     "build": "turbo run build",
     "typecheck": "turbo run compile",
     "test": "turbo run test",
