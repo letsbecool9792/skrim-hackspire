@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>skrim click test fixture</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.5; }
+    section { margin-bottom: 30px; padding: 15px; border: 1px solid #ddd; border-radius: 4px; }
+    h2 { margin-top: 0; font-size: 1.2rem; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+    .panel { display: none; padding: 10px; background: #f5f5f5; margin-top: 10px; }
+    .panel.visible { display: block; }
+    button { padding: 8px 16px; cursor: pointer; }
+    #section2 { margin-top: 100vh; }
+  </style>
+</head>
+<body>
+  <h1>skrim click test fixture</h1>
+  <p>Self-contained fixture page for testing click execution and verification. No external dependencies.</p>
+
+  <section>
+    <h2>1. Toggle Button</h2>
+    <button id="toggle" aria-label="Toggle panel" aria-expanded="false" aria-controls="toggle-panel">Show Panel</button>
+    <div id="toggle-panel" class="panel">This is the toggled panel content.</div>
+  </section>
+
+  <section>
+    <h2>2. Checkbox</h2>
+    <input type="checkbox" id="check1">
+    <label for="check1">Accept terms</label>
+    <span id="check-status" aria-live="polite"></span>
+  </section>
+
+  <section>
+    <h2>3. Counter Button</h2>
+    <button id="counter" aria-label="Increment counter">Count: 0</button>
+  </section>
+
+  <section>
+    <h2>4. Accordion</h2>
+    <button id="accordion-btn" aria-expanded="false" aria-controls="accordion-panel">Details</button>
+    <div id="accordion-panel" class="panel" role="region">More detailed information here.</div>
+  </section>
+
+  <section>
+    <h2>5. Navigation Link</h2>
+    <a href="#section2" id="nav-link">Go to section 2</a>
+  </section>
+
+  <section id="section2">
+    <h2>Section 2</h2>
+    <p>You have reached section 2.</p>
+  </section>
+
+  <script>
+    // Toggle button logic
+    const toggleBtn = document.getElementById('toggle');
+    const togglePanel = document.getElementById('toggle-panel');
+    toggleBtn.addEventListener('click', () => {
+      const isVisible = togglePanel.classList.toggle('visible');
+      toggleBtn.textContent = isVisible ? 'Hide Panel' : 'Show Panel';
+      toggleBtn.setAttribute('aria-expanded', isVisible.toString());
+    });
+
+    // Checkbox logic
+    const check1 = document.getElementById('check1');
+    const checkStatus = document.getElementById('check-status');
+    check1.addEventListener('change', (e) => {
+      checkStatus.textContent = e.target.checked ? '(Checked)' : '(Unchecked)';
+    });
+
+    // Counter logic
+    const counterBtn = document.getElementById('counter');
+    let count = 0;
+    counterBtn.addEventListener('click', () => {
+      count++;
+      counterBtn.textContent = `Count: ${count}`;
+    });
+
+    // Accordion logic
+    const accordionBtn = document.getElementById('accordion-btn');
+    const accordionPanel = document.getElementById('accordion-panel');
+    accordionBtn.addEventListener('click', () => {
+      const isVisible = accordionPanel.classList.toggle('visible');
+      accordionBtn.setAttribute('aria-expanded', isVisible.toString());
+    });
+  </script>
+</body>
+</html>
