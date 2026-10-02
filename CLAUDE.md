@@ -28,7 +28,7 @@ Settled in the setup session. Do not reopen without a reason.
 | **WXT** for the extension | Only framework treating Firefox as first-class; handles manifest-version and API polyfill differences from one codebase. Plasmo is Chrome-first, CRXJS means hand-wrangling Firefox at 2am |
 | **Transformers.js v3** for local inference | Pipelines + tokenisers included. Drop to raw `onnxruntime-web` only for the YOLO icon detector, where preprocessing is a resize and there is no pipeline anyway |
 | **Hono on Node 22** for the server | Thin: prompt build, schema validation, retry. No ML in the server |
-| **Qwen3-VL** as the server brain | Apache 2.0, strong GUI grounding, available both hosted and via Ollama, so demo beat 8 is a base-URL swap |
+| **Qwen3-VL** as the server brain | Apache 2.0, strong GUI grounding, available both hosted and via Ollama, so demo beat 8 is a base-URL swap. **Under review:** NVIDIA does not host Qwen; hosted default is Llama 3.2 11B Vision for now (see "Open findings") |
 | **NVIDIA Build** as the dev provider | Free, no credit card, ~40 RPM, no daily token cap, OpenAI-compatible |
 | **MV3 on both browsers** | Firefox MV3 event pages keep DOM access, so we get the offscreen-free path *and* "MV3 everywhere" on the slide. WXT defaults Firefox to MV2 — override it |
 | **Eval runs in a real browser** via Playwright | The rubric scores precision/recall on the shipped path. Node-side numbers would measure different code than we demo |
@@ -152,75 +152,130 @@ skrim/
 
 ## Status
 
+**How to see each part working today: [`docs/testing.md`](docs/testing.md).**
+
 ### Done
 
-- [x] Monorepo scaffolded: 7 workspace packages, all `@skrim/*`, all private
-- [x] `pnpm-workspace.yaml` with build-script approvals resolved
-- [x] `.gitignore` covering weights, `.env`, and the `scripts/artifacts/` exception
-- [x] TypeScript aligned to 6.0.3 workspace-wide; `@types/node` to `^22` (matches runtime)
-- [x] Python venv installed correctly and frozen (`scripts/requirements.txt`, 54 pins)
-- [x] `scripts/fetch-models.mjs` — fetches GLiNER PII, BlazeFace, tessdata; vendors
-      MediaPipe + Tesseract WASM. **63.6 MB on disk**, ~76 MB once the detector lands
-- [x] Ollama 0.33.2 + `qwen3-vl:4b` pulled locally
-- [x] NVIDIA Build account + API key
+Foundations:
+- [x] Monorepo: 7 workspace packages, all `@skrim/*`, TypeScript 6.0.3, shared strictness
+- [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
+      RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 18 tests.
+- [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
+- [x] Guardrails: `pnpm verify`, 5 invariant rules, CI on every PR, PR template, nested `CLAUDE.md`s
+- [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
+      before the OmniParser detector
+- [x] WXT config: MV3 on both browsers, name Skrim, per-browser permissions
 
-- [x] `turbo.json` + root `tsconfig.base.json` (shared strictness; module resolution
-      stays per-app because they genuinely differ)
-- [x] **`packages/schema` — the contract.** ScreenGraph, ScreenElement, the 8 actions,
-      PiiToken, RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse. 18 tests.
-- [x] `packages/shared` — ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify`, `scripts/check-invariants.mjs`, CI, PR template
-- [x] Nested `CLAUDE.md` in every work area (agents read these automatically)
-- [x] WXT config: MV3 on both browsers, explicit manifest name, permissions documented
+Built, by workstream:
+- [x] **WS1 shell:** task lifecycle, popup, all 8 actions implemented, replies from the page
+      routed back into the loop, `done` ends the task and honours `success`
+- [x] **WS2 perception:** DOM extraction registered as the screen-graph provider, with an
+      id → element registry. OCR, DOM + vision fusion and escalation modules exist (16 tests)
+- [x] **WS3 privacy:** regex PII detectors and the token vault (38 tests). Not yet used by
+      the extension
+- [x] **WS4 server:** `/plan` with one provider adapter, prompt, JSON repair, 60 s provider timeout
+- [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, a temporary `click <text>`
+      planner, a popup OCR button. All in [`docs/testing.md`](docs/testing.md)
 
-### Not done
+### What's left, in order
 
-- [ ] **Vertical slice: DOM-only graph → regex PII → server → one action → verify.**
-      *Everything below is blocked on this.*
-- [x] Server provider adapter + prompt + JSON repair
-- [ ] Token vault + referential redaction
-- [ ] OmniParser icon detector ONNX export (`scripts/artifacts/omniparser-icon.onnx`)
-- [ ] Vision fusion into the screen graph
+**1. Close the loop.** Nothing else matters until one real task runs end to end.
+- [ ] Settle the server model (see "Open findings")
+- [ ] Redact the screen graph inside the extension: run WS3's detectors over each element's
+      label and value, with one vault per task in the background
+- [ ] Register that vault as the token resolver, so `type` actions can fill real values
+- [ ] A planner that calls the server: build the PlanRequest (sanitised URL, title,
+      viewport, redacted elements, manifest), `assertOutboundSafe()`, POST `/plan`. It needs
+      `host_permissions` for the server's origin. It replaces
+      `entrypoints/background/dev-planner.ts`
+- [ ] Make click verification mean something (see "Open findings")
+- [ ] Enforce the task timeout in the extension
+
+**2. Perception beyond the DOM** (WS2, WS3)
+- [ ] Create the offscreen document; run OCR there; keep one screenshot helper
+- [ ] GLiNER inference for names and addresses (only post-processing exists)
+- [ ] Face detection (the BlazeFace model is fetched; no code yet)
+- [ ] OmniParser icon detector: export (`scripts/artifacts/omniparser-icon.onnx`) and inference
+- [ ] Wire vision fusion into the live graph
+- [ ] Fix the regex detector bugs (see "Open findings")
+
+**3. Measure and show it** (WS5, WS6)
 - [ ] Eval harness + 30–50 fixtures with ground truth
-- [ ] Dashboard split-screen + resource panel
+- [ ] Dashboard: split-screen wire view + resource panel
 - [ ] Landing page
-- [ ] Firefox port + MV3 override in `wxt.config.ts`
-- [ ] Cloudflare account (deferred — NVIDIA is sufficient for now)
-- [ ] Measure quint8 vs fp16 GLiNER for the tradeoff curve
+- [ ] Tradeoff curve: GLiNER quint8 vs fp16; hosted vs local model latency
+
+**4. Platform**
+- [ ] Firefox: run the tests in [`docs/testing.md`](docs/testing.md); declare
+      `data_collection_permissions`
+- [ ] Permissions: `tabs` is probably removable; `activeTab` ends on navigation (see findings)
+- [ ] Cloudflare fallback provider (deferred; only if NVIDIA's limits bite)
 
 ---
 
 ## Open findings — revisit later
 
-Noted while merging the team's first PRs. None of these block the merges; each needs a
-decision or a follow-up. Delete an entry once it is dealt with.
+Collected while merging the team's first PRs and while adding test harnesses.
+Each needs a decision or a follow-up. Delete an entry once it is dealt with.
 
-**The server's model probably does not exist on NVIDIA.** NVIDIA's public model list
-(`https://integrate.api.nvidia.com/v1/models`, 81 models) contains no Qwen models at all.
-That rules out both `qwen/qwen3.5-397b-a17b` (the `.env.example` value) and
-`qwen/qwen2-vl-72b-instruct` (the fallback in `apps/server/src/config.ts`, used when
-`NVIDIA_MODEL` is unset). If that holds, every `/plan` call fails with `provider_error`.
-Open-weight vision models that *are* listed: `meta/llama-3.2-11b-vision-instruct`,
-`meta/llama-3.2-90b-vision-instruct`, `google/gemma-3-4b-it`, `google/gemma-3-12b-it`,
-`microsoft/phi-3-vision-128k-instruct`. The public list may not be exhaustive, so confirm with
-one authenticated request per slug before changing anything. This also puts the locked
-"Qwen3-VL as the server brain" decision in question.
+**Decide the hosted model; Qwen is not on NVIDIA.** Checked with the
+account's own key: NVIDIA hosts no Qwen models, so the locked "Qwen3-VL as the server brain"
+only holds locally. Every listed vision model was tried with `pnpm smoke:server`:
 
-**The server's fallback model and `.env.example` disagree.** Pick one value for both once the
-model question above is settled.
+| Model | Result |
+|---|---|
+| `qwen/qwen2-vl-72b-instruct` (the old fallback) | 404: does not exist |
+| `meta/llama-3.2-90b-vision-instruct` | no reply within 60 s, every time |
+| `google/gemma-3-12b-it`, `google/gemma-3-4b-it`, `microsoft/phi-3-vision-128k-instruct` | listed, but "not found for account" |
+| **`meta/llama-3.2-11b-vision-instruct`** | **works:** 2 of 3, 1.5–6 s per step |
+| `qwen3-vl:4b` on Ollama (local) | 3 of 3, but 6–57 s per step |
+
+Before this check every real `/plan` call failed, because the old fallback does not exist.
+`config.ts` and `.env.example` now both default to Llama 3.2 11B Vision so the server works.
+It is open-weight (Llama 3.2 Community License) but not Qwen. Still to decide: keep it, find
+another free host for Qwen3-VL, or treat local Qwen as the quality option and hosted Llama as
+the fast one. That is the brief's tradeoff curve with real numbers.
+
+**The planner ignores its own history.** Given a history showing the counter click already
+succeeded, Llama 3.2 11B clicks again instead of answering `done`. Local Qwen3-VL gets it right.
+The system prompt (`apps/server/src/prompts/system.ts`) never tells the model to check the
+history before acting. Add that, then rerun `pnpm smoke:server`. On a real page this means
+repeating the last action until the 25-step limit.
+
+**Provider error bodies reach the client verbatim.** On failure, `/plan` returns the provider's
+raw response text as `error`. For NVIDIA 404s that includes internal function and account
+identifiers. Return the status and a short message instead, and keep the detail in the
+server log.
 
 **`openai` is an unused dependency in `apps/server`.** The provider adapter calls `fetch`
 directly.
 
-**The agent loop does not close, even after all four PRs merge.** WS1's hooks in
-`apps/extension/lib/integration.ts` had no callers. The WS2 merge registers the DOM extractor
-as the screen-graph provider, and fixes the background dropping every reply from the content
-script (before that, a started task stayed "running" forever). Two hooks are still empty:
-- `registerTokenResolver`: the WS3 vault exists but is never registered.
-- `registerActionPlanner`: nothing calls the server's `/plan`.
+**The agent loop does not close yet.** WS1's hooks in `apps/extension/lib/integration.ts`:
+- `registerScreenGraphProvider`: wired (DOM extractor, WS2).
+- `registerTokenResolver`: empty. The WS3 vault exists but is never registered.
+- `registerActionPlanner`: only the **temporary** local `click <text>` planner
+  (`entrypoints/background/dev-planner.ts`), for testing. Nothing calls the server's `/plan`.
 
-With no planner, a started task now ends with `UNSUPPORTED_ACTION`, which is the expected
-state. That remaining wiring *is* the vertical slice.
+That remaining wiring *is* the vertical slice. Delete the test planner when the real one lands.
+
+**Click verification always passes on buttons, links and checkboxes.** `lib/actions/click.ts`
+calls `element.focus()` and then counts `document.activeElement === element` as proof the
+click changed something. Every native control takes focus, so for those the check cannot fail,
+even when the click did nothing. Found while writing `docs/testing.md`. Focus should not count;
+a same-page link jump then needs its own signal (URL hash or scroll position), or it will fail
+verification.
+
+**The regex PII detectors have precision bugs.** Found with `pnpm demo:pii`:
+- Every detector writes to the vault *before* overlapping matches are resolved, so rejected
+  candidates still get tokens. The UPI pattern also matches every email address, so an email
+  gets an `ACCOUNT` token nobody sees, the first visible `ACCOUNT` token is `:2`, and
+  `vault.stats()` over-counts. Allocate tokens only for accepted matches.
+- The Aadhaar detector accepts any 12 digits with "Aadhaar" in the 48 characters *before*
+  them, so "account number 123456789012" after an Aadhaar number becomes `GOV_ID`.
+- The UPI pattern should require a handle without a top-level domain (`name@okaxis`, not
+  `name@example.com`).
+
+Fixing them touches WS3's tests, so it is WS3 work rather than a quick patch.
 
 **Screen-graph labels are not redacted.** `extractScreenGraph()` puts raw accessible names and
 text content into `label`, and no PII pass sits between extraction and the background.
@@ -229,7 +284,9 @@ detection over labels, and call `assertOutboundSafe()` right before the request.
 
 **The task timeout is not enforced.** `task-manager.ts` records `startedAt` and
 `timeoutMs` (120 s), but nothing checks them. A task that stalls for any reason other than a
-missing content script stays "running" until the user presses Stop.
+missing content script stays "running" until the user presses Stop. The server side now has
+one: each provider call gives up after 60 s. Before that, a stalled model (Llama 3.2 90B on
+NVIDIA) hung the server indefinitely.
 
 **Nothing creates the offscreen document.** WS2 ships `ensureOffscreenDocument()` and an OCR
 handler in `entrypoints/offscreen/`, but nothing calls it. Vision and OCR are unreachable
@@ -239,12 +296,6 @@ until the background does.
 `lib/capture/screenshot.ts`, is never called, and still contains a commented-out earlier
 version. Keep one. Separate helpers would each rate-limit themselves against Chrome's
 ~2 captures/sec cap, and could exceed it together.
-
-**Model footprint grew and a comment is now wrong.** WS2 added Tesseract's relaxed-SIMD
-variants, including `tesseract-core-relaxedsimd-lstm.wasm.js` (an asm.js fallback, ~3.7 MB),
-plus `worker.min.js`, to `scripts/fetch-models.mjs`. The comment above that list still says
-`.wasm.js` files are not supported. Check which files tesseract.js actually loads, then trim
-the list or fix the comment.
 
 **Firefox `data_collection_permissions`.** `pnpm build:firefox` warns that new Firefox add-ons
 must declare data collection (since 3 Nov 2025). Declaring none under
@@ -263,9 +314,11 @@ the extension reads them; `tabs.query`, `tabs.sendMessage` and `captureVisibleTa
 without it. It also shows users a "Read your browsing history" install warning. Try removing it
 once the loop is wired and tested.
 
-**Re-run `pnpm models:fetch` after pulling.** WS3's PR now saves GLiNER's config as `config.json`,
-so existing local model folders have the old filename. WS3's PR description also notes a
-GLiNER model-loading limitation still under investigation.
+**Re-run `pnpm models:fetch` after pulling.** The file set changes: WS3's PR saves GLiNER's config as
+`config.json`, and Tesseract now ships only the two core files it actually loads. The script
+never deletes old files, so after a Tesseract change, delete
+`apps/extension/public/models/tesseract-core/` first. WS3's PR description also notes a GLiNER
+model-loading limitation still under investigation.
 
 ---
 
