@@ -56,7 +56,9 @@ export type AgentEvent =
   | { type: "planned"; step: number; action: Action; targetLabel?: string; model: string; latencyMs: number }
   /**
    * `note` is what the planner is told in its history; `message` says the same
-   * to the user, in plain words, when there is something to say.
+   * to the user, in plain words, when there is something to say. A step can be
+   * reported twice: unverified, then verified once the next view shows it
+   * changed the page after all.
    */
   | { type: "acted"; step: number; verified: boolean; note?: string; message?: string }
   /** Something the user should know that does not stop the task. */
@@ -151,6 +153,8 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     const stateVisits = new Map<string, number>();
     let lastState: string | undefined;
     let previousGraph: ScreenGraph | undefined;
+    /** The last step carried out, and the page it was carried out on. */
+    let lastTaken: { state: string; key: string } | undefined;
 
     for (step = 0; step < maxSteps; step++) {
       const reading = await readPage(link, taskId, signal, names, vault, step, options.readPixels);
@@ -168,7 +172,17 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
       const lastStep = history.at(-1);
       if (lastStep && previousGraph) {
         const change = describeChange(previousGraph, page.graph);
-        if (change) lastStep.note = joinNotes(lastStep.note, change);
+        if (change && !lastStep.verified && lastStep.note?.startsWith(NO_CHANGE)) {
+          // The action watcher missed it, but this view shows the step did
+          // change the page: a search icon that reveals the search box by
+          // restyling a plain container. Say so, here and in the chat.
+          lastStep.verified = true;
+          lastStep.note = joinNotes(lastStep.note.slice(NO_CHANGE.length).replace(/^; /, "") || undefined, change);
+          unverifiedInARow = Math.max(0, unverifiedInARow - 1);
+          onEvent({ type: "acted", step: lastStep.cycle, verified: true });
+        } else if (change) {
+          lastStep.note = joinNotes(lastStep.note, change);
+        }
       }
       previousGraph = page.graph;
 
@@ -216,15 +230,25 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
       // A click that would place an order, pay, delete or create an account is
       // refused unless the goal asks for it (lib/agent/commit-guard.ts).
       const refused = action.type === "click" && target ? unaskedCommitment(`${target.label ?? ""} ${target.value ?? ""}`, options.goal) : undefined;
+      // The same step again, on a page unchanged since it was last taken, can
+      // only do the same again: Qwen3-VL 4B clicked one link 20 times, each
+      // click "verified" because the page redrew. Not a wait: a page still
+      // loading looks the same between waits.
+      const key = actionKey(action);
+      const repeated = action.type !== "wait" && lastTaken?.state === state && lastTaken.key === key;
       let outcome: ActOutcome;
       if (refused) {
         outcome = { verified: false, note: `not clicked: it would ${refused}, which the goal does not ask for. If the goal is met, answer done`, message: `Skipped: it would ${refused}, which you didn't ask for.` };
         log.info("agent.refusedCommitment", { taskId, step });
-      } else if (target?.source === "vision") {
-        // Text read from pixels has no element behind it in the page.
-        outcome = actOnPixelText(action, reading.observation.elements?.find((element) => element.id === target.id)?.label);
+      } else if (repeated) {
+        outcome = { verified: false, note: "not done again: this exact step was just taken on this same page, and the page is as it was then. If the goal is met, answer done; if not, try something else", message: "Skipped: the same step again would change nothing." };
+        log.info("agent.refusedRepeat", { taskId, step });
       } else {
-        outcome = await act(link, taskId, step, action, { vault, names }, signal);
+        // Text read from pixels has no element behind it in the page.
+        outcome = target?.source === "vision"
+          ? actOnPixelText(action, reading.observation.elements?.find((element) => element.id === target.id)?.label)
+          : await act(link, taskId, step, action, { vault, names }, signal);
+        lastTaken = { state, key };
       }
       history.push({ cycle: step, action, verified: outcome.verified, ...(outcome.note ? { note: outcome.note } : {}) });
       onEvent({ type: "acted", step, verified: outcome.verified, ...(outcome.note ? { note: outcome.note } : {}), ...(outcome.message ? { message: outcome.message } : {}) });
@@ -250,6 +274,12 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     // The vault is the only place real values live. It dies with the task.
     vault.clear();
   }
+}
+
+/** An action without its reason, the same however the model ordered its fields. */
+function actionKey(action: Action): string {
+  const { reason: _reason, ...rest } = action;
+  return JSON.stringify(rest, Object.keys(rest).sort());
 }
 
 /**
@@ -357,6 +387,9 @@ function actOnPixelText(action: Action, rawText: string | undefined): ActOutcome
   };
 }
 
+/** The planner's note for an action the page did not react to. */
+const NO_CHANGE = "the page did not change";
+
 /** States worth reporting after an action. "focused" is not: every click causes it. */
 const REPORTED_STATES = new Set(["checked", "unchecked", "expanded", "collapsed", "selected", "disabled", "invalid"]);
 
@@ -415,7 +448,7 @@ async function act(link: PageLink, taskId: string, step: number, action: Action,
     if (result.changed || action.type !== "scroll") {
       if (result.targetAfter) await privacy.names.prepareTexts([result.targetAfter.label, result.targetAfter.value]);
       const after = result.targetAfter ? describeTarget(result.targetAfter, privacy) : undefined;
-      const note = result.changed ? after : ["the page did not change", after].filter(Boolean).join("; ");
+      const note = result.changed ? after : [NO_CHANGE, after].filter(Boolean).join("; ");
       return {
         verified: result.changed,
         ...(note ? { note } : {}),

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Openpedia, the free encyclopedia</title>
+  <style>
+    /* Like Wikipedia's header beside a side panel: the search box collapses
+       into an icon link until it is clicked. */
+    body { font-family: sans-serif; margin: 0; line-height: 1.5; }
+    header { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid #ccc; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .icon { display: inline-block; width: 20px; height: 20px; background: #555; border-radius: 50%; }
+    #searchform { gap: 6px; }
+    main { max-width: 900px; margin: 0 auto; padding: 16px; }
+    footer { padding: 16px; border-top: 1px solid #ccc; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <a class="visually-hidden" href="#content">Jump to content</a>
+  <header>
+    <button aria-label="Main menu" aria-expanded="false"><span class="icon"></span></button>
+    <a href="#home"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="Openpedia" width="120" height="30"></a>
+    <a id="search-toggle" href="/wiki/Special:Search" title="Search Openpedia [f]"><span class="icon"></span><span class="visually-hidden">Search</span></a>
+    <form id="searchform" action="/w/index.php" role="search" style="display: none">
+      <input id="searchInput" type="search" name="search" placeholder="Search Openpedia" aria-label="Search Openpedia" autocomplete="off">
+      <button>Search</button>
+    </form>
+    <nav aria-label="Personal tools">
+      <a href="#donate">Donate</a>
+      <a href="#create">Create account</a>
+      <a href="#login">Log in</a>
+    </nav>
+  </header>
+
+  <main id="content">
+    <h1>Welcome to Openpedia, the free encyclopedia that anyone can edit.</h1>
+    <p>7,041,382 articles in English</p>
+
+    <h2>From today's featured article</h2>
+    <p>The <a href="#loom">Jacquard loom</a> is a device fitted to a loom that simplifies the process of manufacturing textiles with complex patterns. It was invented by <a href="#jacquard">Joseph Marie Jacquard</a> and first shown in 1804.</p>
+    <p>The loom was controlled by a chain of <a href="#cards">punched cards</a> laced together, an idea later taken up by <a href="#babbage">Charles Babbage</a> for his <a href="#engine">Analytical Engine</a>.</p>
+    <p><a href="#loom">Full article...</a></p>
+
+    <h2>In the news</h2>
+    <ul>
+      <li>The <a href="#monsoon">south-west monsoon</a> withdraws from most of <a href="#india">India</a> two weeks later than usual.</li>
+      <li>A <a href="#telescope">space telescope</a> captures the most distant galaxy yet observed.</li>
+      <li><a href="#chess">The world chess championship</a> opens in <a href="#singapore">Singapore</a>.</li>
+      <li>Archaeologists in <a href="#gujarat">Gujarat</a> uncover a harbour from the <a href="#harappan">Harappan period</a>.</li>
+      <li><a href="#ongoing">Ongoing</a>: <a href="#election">General election campaign</a></li>
+    </ul>
+
+    <h2>Did you know...</h2>
+    <ul>
+      <li>... that the first <a href="#postcard">picture postcard</a> was posted in 1840?</li>
+      <li>... that <a href="#lovelace">Ada Lovelace</a> wrote what is often called the first computer program?</li>
+      <li>... that the <a href="#howrah">Howrah Bridge</a> carries over 100,000 vehicles a day?</li>
+      <li>... that <a href="#sundial">sundials</a> were used to set clocks until the 19th century?</li>
+      <li>... that the <a href="#ganges">Ganges river dolphin</a> is nearly blind?</li>
+    </ul>
+
+    <h2>On this day</h2>
+    <p>2 October: <a href="#gandhi">Gandhi Jayanti</a> in India; <a href="#intl">International Day of Non-Violence</a></p>
+    <ul>
+      <li>1869 - <a href="#mkg">Mohandas Karamchand Gandhi</a> is born in <a href="#porbandar">Porbandar</a>.</li>
+      <li>1904 - <a href="#shastri">Lal Bahadur Shastri</a>, later Prime Minister of India, is born.</li>
+      <li>1950 - The first <a href="#peanuts">Peanuts</a> comic strip is published.</li>
+      <li>1958 - <a href="#guinea">Guinea</a> declares its independence from France.</li>
+    </ul>
+
+    <h2>Today's featured picture</h2>
+    <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="The Victoria Memorial in Kolkata at dusk" width="300" height="200">
+    <p>The <a href="#victoria">Victoria Memorial</a> in <a href="#kolkata">Kolkata</a>, completed in 1921.</p>
+
+    <h2>Other areas of Openpedia</h2>
+    <ul>
+      <li><a href="#community">Community portal</a> - The central hub for editors.</li>
+      <li><a href="#help">Help desk</a> - Ask questions about using Openpedia.</li>
+      <li><a href="#reference">Reference desk</a> - Ask research questions.</li>
+      <li><a href="#news">Site news</a> - Announcements and updates.</li>
+    </ul>
+  </main>
+
+  <footer>
+    <p>This page was last edited on 1 October 2026.</p>
+    <a href="#privacy">Privacy policy</a>
+    <a href="#about">About Openpedia</a>
+    <a href="#disclaimers">Disclaimers</a>
+    <a href="#contact">Contact Openpedia</a>
+  </footer>
+
+  <script>
+    // Like the real thing: the icon opens the search box in place.
+    document.getElementById("search-toggle").addEventListener("click", function (event) {
+      event.preventDefault();
+      document.getElementById("searchform").style.display = "flex";
+      document.getElementById("search-toggle").style.display = "none";
+      document.getElementById("searchInput").focus();
+    });
+    // For the agent tasks: searching shows results, as the results page would.
+    document.getElementById("searchform").addEventListener("submit", function (event) {
+      event.preventDefault();
+      var main = document.getElementById("content");
+      var heading = document.createElement("h1");
+      heading.textContent = "Search results";
+      var summary = document.createElement("p");
+      summary.textContent = "Results for " + document.getElementById("searchInput").value;
+      main.replaceChildren(heading, summary);
+    });
+  </script>
+</body>
+</html>

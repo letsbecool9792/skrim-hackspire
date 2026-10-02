@@ -172,7 +172,47 @@ describe("runAgentTask", () => {
 
     assert.equal(finished.errorCode, "NO_PROGRESS");
     assert.equal(requests.length, 3);
-    assert.equal(requests[2]?.history.at(-1)?.note, "the page did not change");
+    assert.equal(requests[1]?.history[0]?.note, "the page did not change");
+    // The same click on the same unchanged page is not sent to it again.
+    assert.match(requests[2]?.history[1]?.note ?? "", /^not done again/);
+  });
+
+  test("does not repeat a step on a page that has not changed since it was taken", async () => {
+    await page(`<a href="#empire">Empire Restaurant</a><p id="shown">Nothing open</p>`);
+    let clicks = 0;
+    document.querySelector("a")!.addEventListener("click", (event) => {
+      event.preventDefault();
+      clicks += 1;
+      // Redraws the same text on every click, so every click is "verified".
+      document.querySelector("#shown")!.textContent = "Now showing: Empire Restaurant";
+    });
+    const { planner, requests } = scripted((request) =>
+      /not done again/.test(request.history.at(-1)?.note ?? "")
+        ? { type: "done", success: true, summary: "Opened it" }
+        : { type: "click", target: idOf(request, "Empire Restaurant") });
+
+    const { finished } = await run("Open the Empire Restaurant result", planner);
+
+    assert.equal(finished.outcome, "completed");
+    assert.equal(clicks, 2);
+    assert.equal(requests.length, 4);
+  });
+
+  test("counts a click as working when the next view shows what it revealed", async () => {
+    // Like Wikipedia's search icon beside the side panel: the click restyles a
+    // plain container, which the action watcher does not see.
+    await page(`<button>Search</button><input type="search" aria-label="Search the site" style="display: none">`);
+    document.querySelector("button")!.addEventListener("click", () => { document.querySelector("input")!.style.display = "inline-block"; });
+    const { planner, requests } = scripted((request, step) =>
+      step === 0 ? { type: "click", target: idOf(request, "Search") } : { type: "done", success: true, summary: "Opened the search box" });
+
+    const { events } = await run("Open the search box", planner);
+
+    assert.equal(requests[1]?.history[0]?.verified, true);
+    assert.match(requests[1]?.history[0]?.note ?? "", /^appeared: searchbox "Search the site"/);
+    // The chat first showed the step as unconfirmed, then as done.
+    const acted = events.filter((e) => e.type === "acted");
+    assert.deepEqual(acted.map((e) => e.type === "acted" && e.verified), [false, true]);
   });
 
   test("stops when the page keeps coming back to the same state", async () => {

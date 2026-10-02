@@ -1,0 +1,6 @@
+{
+  "page": "encyclopedia-home.html",
+  "about": "An encyclopedia's main page, its search box folded into an icon link as on a narrow window: public figures, places and dates, none of them the user's. Nothing should be hidden.",
+  "pii": [],
+  "notPii": ["Joseph Marie Jacquard", "Charles Babbage", "Ada Lovelace", "Mohandas Karamchand Gandhi", "Lal Bahadur Shastri", "Porbandar", "Kolkata", "Howrah Bridge", "2 October", "1 October 2026"]
+}
