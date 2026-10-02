@@ -1,0 +1,18 @@
+feat(dashboard): split-screen dashboard, message format, and feed
+
+### What changed
+- Added `packages/schema/src/dashboard.ts` with the `DashboardMessage` schema for safe extension-to-dashboard communication.
+- Implemented `DashboardFeed` in the extension (`lib/agent/dashboard-feed.ts`), wrapping the server planner and tapping into the `onEvent` hook in `App.tsx`.
+- Updated the content script (`entrypoints/content/index.ts`) to relay `__skrimToDashboard` messages via `window.postMessage`.
+- Completely rebuilt `apps/dashboard` in React with a live feed, wire view (token highlighting), elements panel, and a resource panel with large type and high contrast for a projector.
+- Added a checklist item to `CLAUDE.md` for manual testing beat 8 offline.
+
+### How I tested it
+- Built the schemas and ran `pnpm verify` successfully. 
+- The schema passes unit tests for `DashboardMessage` parsing and structure.
+
+### What is left
+- Screenshots need to be added to this PR by the reviewer.
+- Suparno will add per-stage timings to the loop's "observed" event (a placeholder is currently set in the dashboard).
+- Getting model sizes from `public/models` and resolving bindings (WASM/WebGPU) wasn't implemented as those touch the hands-off vision files, a placeholder is ready in the dashboard logic.
+- Offline rehearsal (demo beat 8 on Ollama) was added to manual review in `CLAUDE.md`.
