@@ -535,6 +535,11 @@ function getBoundingBox(element: Element): ScreenElement["bbox"] {
 
 function getState(element: Element): ScreenElement["state"] {
   const states = new Set<ElementState>();
+
+  if (isOffscreen(element)) {
+    states.add("offscreen");
+  }
+
   const nativeDisabled = isNativeDisabled(element);
   const ariaDisabled = getAriaBoolean(element, "aria-disabled");
   const disabled = nativeDisabled || ariaDisabled === true;
@@ -593,6 +598,17 @@ function getState(element: Element): ScreenElement["state"] {
   }
 
   return [...states];
+}
+
+function isOffscreen(element: Element): boolean {
+  const rect = element.getBoundingClientRect();
+
+  return (
+    rect.right <= 0 ||
+    rect.bottom <= 0 ||
+    rect.left >= window.innerWidth ||
+    rect.top >= window.innerHeight
+  );
 }
 
 function isNativeDisabled(element: Element): boolean {
