@@ -1,4 +1,4 @@
-import type { Action, PlanRequest, PlanResponse, StepRecord } from "@skrim/schema";
+import type { Action, PlanRequest, PlanResponse, ScreenGraph, StepRecord } from "@skrim/schema";
 import { log } from "@skrim/shared";
 
 import type { ErrorCode } from "../errors.ts";
@@ -70,6 +70,12 @@ export interface AgentOptions {
 
 /** The schema caps history at 20 steps; older steps matter least. */
 const MAX_HISTORY = 20;
+/**
+ * A page state seen this many times means the agent is going in circles:
+ * toggling a panel open and shut, say, which Qwen3-VL 4B did 25 times for
+ * "Click show panel". Stopping does not depend on the model noticing.
+ */
+const MAX_SAME_STATE_VISITS = 3;
 /** How long a new page may take to finish loading after a click or navigate. */
 const PAGE_LOAD_TIMEOUT_MS = 15_000;
 
@@ -100,6 +106,8 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     const goal = redactText(options.goal, vault);
     onEvent({ type: "started", taskId, redactedGoal: goal });
     let unverifiedInARow = 0;
+    const stateVisits = new Map<string, number>();
+    let lastState: string | undefined;
 
     for (step = 0; step < maxSteps; step++) {
       const observation = await observe(link, taskId, signal);
@@ -112,6 +120,18 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
 
       const page = redactPage(observation, step, vault);
       onEvent({ type: "observed", step, elements: page.graph.elements.length, redactions: page.redactions, page: `${page.graph.url.origin}${page.graph.url.pathTemplate}` });
+
+      // Count arrivals, not stays: a page that did not change at all is the
+      // unverified-step rule's business, not this one's.
+      const state = pageState(page.graph);
+      if (state !== lastState) {
+        const visits = (stateVisits.get(state) ?? 0) + 1;
+        stateVisits.set(state, visits);
+        lastState = state;
+        if (visits >= MAX_SAME_STATE_VISITS) {
+          return finish({ outcome: "failed", errorCode: "NO_PROGRESS", message: "The page keeps coming back to the same state, so the agent is going in circles." });
+        }
+      }
 
       const request: PlanRequest = {
         goal,
@@ -166,6 +186,15 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     // The vault is the only place real values live. It dies with the task.
     vault.clear();
   }
+}
+
+/**
+ * What the page says, without where things sit: positions shift with every
+ * scroll and would make every state look new. Redacted input, so no PII.
+ */
+function pageState(graph: ScreenGraph): string {
+  const elements = graph.elements.map((e) => [e.role, e.label ?? "", e.value ?? "", (e.state ?? []).filter((s) => s !== "focused" && s !== "offscreen").join(",")].join("\u0001"));
+  return `${graph.url.origin}${graph.url.pathTemplate}\u0002${graph.title}\u0002${elements.join("\u0002")}`;
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
