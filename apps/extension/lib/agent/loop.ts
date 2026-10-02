@@ -27,6 +27,8 @@ export interface PageLink {
   send(message: Message): Promise<unknown>;
   /** Starts watching the tab for a page load. */
   watchNavigation(): NavigationWatch;
+  /** Why the page cannot be reached, in words the user can act on. */
+  whyUnreachable?(): Promise<string>;
 }
 
 export interface NavigationWatch {
@@ -112,7 +114,8 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     for (step = 0; step < maxSteps; step++) {
       const observation = await observe(link, taskId, signal);
       if (!observation) {
-        return finish({ outcome: "failed", errorCode: "CONTENT_SCRIPT_ERROR", message: "Skrim cannot read this tab. Reload the page and try again. Browser pages such as chrome:// and the extension store are off limits to all extensions." });
+        const reason = (await link.whyUnreachable?.()) ?? "Skrim cannot read this tab. Reload the page and try again.";
+        return finish({ outcome: "failed", errorCode: "CONTENT_SCRIPT_ERROR", message: reason });
       }
       if (!observation.graphAvailable) {
         return finish({ outcome: "failed", errorCode: "OBSERVATION_FAILED", message: "The page did not produce a screen graph." });

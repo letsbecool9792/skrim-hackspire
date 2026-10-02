@@ -6,8 +6,8 @@ import { getActionPlanner } from "@/lib/integration.ts";
 import { runAgentTask, type AgentEvent } from "@/lib/agent/loop.ts";
 import type { RedactionCounts } from "@/lib/agent/redact.ts";
 import { fetchServerInfo, type ServerInfo } from "@/lib/agent/server-planner.ts";
-import { tabLink } from "@/lib/agent/tab-link.ts";
-import { captureIfNeeded } from "@/lib/capture/screenshot.ts";
+import { explainTabAccess, tabLink } from "@/lib/agent/tab-link.ts";
+import { captureTab, type CaptureResult } from "@/lib/capture/screenshot.ts";
 import { SERVER_URL } from "./config.ts";
 
 // ─── Chat model ────────────────────────────────────────────────────────────
@@ -289,9 +289,15 @@ export default function App() {
 
   const readPageText = async () => {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    const capture = tab?.id === undefined ? null : await captureIfNeeded(tab.id);
-    if (!capture) {
-      addNote("Could not capture this tab. Chrome only allows it right after you click the Skrim icon: click it again, then retry.", "error");
+    if (tab?.id === undefined) {
+      addNote("There is no tab to read.", "error");
+      return;
+    }
+    let capture: CaptureResult;
+    try {
+      capture = await captureTab(tab.id);
+    } catch {
+      addNote(`Could not capture this tab. ${await explainTabAccess(tab.id)}`, "error");
       return;
     }
     addNote("Reading this tab's text with on-device OCR…");

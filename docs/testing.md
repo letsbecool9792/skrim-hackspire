@@ -28,9 +28,14 @@ pnpm --filter @skrim/extension build
    are local files, and Chrome keeps extensions off `file://` pages unless you allow it.
 4. Pin Skrim to the toolbar (puzzle-piece icon → pin). Clicking it opens the **side panel**.
 
-**After every rebuild:** click **reload ↻** on the Skrim card, close and reopen the side
-panel, and reload the tab you test on. Chrome does not put the new content script into tabs
-that were already open; the task then fails with "Can't work on this tab".
+**After every rebuild:** click **reload ↻** on the Skrim card, then close and reopen the side
+panel. Tabs that were already open are fine: Skrim starts itself in them. Removing the card
+and loading it again turns **Allow access to file URLs** back off; without it, the fixtures
+fail with a message saying so.
+
+**The side panel header shows which model the server is using.** If it says
+`llama-3.2-11b-vision-instruct` when you meant to use Ollama, an older server is still
+running on port 3000 (see section 3).
 
 **Where logs go.** Nothing logs page content: ids, counts and timings only.
 
@@ -99,8 +104,10 @@ Sends four hand-built requests and checks each answer: a click, typing the token
 the goal is reached, and clicking a button by its visible text. Each line shows the action,
 whether it matched, and the latency.
 
-**Only one server can use port 3000.** If `pnpm dev:server` says `EADDRINUSE`, one is already
-running in another terminal. Use that one, or stop it with Ctrl+C first.
+**Only one server can use port 3000.** If `pnpm dev:server` says the port is already in use,
+a server from earlier is still running in another terminal, perhaps with a different
+provider. Stop it with Ctrl+C in that terminal, then start the one you want. Changing
+`$env:MODEL_PROVIDER` does nothing to a server that is already running.
 
 ### Choosing the model
 
@@ -164,8 +171,9 @@ clears everything.
 
 In the side panel header, click **Aa**. It captures the visible tab and reads its text with
 Tesseract, on your machine, and shows the word count, time and the first words in the chat.
-Expect a couple of seconds for a full screen. If it says it could not capture the tab, click
-the Skrim toolbar icon again (Chrome grants capture right after that click), then retry.
+Expect a couple of seconds for a full screen. Browser pages (settings, new tab, the extension
+store) cannot be captured by any extension, and local files only with file access allowed;
+the chat says which one it hit.
 
 ---
 
