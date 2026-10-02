@@ -80,7 +80,19 @@ const VENDOR = [
     // LSTM engine only - the "full" builds bundle the legacy pre-neural
     // Tesseract engine we never invoke. The .wasm.js files are the asm.js
     // fallback for browsers without WASM at all; not a case we support.
-    files: ["tesseract-core-simd-lstm.js", "tesseract-core-simd-lstm.wasm"],
+    files: [
+    "tesseract-core-simd-lstm.js",
+    "tesseract-core-simd-lstm.wasm",
+    "tesseract-core-relaxedsimd-lstm.js",
+    "tesseract-core-relaxedsimd-lstm.wasm.js",
+    "tesseract-core-relaxedsimd-lstm.wasm",
+  ],
+  },
+  {
+    pkg: "tesseract.js",
+    from: "dist",
+    to: "tesseract",
+    files: ["worker.min.js"],
   },
 ];
 
