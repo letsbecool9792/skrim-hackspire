@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node --env-file-if-exists=../../.env dist/index.js",
     "compile": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
@@ -15,7 +16,6 @@
     "@skrim/shared": "workspace:*",
     "@hono/node-server": "^2.1.1",
     "hono": "^4.13.5",
-    "openai": "^7.8.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {

@@ -1,9 +1,23 @@
 import { ActionSchema } from '@skrim/schema';
-import type { PlanRequest, PlanResponse } from '@skrim/schema';
+import type { Action, PlanRequest, PlanResponse } from '@skrim/schema';
 import { createChatCompletion } from '../providers/index.js';
-import type { ChatMessage } from '../providers/index.js';
 import { buildPrompt } from '../prompts/builder.js';
 import type { ProviderConfig } from '../config.js';
+
+export class UnparseableOutputError extends Error {
+  constructor(readonly attempts: number) {
+    super(`The model did not produce a valid action in ${attempts} attempts`);
+    this.name = 'UnparseableOutputError';
+  }
+}
+
+/**
+ * Reasoning models (Qwen 3.x among them) can wrap their answer in
+ * <think>...</think>. Braces inside that text would break the {...} extraction.
+ */
+function stripReasoning(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
 
 function extractJson(text: string): string {
   const start = text.indexOf('{');
@@ -14,50 +28,46 @@ function extractJson(text: string): string {
   return text;
 }
 
-export async function planAction(config: ProviderConfig, request: PlanRequest): Promise<Omit<PlanResponse, 'latencyMs'>> {
-  let messages = buildPrompt(request);
-  let repairs = 0;
-  const maxRepairs = 2;
+export type ParsedOutput =
+  | { ok: true; action: Action }
+  | { ok: false; repairPrompt: string };
 
-  while (repairs <= maxRepairs) {
-    const responseText = await createChatCompletion(config, messages);
-    
-    let parsed: unknown;
+/** Turns raw model text into an action, or says what to ask the model to fix. */
+export function parseModelOutput(raw: string): ParsedOutput {
+  const text = stripReasoning(raw);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
     try {
-      parsed = JSON.parse(responseText);
-    } catch (e) {
-      try {
-        parsed = JSON.parse(extractJson(responseText));
-      } catch (e2) {
-        if (repairs < maxRepairs) {
-          repairs++;
-          messages.push({ role: 'assistant', content: responseText });
-          messages.push({ role: 'user', content: 'Invalid JSON. Please output only a valid JSON object.' });
-          continue;
-        } else {
-          throw new Error('unparseable_model_output');
-        }
-      }
-    }
-
-    const validation = ActionSchema.safeParse(parsed);
-    if (validation.success) {
-      return {
-        action: validation.data,
-        model: config.model,
-        repairs,
-      };
-    } else {
-      if (repairs < maxRepairs) {
-        repairs++;
-        messages.push({ role: 'assistant', content: typeof parsed === 'string' ? parsed : JSON.stringify(parsed) });
-        messages.push({ role: 'user', content: `JSON validation failed: ${validation.error.message}. Please fix the errors and return a valid JSON object matching the ActionSchema.` });
-        continue;
-      } else {
-        throw new Error('unparseable_model_output');
-      }
+      parsed = JSON.parse(extractJson(text));
+    } catch {
+      return { ok: false, repairPrompt: 'That was not valid JSON. Reply with only the JSON object for one action.' };
     }
   }
 
-  throw new Error('unparseable_model_output');
+  const validation = ActionSchema.safeParse(parsed);
+  if (validation.success) return { ok: true, action: validation.data };
+  return {
+    ok: false,
+    repairPrompt: `That JSON is not a valid action: ${validation.error.message}. Reply with only a corrected JSON object.`,
+  };
+}
+
+const MAX_REPAIRS = 2;
+
+export async function planAction(config: ProviderConfig, request: PlanRequest): Promise<Omit<PlanResponse, 'latencyMs'>> {
+  const messages = buildPrompt(request);
+
+  for (let repairs = 0; repairs <= MAX_REPAIRS; repairs++) {
+    const responseText = await createChatCompletion(config, messages);
+    const result = parseModelOutput(responseText);
+    if (result.ok) {
+      return { action: result.action, model: config.model, repairs };
+    }
+    messages.push({ role: 'assistant', content: responseText });
+    messages.push({ role: 'user', content: result.repairPrompt });
+  }
+
+  throw new UnparseableOutputError(MAX_REPAIRS + 1);
 }

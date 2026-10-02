@@ -6,6 +6,22 @@ export interface ChatMessage {
 }
 
 /**
+ * A failed provider call. `message` is safe to return to the client. `detail`
+ * is for the server log only: provider error bodies can carry account and
+ * function ids (NVIDIA's 404s do), and the client has no use for them.
+ */
+export class ProviderError extends Error {
+  constructor(
+    readonly kind: 'timeout' | 'rate_limited' | 'http' | 'network' | 'bad_response',
+    message: string,
+    readonly detail?: string,
+  ) {
+    super(message);
+    this.name = 'ProviderError';
+  }
+}
+
+/**
  * Longest we wait for one model reply. Without a limit, a stalled provider
  * stalls the server and leaves the extension's task "running" forever.
  * Ollama gets longer: its first request loads the model into VRAM, which took
@@ -40,20 +56,23 @@ export async function createChatCompletion(config: ProviderConfig, messages: Cha
     });
   } catch (err) {
     if (err instanceof Error && err.name === 'TimeoutError') {
-      throw new Error(`Provider error (timeout): no reply from ${config.model} within ${timeoutMs / 1000} s`);
+      throw new ProviderError('timeout', `No reply from ${config.model} within ${timeoutMs / 1000} s`);
     }
-    throw err;
+    throw new ProviderError('network', `Could not reach the ${config.provider} provider`, String(err));
   }
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Provider error (${response.status}): ${errorText}`);
+    const detail = (await response.text()).slice(0, 500);
+    if (response.status === 429) {
+      throw new ProviderError('rate_limited', `The ${config.provider} rate limit was reached. Wait a minute and retry.`, detail);
+    }
+    throw new ProviderError('http', `The ${config.provider} provider returned HTTP ${response.status} for ${config.model}`, detail);
   }
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
   if (!content) {
-    throw new Error('Invalid response format from provider');
+    throw new ProviderError('bad_response', `The ${config.provider} provider returned no message`);
   }
 
   return content;
