@@ -237,6 +237,20 @@ describe("runAgentTask", () => {
     assert.equal(requests[1]?.history[0]?.note, "the page did not answer");
   });
 
+  test("refuses a click that would place an order the goal did not ask for", async () => {
+    await page(`<label for="coupon">Coupon</label><input id="coupon" value="SAVE10"><button>Place order</button>`);
+    let placed = false;
+    document.querySelector("button")!.addEventListener("click", () => { placed = true; });
+    const { planner, requests } = scripted((request, step) =>
+      step === 0 ? { type: "click", target: idOf(request, "Place order") } : { type: "done", success: true, summary: "ok" });
+
+    await run("Change the coupon code to SAVE20", planner);
+
+    assert.equal(placed, false);
+    assert.equal(requests[1]?.history[0]?.verified, false);
+    assert.match(requests[1]?.history[0]?.note ?? "", /^not clicked: it would place an order or pay/);
+  });
+
   test("reports a planner failure with its message", async () => {
     await page(`<button>Go</button>`);
     const planner: ActionPlanner = async () => { throw new Error("Could not reach the Skrim server"); };

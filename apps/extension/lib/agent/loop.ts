@@ -10,6 +10,7 @@ import { redactDomData } from "../pii/redact.js";
 import { DEFAULT_MAX_STEPS, DEFAULT_TIMEOUT_MS, MAX_CONSECUTIVE_UNVERIFIED } from "../task-state.ts";
 import { TokenVault } from "../vault/vault.js";
 import type { PixelReader } from "../vision/read-pixels.ts";
+import { unaskedCommitment } from "./commit-guard.ts";
 import { PrivateNames } from "./private-names.ts";
 import { readPage } from "./read-page.ts";
 import { redactText, resolveTokens, type RedactionCounts } from "./redact.ts";
@@ -208,7 +209,13 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
           : { outcome: "failed", errorCode: "GOAL_NOT_ACHIEVED", summary: action.summary });
       }
 
-      const outcome = await act(link, taskId, step, action, { vault, names }, signal);
+      // A click that would place an order, pay, delete or create an account is
+      // refused unless the goal asks for it (lib/agent/commit-guard.ts).
+      const refused = action.type === "click" && target ? unaskedCommitment(`${target.label ?? ""} ${target.value ?? ""}`, options.goal) : undefined;
+      const outcome: ActOutcome = refused
+        ? { verified: false, note: `not clicked: it would ${refused}, which the goal does not ask for. If the goal is met, answer done` }
+        : await act(link, taskId, step, action, { vault, names }, signal);
+      if (refused) log.info("agent.refusedCommitment", { taskId, step });
       history.push({ cycle: step, action, verified: outcome.verified, ...(outcome.note ? { note: outcome.note } : {}) });
       onEvent({ type: "acted", step, verified: outcome.verified, note: outcome.note });
       if (action.type === "extract" && outcome.extractedValue) {
