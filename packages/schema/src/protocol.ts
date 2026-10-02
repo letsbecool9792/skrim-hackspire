@@ -48,6 +48,12 @@ export const PlanResponseSchema = z.object({
   latencyMs: z.number().nonnegative(),
   /** How many JSON repair attempts were needed. Nonzero means the prompt needs work. */
   repairs: z.number().int().nonnegative().default(0),
+  /**
+   * Tokens the provider counted for this step, repairs included, when it
+   * reports them. Free tiers limit tokens a minute, so this sets how many
+   * steps a minute a provider can take.
+   */
+  usage: z.object({ promptTokens: z.number().int().nonnegative(), completionTokens: z.number().int().nonnegative() }).optional(),
 });
 export type PlanResponse = z.infer<typeof PlanResponseSchema>;
 

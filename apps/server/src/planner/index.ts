@@ -58,14 +58,22 @@ const MAX_REPAIRS = 2;
 
 export async function planAction(config: ProviderConfig, request: PlanRequest): Promise<Omit<PlanResponse, 'latencyMs'>> {
   const messages = buildPrompt(request);
+  let usage: PlanResponse['usage'];
 
   for (let repairs = 0; repairs <= MAX_REPAIRS; repairs++) {
-    const responseText = await createChatCompletion(config, messages);
-    const result = parseModelOutput(responseText);
-    if (result.ok) {
-      return { action: result.action, model: config.model, repairs };
+    const completion = await createChatCompletion(config, messages);
+    // A repair is a second request, and counts against the same limits.
+    if (completion.usage) {
+      usage = {
+        promptTokens: (usage?.promptTokens ?? 0) + completion.usage.promptTokens,
+        completionTokens: (usage?.completionTokens ?? 0) + completion.usage.completionTokens,
+      };
     }
-    messages.push({ role: 'assistant', content: responseText });
+    const result = parseModelOutput(completion.text);
+    if (result.ok) {
+      return { action: result.action, model: config.model, repairs, ...(usage ? { usage } : {}) };
+    }
+    messages.push({ role: 'assistant', content: completion.text });
     messages.push({ role: 'user', content: result.repairPrompt });
   }
 

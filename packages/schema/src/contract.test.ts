@@ -5,6 +5,7 @@ import { formatPiiToken, parsePiiToken, isPiiToken, findPiiTokens } from "./pii.
 import { sanitizeUrl, ScreenGraphSchema, type ScreenGraph } from "./graph.js";
 import { ActionSchema, isNavigationAllowed } from "./action.js";
 import { scanForRawPii, assertOutboundSafe } from "./guard.js";
+import { PlanResponseSchema } from "./protocol.js";
 
 /**
  * These tests exist to protect the wire contract. If one fails, something that
@@ -76,6 +77,15 @@ describe("URL sanitisation", () => {
 
   test("never throws on a malformed URL", () => {
     assert.equal(sanitizeUrl("not a url").origin, "about:unknown");
+  });
+});
+
+describe("plan response", () => {
+  test("may carry the provider's token counts, as whole numbers", () => {
+    const base = { action: { type: "done", success: true, summary: "ok" }, model: "m", latencyMs: 5, repairs: 0 };
+    assert.equal(PlanResponseSchema.safeParse(base).success, true);
+    assert.equal(PlanResponseSchema.safeParse({ ...base, usage: { promptTokens: 1480, completionTokens: 32 } }).success, true);
+    assert.equal(PlanResponseSchema.safeParse({ ...base, usage: { promptTokens: -1, completionTokens: 0 } }).success, false);
   });
 });
 
