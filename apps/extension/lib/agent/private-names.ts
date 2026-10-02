@@ -20,35 +20,34 @@ import { labelBefore } from "./redact.ts";
  *   filled-in personal form field). An inbox, an order, an account page.
  * - anywhere, a name right after words that address the user ("Welcome
  *   back", "Signed in as", "Hi", "Deliver to"), and an address right after it.
- * - in the goal, also a name after words for dealing with someone ("email",
- *   "call", "reply to"), and every name when the goal holds other personal
- *   data or the task starts on a personal page.
+ * - every name and address in the goal, public or not. The goal is the
+ *   user's own words, and no rule tells "find Rahul Sharma's profile" from
+ *   "search for Alan Turing" (a rule on words like "email" or "call" let the
+ *   first through). Privacy wins that trade: a public name hidden costs the
+ *   planner a little context, a private one sent cannot be taken back.
  * - anywhere, a name or address already hidden in this task, however it is
- *   written: the header's "Asha Rao" stays hidden in the profile card too.
+ *   written: the header's "Asha Rao" stays hidden in the profile card, and
+ *   the goal's "Rahul Sharma" on every page. Otherwise the server could match
+ *   a hidden name in one place to the same name readable in another.
  *
  * Everything else is public and stays readable: names in articles, news and
- * search results. The model runs only where its answer matters: every text
- * on a personal page, and elsewhere only texts with those words in them, so a
- * public page like Wikipedia costs no model time at all.
- *
- * Known gap: a private name in the goal without any of those words, on a
- * public page ("find Rahul Sharma's profile"), is sent as written.
+ * search results, unless the goal named them. The model runs only where its
+ * answer matters: the goal, every text on a personal page, and elsewhere only
+ * texts with those words in them, so a public page like Wikipedia costs no
+ * model time at all.
  */
 
 const PAGE_CUES = String.raw`hello|hi|hey|dear|welcome(?: back)?|good (?:morning|afternoon|evening)|signed in as|logged in as|my name is|i am|i'm|deliver(?:ing)? to|ship(?:ping)? to|bill(?:ing)? to`;
-const GOAL_CUES = String.raw`${PAGE_CUES}|e-?mail|message|text|call|phone|reply to|write to|send(?: it| this| them)? to|forward(?: it)? to|invite|pay|tell|ask|remind|cc`;
 
 /** Cue words at the end of what comes before a name: "Welcome back, " then "Asha". */
-const cueRightBefore = (cues: string) => new RegExp(String.raw`(?:^|[^\p{L}\p{N}])(?:${cues})[\s,:!-]*$`, "iu");
-const PAGE_CUE_BEFORE = cueRightBefore(PAGE_CUES);
-const GOAL_CUE_BEFORE = cueRightBefore(GOAL_CUES);
+const PAGE_CUE_BEFORE = new RegExp(String.raw`(?:^|[^\p{L}\p{N}])(?:${PAGE_CUES})[\s,:!-]*$`, "iu");
 /** A text worth running the model on, on a public page. */
 const MENTIONS_PAGE_CUE = new RegExp(String.raw`(?:^|[^\p{L}\p{N}])(?:${PAGE_CUES})(?![\p{L}\p{N}])`, "iu");
 
 /** Shorter known values would match inside ordinary words. */
 const MIN_KNOWN_LENGTH = 3;
 
-type Mode = "all" | "page" | "goal";
+type Mode = "all" | "page";
 
 const normalise = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -113,11 +112,13 @@ export class PrivateNames {
     return { personal, lookup: this.lookup };
   }
 
-  /** The goal, once, after the first page view. */
-  async prepareGoal(goal: string, pagePersonal: boolean): Promise<NameLookup> {
-    const mode: Mode = pagePersonal || findRegexCandidates(goal).length > 0 ? "all" : "goal";
+  /**
+   * The goal, once, before the first page view: every name in it is hidden,
+   * there and on every page after.
+   */
+  async prepareGoal(goal: string): Promise<NameLookup> {
     await this.scan([goal]);
-    const lookup = this.lookupFor(mode);
+    const lookup = this.lookupFor("all");
     this.learn([goal], lookup);
     return lookup;
   }
@@ -135,7 +136,7 @@ export class PrivateNames {
   private lookupFor(mode: Mode): NameLookup {
     return (text) => {
       const model = this.found.get(text) ?? [];
-      const chosen = mode === "all" ? model : afterCues(text, model, mode === "goal" ? GOAL_CUE_BEFORE : PAGE_CUE_BEFORE);
+      const chosen = mode === "all" ? model : afterCues(text, model, PAGE_CUE_BEFORE);
       const known = this.knownIn(text).filter((candidate) => !chosen.some((other) => candidate.start < other.end && candidate.end > other.start));
       return [...chosen, ...known];
     };

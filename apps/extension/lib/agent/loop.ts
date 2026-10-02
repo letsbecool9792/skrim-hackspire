@@ -135,12 +135,13 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     log.warn("agent.nameFinderFailed", { taskId, error: error instanceof Error ? error.name : "unknown" });
     onEvent({ type: "warning", message: "Name and address detection could not start, so names and addresses are NOT being hidden in this task. Emails, phone numbers, cards and ID numbers still are." });
   });
-  // Redacted after the first page view: whether a name in it is private
-  // depends on that page (lib/agent/private-names.ts).
-  let goal: string | undefined;
 
   log.info("agent.started", { taskId });
   try {
+    // Before the first page view: every name in the goal is hidden, on the
+    // pages too (lib/agent/private-names.ts).
+    const goal = redactText(options.goal, vault, await names.prepareGoal(options.goal));
+    onEvent({ type: "started", taskId, redactedGoal: goal });
     let unverifiedInARow = 0;
     const stateVisits = new Map<string, number>();
     let lastState: string | undefined;
@@ -156,10 +157,6 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
         return finish({ outcome: "failed", errorCode: "OBSERVATION_FAILED", message: "The page did not produce a screen graph." });
       }
       const { page } = reading;
-      if (goal === undefined) {
-        goal = redactText(options.goal, vault, await names.prepareGoal(options.goal, reading.personal));
-        onEvent({ type: "started", taskId, redactedGoal: goal });
-      }
       onEvent({ type: "observed", step, elements: page.graph.elements.length, redactions: page.redactions, page: `${page.graph.url.origin}${page.graph.url.pathTemplate}` });
 
       // What the last action changed on screen goes into its history entry.
