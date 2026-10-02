@@ -6,6 +6,7 @@ import { tabLink } from "@/lib/agent/tab-link.ts";
 import { toEvalReading } from "@/lib/eval-reading.ts";
 import { loadNameFinder } from "@/lib/pii/ner-browser.ts";
 import { TokenVault } from "@/lib/vault/vault.ts";
+import { tabPixelReader } from "@/lib/vision/read-pixels.ts";
 
 /**
  * EVAL BUILDS ONLY (`wxt build --mode eval`; main.tsx imports this only in
@@ -21,7 +22,7 @@ async function readTab(url: string): Promise<Reading> {
   if (tab?.id === undefined) throw new Error(`No tab is showing ${url}`);
   let failed = false;
   const names = new PrivateNames((texts) => loadNameFinder().then((find) => find(texts)), () => { failed = true; });
-  const reading = await readPage(tabLink(tab.id), "eval", new AbortController().signal, names, new TokenVault(), 0);
+  const reading = await readPage(tabLink(tab.id), "eval", new AbortController().signal, names, new TokenVault(), 0, tabPixelReader(tab.id));
   if (!reading) throw new Error(`The page at ${url} did not answer`);
   return toEvalReading(reading, failed ? "failed" : "on");
 }

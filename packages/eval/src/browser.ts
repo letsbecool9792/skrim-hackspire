@@ -91,6 +91,8 @@ async function main(): Promise<void> {
       const tab = await context.newPage();
       try {
         await tab.goto(url, { waitUntil: "load" });
+        // Text in pixels is read from a capture of the tab on screen.
+        await tab.bringToFront();
         return await panel.evaluate(
           (target) => (window as unknown as { __skrimEval: { readTab(url: string): Promise<Reading> } }).__skrimEval.readTab(target),
           url,

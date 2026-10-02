@@ -47,7 +47,7 @@ function reading(pairs: [string, string][]): Reading {
     redacted: { title: "", elements: pairs.map(([, label]) => ({ label })) },
     personal: true,
     beyondView: { above: 0, below: 0 },
-    timings: { observeMs: 10, namesMs: 20, redactMs: 1 },
+    timings: { observeMs: 10, visionMs: 0, namesMs: 20, redactMs: 1 },
     nameModel: "on",
   };
 }

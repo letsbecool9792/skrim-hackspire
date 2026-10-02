@@ -186,7 +186,7 @@ export interface Totals {
   byCategory: Record<string, { pii: number; caught: number }>;
   byLocation: Partial<Record<Location, { pii: number; caught: number }>>;
   /** Median milliseconds per reading, per stage. */
-  medianMs: { observe: number; names: number; redact: number };
+  medianMs: { observe: number; vision: number; names: number; redact: number };
 }
 
 function median(values: number[]): number {
@@ -238,6 +238,7 @@ export function summarise(scores: FixtureScore[]): Totals {
     byLocation,
     medianMs: {
       observe: median(scores.map((score) => score.timings.observeMs)),
+      vision: median(scores.map((score) => score.timings.visionMs)),
       names: median(scores.map((score) => score.timings.namesMs)),
       redact: median(scores.map((score) => score.timings.redactMs)),
     },

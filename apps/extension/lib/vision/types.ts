@@ -57,7 +57,7 @@ export interface VisionResult {
  * The screenshot remains in memory as a data URL; this interface does not
  * introduce any persistent image-storage mechanism.
  */
-export type VisionInput = string;
+export type VisionInput = string | Blob;
 
 /**
  * Model-agnostic interface for local vision inference.

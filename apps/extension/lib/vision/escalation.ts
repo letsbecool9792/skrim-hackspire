@@ -4,7 +4,15 @@ export type VisionEscalationReason =
   | "canvas"
   | "iframe"
   | "video"
-  | "unlabelled-image";
+  | "unlabelled-image"
+  | "large-image";
+
+/**
+ * An image this big can hold readable text whatever its alt text says: the
+ * alt of a scanned ID card says what the image is ("Uploaded ID card"), not
+ * the name and number printed on it.
+ */
+const LARGE_IMAGE = { width: 200, height: 100 };
 
 export interface VisionEscalation {
   elementId: string;
@@ -57,6 +65,11 @@ export function shouldEscalateToVision(
           reasons.push({
             elementId: element.id,
             reason: "unlabelled-image",
+          });
+        } else if (element.bbox[2] >= LARGE_IMAGE.width && element.bbox[3] >= LARGE_IMAGE.height) {
+          reasons.push({
+            elementId: element.id,
+            reason: "large-image",
           });
         }
         break;

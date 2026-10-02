@@ -77,6 +77,31 @@ export async function recognizeText(
     }));
 }
 
+/**
+ * Lines of text, not words: a name or an address spans several words, and
+ * the PII detectors read a line at a time, as they read a DOM text.
+ */
+export async function recognizeLines(
+  input: VisionInput,
+): Promise<VisionTextRegion[]> {
+  const worker = await getWorker();
+  const result = await withTimeout(
+    worker.recognize(input, {}, { text: true, blocks: true }),
+    RECOGNIZE_TIMEOUT_MS,
+    "Reading text",
+  );
+
+  return (result.data.blocks ?? [])
+    .flatMap((block) => block.paragraphs)
+    .flatMap((paragraph) => paragraph.lines)
+    .map((line) => ({
+      bbox: [line.bbox.x0, line.bbox.y0, line.bbox.x1 - line.bbox.x0, line.bbox.y1 - line.bbox.y0] as VisionTextRegion["bbox"],
+      text: line.text.trim().replace(/\s+/g, " "),
+      confidence: line.confidence / 100,
+    }))
+    .filter((line) => line.text.length > 0);
+}
+
 export async function terminateOcrWorker(): Promise<void> {
   if (!workerPromise) {
     return;

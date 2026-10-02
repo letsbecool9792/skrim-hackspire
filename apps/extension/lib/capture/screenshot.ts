@@ -21,12 +21,13 @@ function base64ToUint8Array(dataUri: string): Uint8Array {
 }
 
 /**
- * Captures the visible tab of the current window. Throws when the browser
- * refuses: on its own pages, and on local files until file access is allowed.
- * Waits out the cooldown instead of skipping, so a user's click always gets
- * a capture.
+ * Captures the visible tab of a window: the given one, or the current one.
+ * The browser shows only a window's active tab, so a caller that means one
+ * tab must check it is active first. Throws when the browser refuses: on its
+ * own pages, and on local files until file access is allowed. Waits out the
+ * cooldown instead of skipping, so a user's click always gets a capture.
  */
-export async function captureTab(tabId: number): Promise<CaptureResult> {
+export async function captureTab(tabId: number, windowId?: number): Promise<CaptureResult> {
   const wait = lastCaptureAt + CAPTURE_COOLDOWN_MS - Date.now();
   if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
   const startedAt = Date.now();
@@ -34,7 +35,9 @@ export async function captureTab(tabId: number): Promise<CaptureResult> {
   return timed("capture", async () => {
     let dataUri: string;
     try {
-      dataUri = await browser.tabs.captureVisibleTab({ format: "png" });
+      dataUri = windowId === undefined
+        ? await browser.tabs.captureVisibleTab({ format: "png" })
+        : await browser.tabs.captureVisibleTab(windowId, { format: "png" });
     } catch (error) {
       // The browser's message names the page's URL; log only that it failed.
       log.warn("capture.failed", { tabId });
