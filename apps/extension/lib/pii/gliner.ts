@@ -32,11 +32,20 @@ const GLINER_LABEL_CATEGORIES: Record<string, PiiCategory> = {
 export const NAME_LABELS = ["person", "address"] as const;
 export const NAME_THRESHOLD = 0.6;
 
+const DENYLIST_EXACT = new Set(["aadhaar", "aadhar", "uidai", "biryani", "koramangala", "skrim"]);
+const BUSINESS_ADDRESS_WORDS = /\b(?:clinic|branch|hospital|bank|restaurant|store)\b/i;
+
 /** Maps entities to redaction candidates, keeping the best of any overlapping ones. No tokens yet. */
 export function glinerCandidates(entities: GlinerEntity[], minimumConfidence = 0.5): PiiCandidate[] {
   const candidates = entities.filter((entity) => {
     const category = GLINER_LABEL_CATEGORIES[entity.label.toLowerCase()];
-    return category !== undefined && entity.score >= minimumConfidence && entity.start >= 0 && entity.end > entity.start && entity.text.length === entity.end - entity.start;
+    if (category === undefined || entity.score < minimumConfidence || entity.start < 0 || entity.end <= entity.start || entity.text.length !== entity.end - entity.start) return false;
+    
+    const lower = entity.text.toLowerCase().trim();
+    if (category === "NAME" && DENYLIST_EXACT.has(lower)) return false;
+    if (category === "ADDRESS" && BUSINESS_ADDRESS_WORDS.test(lower)) return false;
+    
+    return true;
   }).map((entity) => ({ entity, category: GLINER_LABEL_CATEGORIES[entity.label.toLowerCase()] as PiiCategory }))
     .sort((left, right) => right.entity.score - left.entity.score || left.entity.start - right.entity.start);
 

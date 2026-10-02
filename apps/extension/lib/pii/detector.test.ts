@@ -455,7 +455,7 @@ describe("addresses found in part", () => {
     const vault = new TokenVault();
 
     assert.equal(redactDomData({ label: "Deliveries go to 12 MG Road, Bengaluru" }, vault, tail("12 MG Road, Bengaluru")).label, "Deliveries go to <PII:ADDRESS:1>");
-    assert.equal(redactDomData({ label: "IFSC HDFC0001234, MG Road branch" }, vault, tail("MG Road branch")).label, "IFSC <PII:ACCOUNT:1>, <PII:ADDRESS:2>");
+    assert.equal(redactDomData({ label: "IFSC HDFC0001234, MG Road branch" }, vault, tail("MG Road branch")).label, "IFSC <PII:ACCOUNT:1>, MG Road branch");
   });
 });
 
