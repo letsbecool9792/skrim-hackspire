@@ -102,6 +102,31 @@ describe("PrivateNames", () => {
     assert.deepEqual(hidden(view.lookup, "Your profile: Meera Iyer"), ["Meera Iyer"]);
   });
 
+  test("a phone number makes a page personal even when the page has a search box", async () => {
+    // Most sites put a search box in the header, contact lists and bank pages
+    // included: a search box says nothing about whose data a page shows.
+    const { finder } = finderFor({ "Meera Iyer": "NAME" });
+    const names = new PrivateNames(finder, () => {});
+    const observation: PageObservationMessage = {
+      type: "page.observation",
+      taskId: "t",
+      observationVersion: 0,
+      elementCount: 2,
+      hasVisualCapture: false,
+      graphAvailable: true,
+      elements: [
+        { id: "e1", role: "searchbox", label: "Search contacts", bbox: [0, 0, 10, 10], source: "dom" },
+        { id: "e2", role: "text", label: "Meera Iyer +91 98765 43210", bbox: [0, 20, 10, 10], source: "dom" },
+      ],
+      fields: { e1: { inputType: "search" } },
+    };
+
+    const view = await names.preparePage(observation, ["Search contacts", "Meera Iyer +91 98765 43210"]);
+
+    assert.equal(view.personal, true);
+    assert.deepEqual(hidden(view.lookup, "Meera Iyer +91 98765 43210"), ["Meera Iyer"]);
+  });
+
   test("hides every name in the goal, public or not, and then on the pages too", async () => {
     const { finder } = finderFor({ "Rahul Sharma": "NAME", "Alan Turing": "NAME", "Winston Churchill": "NAME" });
     const names = new PrivateNames(finder, () => {});

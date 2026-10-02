@@ -53,13 +53,8 @@ const normalise = (value: string) => value.toLowerCase().replace(/\s+/g, " ").tr
 
 /** Whether a page shows the user's own data. Regex and field hints only: no model. */
 export function isPersonalPage(observation: PageObservationMessage, texts: readonly string[]): boolean {
+  if (texts.some((text) => findRegexCandidates(text).length > 0)) return true;
   const elements = observation.elements ?? [];
-  // A search page is generally public. A phone number on it (like a business result)
-  // should not make the whole page personal. We identify search pages by HTML semantics.
-  const isSearch = elements.some((e) => observation.fields?.[e.id]?.inputType === "search");
-  
-  if (texts.some((text) => findRegexCandidates(text).some(c => !isSearch || c.category !== "PHONE"))) return true;
-  
   return elements.some((element, index) => {
     // A value labelled by the element before it: "Aadhaar", then "2345 6789 0123".
     const context = labelBefore(elements, index);
