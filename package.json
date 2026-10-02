@@ -14,6 +14,8 @@
     "test:agent": "pnpm --filter @skrim/extension test:agent",
     "eval": "pnpm --filter @skrim/extension build:eval && pnpm --filter @skrim/eval eval",
     "eval:node": "pnpm --filter @skrim/extension eval:node",
+    "study": "pnpm --filter @skrim/extension study",
+    "study:report": "pnpm --filter @skrim/extension study:report",
     "build": "turbo run build",
     "typecheck": "turbo run compile",
     "test": "turbo run test",

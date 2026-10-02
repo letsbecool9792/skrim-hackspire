@@ -16,6 +16,8 @@
     "demo:pii": "tsx scripts/pii-demo.ts",
     "test:agent": "tsx scripts/agent-check.ts",
     "eval:node": "tsx scripts/eval-node.ts",
+    "study": "tsx scripts/provider-study.ts",
+    "study:report": "tsx scripts/study-report.ts",
     "build:eval": "wxt build --mode eval",
     "postinstall": "wxt prepare"
   },
