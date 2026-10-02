@@ -66,7 +66,7 @@ describe("decodeSpans", () => {
 });
 
 describe("GlinerRunner", () => {
-  test("batches texts as separate rows and maps spans back to character offsets", async () => {
+  test("runs each text on its own, unpadded, and maps spans back to character offsets", async () => {
     const calls: Record<string, OrtTensorLike>[] = [];
     // Marks the last word of every row as a label-0 entity.
     const session = {
@@ -84,8 +84,8 @@ describe("GlinerRunner", () => {
 
     const results = await runner.detect(["Hello Asha", "Bye Rao ."], { labels: ["person"] });
 
-    assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0]!.input_ids!.dims[0], 2);
+    // Padding rows to a common length changed the scores.
+    assert.deepEqual(calls.map((feeds) => feeds.input_ids!.dims[0]), [1, 1]);
     assert.deepEqual(results.map((entities) => entities.map((e) => [e.text, e.start, e.end])), [[["Asha", 6, 10]], [[".", 8, 9]]]);
   });
 });
