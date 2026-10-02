@@ -18,10 +18,12 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
+    "@huggingface/tokenizers": "^0.1.3",
     "@huggingface/transformers": "^4.2.0",
     "@mediapipe/tasks-vision": "^1.0.1",
     "@skrim/schema": "workspace:*",
     "@skrim/shared": "workspace:*",
+    "onnxruntime-web": "^1.30.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "tesseract.js": "^7.0.0",
@@ -33,6 +35,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@wxt-dev/module-react": "^1.1.5",
+    "onnxruntime-node": "1.24.3",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
     "web-ext": "^10.5.0",
