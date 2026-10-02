@@ -1,110 +1,37 @@
-import { defineContentScript } from 'wxt/sandbox';
-import { log } from '@skrim/shared';
-import { initObserver, getObservationVersion } from './observer.ts';
-import { buildRegistry } from './element-registry.ts';
-import { executeAction } from '@/lib/actions/dispatcher.ts';
-import { parseMessage } from '@/lib/messages.ts';
+import { defineContentScript } from "#imports";
 import { log } from "@skrim/shared";
 import { initObserver, getObservationVersion } from "./observer.ts";
-import { buildRegistry } from "./element-registry.ts";
 import { executeAction } from "@/lib/actions/dispatcher.ts";
+import { getScreenGraphProvider, getTokenResolver } from "@/lib/integration.ts";
 import { parseMessage } from "@/lib/messages.ts";
 
-/**
- * RUNS IN THE PAGE. Two jobs: build the element graph from the DOM, and
- * execute the eight actions against real elements.
- *
- * No site-specific selectors. Ever. Skrim has to work on websites
- * we have never seen (brief §4.6).
- */
 export default defineContentScript({
-  matches: ['<all_urls>'],
-  runAt: 'document_idle',
   matches: ["<all_urls>"],
   runAt: "document_idle",
-
   main() {
-    log.debug('content.injected');
-    log.debug("content.injected");
     initObserver();
-
-    browser.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
-      // Validate incoming message
+    let currentRegistry = new Map<string, Element>();
+    browser.runtime.onMessage.addListener((rawMessage: unknown, _sender, sendResponse) => {
       const message = parseMessage(rawMessage);
-      if (!message) {
-        return false;
-      }
-    // Hold the latest registry across the observe→execute cycle so we
-    // resolve element IDs against the same build that produced them.
-    let currentRegistry: Map<string, Element> = new Map();
-
-      if (message.type === 'page.observe') {
-        const { registry, elements } = buildRegistry();
-        const response = {
-          type: 'page.observation',
-          elementCount: elements.length,
-          observationVersion: getObservationVersion(),
-          hasVisualCapture: false,
-          elements
-        };
-        sendResponse(response);
-        return true;
-      }
-    browser.runtime.onMessage.addListener(
-      (rawMessage: unknown, _sender, sendResponse) => {
-        const message = parseMessage(rawMessage);
-        if (!message) return false;
-
-      if (message.type === 'action.execute') {
-        const { registry } = buildRegistry();
-        executeAction(message.action, message.actionId, registry, getObservationVersion)
-          .then((result) => {
-        if (message.type === "page.observe") {
-          const { registry, elements } = buildRegistry();
-          currentRegistry = registry;
-
-          log.info("content.observed", {
-            elementCount: elements.length,
-            version: getObservationVersion(),
-          });
-
-          sendResponse({
-            type: "page.observation" as const,
-            taskId: message.taskId,
-            observationVersion: getObservationVersion(),
-            elementCount: elements.length,
-            hasVisualCapture: false,
-          });
+      if (!message) return false;
+      if (message.type === "page.observe") {
+        const provider = getScreenGraphProvider();
+        if (!provider) {
+          sendResponse({ type: "page.observation", taskId: message.taskId, observationVersion: getObservationVersion(), elementCount: 0, hasVisualCapture: false, graphAvailable: false });
           return true;
         }
-
-        if (message.type === "action.execute") {
-          // Rebuild registry for action execution to ensure fresh state.
-          const { registry } = buildRegistry();
-          currentRegistry = registry;
-
-          executeAction(
-            message.action,
-            message.actionId,
-            currentRegistry,
-            getObservationVersion,
-          ).then((result) => {
-            sendResponse({
-              type: 'action.result',
-              ...result
-              type: "action.result" as const,
-              ...result,
-            });
-          });
-        return true; // Indicates async response
+        void Promise.resolve(provider()).then((result) => {
+          currentRegistry = result.registry;
+          sendResponse({ type: "page.observation", taskId: message.taskId, observationVersion: getObservationVersion(), elementCount: result.elements.length, hasVisualCapture: result.hasVisualCapture, graphAvailable: true, elements: result.elements });
+        });
+        return true;
       }
-          return true; // async response
-        }
-
+      if (message.type === "action.execute") {
+        void executeAction(message.action, message.actionId, currentRegistry, getObservationVersion, { resolveToken: getTokenResolver() }).then((result) => sendResponse({ type: "action.result", taskId: message.taskId, ...result }));
+        return true;
+      }
       return false;
     });
-        return false;
-      },
-    );
+    log.info("content.injected");
   },
 });

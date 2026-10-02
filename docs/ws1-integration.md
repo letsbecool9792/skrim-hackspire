@@ -7,22 +7,24 @@ Intra-extension messages are defined in `apps/extension/lib/messages.ts` and are
 
 ## Integration Points
 
+The stable code-level integration surface is [apps/extension/lib/integration.ts](../apps/extension/lib/integration.ts). WS1 provides registration points; each workstream supplies its implementation in the correct browser context.
+
 | WS | Integration Point | WS1 Provides | They Provide |
 | -- | ----------------- | ------------ | ------------ |
-| 2 | `page.observe` response | Element registry (id, role, bbox, state) via content script | Full `ScreenElement[]` with labels, values, source via `lib/dom/` |
-| 3 | Before server request | Raw observation values | Tokenised values via vault, `RedactionManifest` via `lib/pii/` and `lib/vault/` |
-| 4 | After observation | `PlanRequest`-shaped payload | Single `Action` via `PlanResponse` |
+| 2 | `registerScreenGraphProvider()` in the content context | Message routing and action-result handling | `ScreenElement[]` plus the matching `Map<id, Element>` registry |
+| 3 | `registerTokenResolver()` in the content context | Resolver injection into type actions | In-memory token resolver and privacy-safe graph adapter |
+| 4 | `registerActionPlanner()` in the background context | Goal, observation, task lifecycle, action dispatch | Validated `PlanRequest`/`PlanResponse` flow and one action per cycle |
 | 5 | Runtime events | `task.status`, `action.result`, timing samples via `getSamples()` | Playwright test harness |
 | 6 | Runtime events | Status, step count, timing via `getSamples()` from `@skrim/shared` | Dashboard visualization |
 
 ## How to Plug in a Planner (WS4)
-In `entrypoints/background/index.ts`, the hardcoded click dispatch is currently marked as the WS4 integration point. Replace it with the following flow: build a `PlanRequest` from the observation, POST it to the server, validate the `PlanResponse`, and forward the `Action` to the content script.
+Register a planner from the background context through `registerActionPlanner()`. It receives `{ goal, observation }`, builds a privacy-safe `PlanRequest`, calls the server, validates the response, and returns exactly one `Action`. WS1 forwards that action to the content script and never selects the target itself.
 
 ## How to Enhance Observation (WS2)
-The content script's `buildRegistry()` returns basic element info. WS2 replaces/enhances this with full `ScreenElement` extraction from `lib/dom/`, adding labels, values, source, and children.
+Register a `ScreenGraphProvider` from the content context. It returns full `ScreenElement[]`, a matching DOM registry, and the `hasVisualCapture` flag. WS1 stores the registry for action execution and forwards the graph; it does not walk the DOM.
 
 ## How to Add PII Redaction (WS3)
-Between observation and server request, WS3 pipes the observation through `lib/pii/` detection and `lib/vault/` tokenisation.
+Register the in-memory token resolver with `registerTokenResolver()` and provide the privacy-safe graph at the WS2 provider boundary. WS1 passes the resolver into type actions and does not implement detection, token storage, or redaction.
 
 ## Timing
 All timed stages use `timed()` from `@skrim/shared`. WS6 reads `getSamples()` for the resource panel.

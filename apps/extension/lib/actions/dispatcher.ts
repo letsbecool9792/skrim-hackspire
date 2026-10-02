@@ -1,104 +1,34 @@
-import { Action, ActionSchema } from '@skrim/schema';
-import { log, timed } from '@skrim/shared';
-import { ErrorCode } from '@/lib/errors.ts';
-import { executeClick } from './click.ts';
-import { executeStub } from './stubs.ts';
-import type { Action } from "@skrim/schema";
-import { ActionSchema } from "@skrim/schema";
-import { log, timed } from "@skrim/shared";
+import { ActionSchema, type Action } from "@skrim/schema";
+import { log } from "@skrim/shared";
 import type { ErrorCode } from "@/lib/errors.ts";
 import { executeClick } from "./click.ts";
-import { executeStub } from "./stubs.ts";
+import { executeExtract, executeNavigate, executeScroll, executeSelect, executeType, executeWait } from "./stubs.ts";
 
-export interface ActionResult {
-  ok: boolean;
-  actionId: string;
-  changed: boolean;
-  errorCode?: ErrorCode;
-  observationVersion: number;
+export interface ActionResult { ok: boolean; actionId: string; changed: boolean; completed?: boolean; errorCode?: ErrorCode; observationVersion: number; }
+
+export interface ActionRuntimeContext {
+  resolveToken?: (value: string) => string | null;
 }
 
-export async function executeAction(action: Action, actionId: string, registry: Map<string, Element>, getObservationVersion: () => number): Promise<ActionResult> {
-/**
- * Central action dispatch. Validates, routes to the correct handler,
- * instruments timing, and returns a structured result. Never throws.
- */
-export async function executeAction(
-  action: Action,
-  actionId: string,
-  registry: Map<string, Element>,
-  getObservationVersion: () => number,
-): Promise<ActionResult> {
+export async function executeAction(action: Action, actionId: string, registry: Map<string, Element>, getObservationVersion: () => number, context: ActionRuntimeContext = {}): Promise<ActionResult> {
   const parsed = ActionSchema.safeParse(action);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      actionId,
-      changed: false,
-      errorCode: 'MALFORMED_ACTION',
-      observationVersion: getObservationVersion()
-      errorCode: "MALFORMED_ACTION",
-      observationVersion: getObservationVersion(),
-    };
-  }
-
-  log.info('action.dispatched', { type: action.type, actionId });
-  log.info("action.dispatched", { type: action.type, actionId });
-
-  let result: ActionResult;
-  const result = await timed("action.execute", async () => {
-    switch (action.type) {
-      case "click":
-        return executeClick(
-          action.target,
-          actionId,
-          registry,
-          getObservationVersion,
-        );
-      case "done":
-        return {
-          ok: true,
-          actionId,
-          changed: false,
-          observationVersion: getObservationVersion(),
-        } satisfies ActionResult;
-      default:
-        return executeStub(action.type, actionId, getObservationVersion());
-    }
-  });
-
+  if (!parsed.success) return { ok: false, actionId, changed: false, errorCode: "MALFORMED_ACTION", observationVersion: getObservationVersion() };
   try {
-    result = await timed('action.execute', async () => {
-      switch (action.type) {
-        case 'click':
-          return await executeClick(action.target, registry, getObservationVersion, actionId);
-        case 'done':
-          return {
-            ok: true,
-            actionId,
-            changed: false,
-            observationVersion: getObservationVersion()
-          };
-        default:
-          return executeStub(action.type, actionId, getObservationVersion());
-      }
-    });
+    let result: ActionResult;
+    switch (action.type) {
+      case "click": result = await executeClick(action.target, actionId, registry, getObservationVersion); break;
+      case "type": result = await executeType(action, actionId, registry, getObservationVersion, context.resolveToken); break;
+      case "scroll": result = await executeScroll(action, actionId, registry, getObservationVersion); break;
+      case "select": result = await executeSelect(action, actionId, registry, getObservationVersion); break;
+      case "navigate": result = await executeNavigate(action, actionId, getObservationVersion); break;
+      case "extract": result = await executeExtract(action, actionId, registry, getObservationVersion); break;
+      case "wait": result = await executeWait(action, actionId, getObservationVersion); break;
+      case "done": result = { ok: true, actionId, changed: false, completed: true, observationVersion: getObservationVersion() }; break;
+    }
+    log.info("action.completed", { actionId, ok: result.ok, changed: result.changed });
+    return result;
   } catch (error) {
-    result = {
-      ok: false,
-      actionId,
-      changed: false,
-      errorCode: 'ACTION_FAILED',
-      observationVersion: getObservationVersion()
-    };
+    log.warn("action.failed", { actionId, error: String(error) });
+    return { ok: false, actionId, changed: false, errorCode: "CONTENT_SCRIPT_ERROR", observationVersion: getObservationVersion() };
   }
-  log.info("action.completed", {
-    actionId,
-    ok: result.ok,
-    changed: result.changed,
-  });
-
-  log.info('action.completed', { actionId, ok: result.ok, changed: result.changed });
-
-  return result;
 }

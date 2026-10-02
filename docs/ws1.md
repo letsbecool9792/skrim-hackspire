@@ -1,7 +1,9 @@
 # Workstream 1 — Browser Extension Shell & Local Action Runtime
 
 > **Owner:** WS1  
-> **Status:** Phase 1 complete, verified, building on both Chrome MV3 and Firefox MV3  
+> **Status:** WS1 runtime implemented; WS2/WS3/WS4 registration contracts available; full integration pending
+
+For the current workflow and exact integration contracts, read [`ws1-workflow.md`](ws1-workflow.md).
 
 ---
 
@@ -24,22 +26,18 @@
 WS1 is the **extension skeleton** — the runtime that makes everything else possible. It
 implements the **observe → plan → act → verify** loop that every other workstream plugs into.
 
-In Phase 1, the loop works end-to-end but with training wheels:
+The WS1 runtime provides the loop mechanics. The complete loop becomes executable after WS2,
+WS3, and WS4 register their providers:
 
-- **Observe:** The content script walks the DOM, finds all interactive elements (buttons,
-  links, inputs, etc.), assigns each one an ID like `e0`, `e1`, `e17`, and reports the count
-  back to the background.
-- **Plan:** Hardcoded to `click e0` (the first element on the page). This is where WS4's
-  server planner plugs in later.
-- **Act:** Dispatches a realistic click event sequence on the target element — the same
-  events a real user's mouse would produce.
-- **Verify:** Waits up to 500ms for DOM mutations, then checks whether the element's state
-  actually changed (checked, expanded, class changed, etc.).
+- **Observe:** The content script calls the registered WS2 graph provider, stores its DOM
+  registry, and forwards the graph to the background.
+- **Plan:** The background calls the registered WS4 planner with the goal and observation.
+- **Act:** The content script executes one validated action against the registry.
+- **Verify:** WS1 checks the action result and starts a fresh observation cycle when needed.
 
 Additionally:
 - A **popup UI** lets you type a goal, start/cancel a task, and see live status.
-- **Screenshot capture** is wired (rate-limited to ~2/sec) but not yet integrated into the
-  loop — it's for WS2's vision pipeline.
+- **Screenshot capture** is rate-limited, kept in memory, and gated before WS2 interprets it.
 - A **click-test fixture page** is included for manual and automated testing.
 - The `sidePanel` permission was dropped from the manifest (unused permissions are a scored
   signal for judges).
@@ -55,7 +53,6 @@ apps/extension/
 │   │   └── message-router.ts     ← Cross-context messaging helpers
 │   ├── content/
 │   │   ├── index.ts              ← Injected into every page, handles observe + act
-│   │   ├── element-registry.ts   ← DOM walker, assigns e<n> IDs
 │   │   └── observer.ts           ← MutationObserver for change detection
 │   └── popup/
 │       └── App.tsx               ← Task controls UI (replaced the counter template)
@@ -67,10 +64,10 @@ apps/extension/
 │   ├── actions/
 │   │   ├── dispatcher.ts         ← Central action dispatch + validation
 │   │   ├── click.ts              ← Click implementation (Phase 1 focus)
-│   │   └── stubs.ts              ← 6 stubs returning UNSUPPORTED_ACTION
+│   │   └── stubs.ts              ← non-click action implementations
 │   └── capture/
 │       ├── screenshot.ts         ← captureVisibleTab wrapper, rate-limited
-│       └── frame-diff.ts         ← Placeholder for pixel-diff gating
+│       └── frame-diff.ts         ← Mutation/time and frame-signature gating
 └── wxt.config.ts                 ← Modified: dropped sidePanel permission
 
 fixtures/pages/click-test.html    ← Self-contained fixture for click testing
@@ -145,7 +142,7 @@ type ErrorCode =
   | 'TARGET_NOT_FOUND'      // element ID not in registry
   | 'TARGET_NOT_CLICKABLE'  // element is hidden, disabled, or zero-size
   | 'ACTION_TIMEOUT'        // action produced no change
-  | 'UNSUPPORTED_ACTION'    // verb not yet implemented (Phase 2)
+  | 'UNSUPPORTED_ACTION'    // unavailable integration or action
   | 'MALFORMED_ACTION'      // ActionSchema.safeParse failed
   | 'MAX_STEPS_REACHED'     // hit 25-step limit
   | 'TASK_CANCELLED'        // user pressed Cancel
@@ -222,10 +219,9 @@ On startup, logs `background.started` and registers a message listener. On each 
 1. **`task.start`** → Creates task state, broadcasts status to popup, sends `page.observe`
    to the content script in the active tab.
 2. **`task.cancel`** → Sets status to cancelled, broadcasts, clears state.
-3. **`page.observation`** → The content script finished observing the page. In Phase 1,
-   responds with a hardcoded `{ type: 'click', target: 'e0' }`. **This is where WS4 plugs
-   in** — replace the hardcoded action with: build `PlanRequest` from observation → POST
-   to server → validate `PlanResponse` → forward the returned `Action`.
+3. **`page.observation`** → The content script finished observing the page. The background
+  calls the planner registered through `registerActionPlanner()` with the task goal and
+  observation, then forwards exactly one validated action.
 4. **`action.result`** → If `ok && changed`, increment step counter, send next
    `page.observe`. If max steps reached, fail the task. If action failed, fail the task.
 
@@ -261,32 +257,19 @@ execute actions.
 
 On injection, starts the MutationObserver and registers a message listener:
 
-- **`page.observe`** → Calls `buildRegistry()`, returns element count + observation version.
-- **`action.execute`** → Rebuilds registry for fresh state, calls `executeAction()`, returns
-  the result.
+- **`page.observe`** → Calls the registered WS2 provider, stores its registry, and returns
+  the graph elements and visual-capture flag.
+- **`action.execute`** → Executes the action against the registry from the preceding graph.
 
-#### `content/element-registry.ts` — DOM Walker
+#### `lib/integration.ts` — Workstream Registration Surface
 
-`buildRegistry()` queries the DOM for interactive elements:
+WS1 provides three registration points:
 
-```
-a, button, input, select, textarea, [role], [tabindex], label, [contenteditable]
-```
+- `registerScreenGraphProvider()` — WS2 supplies graph elements and the matching DOM registry.
+- `registerTokenResolver()` — WS3 supplies the in-memory token lookup used by type actions.
+- `registerActionPlanner()` — WS4 supplies one validated action per observation.
 
-For each element:
-1. Skip if `aria-hidden="true"` or zero-size (width=0 or height=0).
-2. Assign ID: `e0`, `e1`, `e2`, ... — matches `/^e\d+$/` required by `ElementIdSchema` from
-   `@skrim/schema`. If the ID format is wrong, the schema rejects every action.
-3. Map tag/ARIA role to `ElementRole`: button→button, a→link, input[type=text]→textbox, etc.
-4. Get bounding box from `getBoundingClientRect()`.
-5. Check enabled state (no `disabled` attribute, no `aria-disabled="true"`).
-
-Returns:
-- `registry: Map<string, Element>` — for action resolution (look up `e17` → get the element)
-- `elements: ElementInfo[]` — for the observation message (id, role, bbox, etc.)
-
-**No text values or labels are included** — that's WS2's job (`lib/dom/`). WS1 only reports
-structure: what's there, where it is, what role it has.
+WS1 does not implement the graph, privacy pipeline, vault, or planner.
 
 #### `content/observer.ts` — Change Detection
 
@@ -337,10 +320,10 @@ This is the most critical file for the demo. The sequence:
    aria-expanded, className)?
 8. **Return** — `{ ok: true, changed: true/false }`.
 
-#### `actions/stubs.ts` — Phase 2 Placeholders
+#### `actions/stubs.ts` — Non-click Action Implementations
 
-Returns `UNSUPPORTED_ACTION` for: `type`, `scroll`, `select`, `navigate`, `extract`, `wait`.
-Each has a `// Phase 2:` comment sketching the implementation.
+Contains the WS1 implementations for `type`, `scroll`, `select`, `navigate`, `extract`, and
+`wait`. Token lookup is delegated to the WS3 resolver.
 
 ---
 
@@ -368,12 +351,12 @@ Replaced the WXT+React counter template with:
 - Wrapped in `timed('capture', ...)`.
 - Returns `null` on failure or rate limit — never throws.
 
-Not yet called from the loop — it's wired for WS2 to plug in.
+The capture helper is available to the visual-perception integration and remains in memory.
 
 #### `capture/frame-diff.ts`
 
-`shouldCapture()` currently returns `true`. Placeholder for WS2's pixel-diff gating (skip
-capture if the screen hasn't materially changed).
+`shouldCapture()` gates work using mutation count and elapsed time. Frame signatures provide a
+cheap additional comparison; WS2 remains responsible for visual interpretation.
 
 ---
 
@@ -394,19 +377,18 @@ Here's what happens when you click "Start" with the goal "Click the toggle butto
                                      Sends page.observe to content tab
 
 3. CONTENT SCRIPT                 4. BACKGROUND
-   Receives page.observe             Receives page.observation
-   Calls buildRegistry()             { elementCount: 12,
-   Walks DOM, finds 12 elements        observationVersion: 0 }
-   Assigns e0..e11
-   Returns page.observation           Phase 1: hardcoded response
+  Receives page.observe             Receives page.observation
+  Calls the registered WS2 provider  { elementCount: 12,
+  Stores its matching registry       observationVersion: 0 }
+  Returns the sanitized graph        Calls the registered WS4 planner
    ──────────────────►                 Sends action.execute
                                        { action: { type: "click",
                                                    target: "e0" },
                                          actionId: "a0" }
 
 5. CONTENT SCRIPT                 6. BACKGROUND
-   Receives action.execute           Receives action.result
-   Rebuilds registry                  { ok: true, changed: true }
+  Receives action.execute           Receives action.result
+  Executes against the current graph { ok: true, changed: true }
    Resolves e0 → <button>
    Checks: visible? enabled?          Step 0 succeeded!
    Scrolls into view                  Increments to step 1
@@ -516,10 +498,9 @@ taskManager.clear();
 assert(taskManager.getState() === null);
 ```
 
-**`element-registry` — needs jsdom, tests ID format:**
+**WS2 graph provider — browser integration test:**
 ```typescript
-// vitest.config.ts: environment: 'jsdom'
-import { buildRegistry } from '../entrypoints/content/element-registry.ts';
+import { registerScreenGraphProvider } from '../lib/integration.ts';
 
 document.body.innerHTML = `
   <button>Click me</button>
@@ -528,17 +509,10 @@ document.body.innerHTML = `
   <div aria-hidden="true"><button>Hidden</button></div>
 `;
 
-const { elements, registry } = buildRegistry();
+registerScreenGraphProvider(() => ({ elements: [], registry: new Map(), hasVisualCapture: false }));
 
-// IDs match the required format
-assert(elements.every(el => /^e\d+$/.test(el.id)));
-
-// Hidden elements are skipped
-assert(!elements.some(el => el.id === 'Hidden'));
-
-// Roles are mapped correctly
-const btn = elements.find(el => el.role === 'button');
-assert(btn !== undefined);
+// WS2 owns graph candidate, role, label, state, and ID assertions.
+// WS1 asserts that the provider registry is used for action execution.
 ```
 
 **`click.ts` — event dispatch + verification:**
@@ -666,10 +640,9 @@ Once loaded:
 [`entrypoints/content/index.ts`](../apps/extension/entrypoints/content/index.ts), in the
 `page.observe` handler.
 
-**Current state:** `buildRegistry()` returns basic `ElementInfo` (id, role, bbox, state).
+**Current state:** WS1 calls the provider registered through `registerScreenGraphProvider()`.
 
-**What WS2 does:** Replace or enhance `buildRegistry()` with full `ScreenElement[]` from
-`lib/dom/`, adding:
+**What WS2 does:** Provide full `ScreenElement[]` from `lib/dom/` and the matching registry, adding:
 - Accessible names (aria-label, label associations, placeholder, text content)
 - Values (for inputs — but tokenised by WS3 first!)
 - `source: "dom" | "vision" | "fused"`
@@ -698,15 +671,10 @@ real string. If resolution fails → abort the step, never type the literal toke
 
 ### WS4 — Server Agent, Action Schema, Providers
 
-**Where to plug in:**
-[`entrypoints/background/index.ts`](../apps/extension/entrypoints/background/index.ts),
-in `handleObservation()`. There's a comment:
+**Where to plug in:** `registerActionPlanner()` from `apps/extension/lib/integration.ts`,
+registered in the background context.
 
-```typescript
-// Phase 1: hardcoded click on e0. WS4 replaces this.
-```
-
-**What WS4 does:** Replace the hardcoded click with:
+**What WS4 does:**
 1. Build `PlanRequest` from the observation (using types from `@skrim/schema`)
 2. POST to the planning server (`apps/server/`)
 3. Validate `PlanResponse` with `ActionSchema`
@@ -736,17 +704,12 @@ verify → observe again. Not a batch.
 
 | What | Status | Who |
 |---|---|---|
-| Server planner call | Hardcoded click on e0 | WS4 |
-| Full ScreenElement extraction | Basic id/role/bbox only | WS2 |
+| Server planner call | Registration hook available, planner not registered yet | WS4 |
+| Full ScreenElement extraction | Registration hook available, provider not registered yet | WS2 |
 | PII detection + redaction | Not wired | WS3 |
 | Token vault | Not wired | WS3 |
 | Vision pipeline (OCR, face, icon detect) | Models fetched, not loaded | WS2+WS3 |
-| `type` action (fill form fields) | Returns UNSUPPORTED_ACTION | WS1 Phase 2 |
-| `scroll` action | Returns UNSUPPORTED_ACTION | WS1 Phase 2 |
-| `select` action | Returns UNSUPPORTED_ACTION | WS1 Phase 2 |
-| `navigate` action | Returns UNSUPPORTED_ACTION | WS1 Phase 2 |
-| `extract` action | Returns UNSUPPORTED_ACTION | WS1 Phase 2 |
-| `wait` action | Returns UNSUPPORTED_ACTION | WS1 Phase 2 |
+| `type`, `scroll`, `select`, `navigate`, `extract`, `wait` | Implemented in WS1 dispatcher; external planner/privacy integration still required | WS1 + other workstreams |
 | Screenshot in the loop | Wired but not called | WS2 |
 | Offscreen document (Chrome inference) | Not created | WS2 |
 | Dynamic injection (activeTab) | Using static `<all_urls>` match | WS1 (pre-PPT) |

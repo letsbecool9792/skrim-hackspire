@@ -17,6 +17,9 @@ up in the vault and type the real string. If resolution fails, abort the step â€
 the literal token into a form. That failure mode is the single most visible way this project
 can embarrass itself on stage.
 
+WS1 supplies the executor and accepts the resolver; WS3 owns the vault and provides the
+resolver. WS1 must not implement PII detection or token storage.
+
 **Enforce `isNavigationAllowed()`.** It is exported from `@skrim/schema`. The server is a
 remote machine we do not control; letting it pick an arbitrary destination turns a redaction
 bug into an exfiltration channel. Check every time, not once.

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ActionSchema } from "@skrim/schema";
+import { ActionSchema, ScreenElementSchema } from "@skrim/schema";
 import { ErrorCodeSchema } from "./errors.ts";
 import { TaskStatusSchema } from "./task-state.ts";
 
@@ -54,14 +54,18 @@ export const PageObservationSchema = z.object({
   observationVersion: z.number().int().nonnegative(),
   elementCount: z.number().int().nonnegative(),
   hasVisualCapture: z.boolean(),
+  graphAvailable: z.boolean().default(false),
+  elements: z.array(ScreenElementSchema).optional(),
 });
 export type PageObservationMessage = z.infer<typeof PageObservationSchema>;
 
 export const ActionResultSchema = z.object({
   type: z.literal("action.result"),
+  taskId: z.string().optional(),
   ok: z.boolean(),
   actionId: z.string(),
   changed: z.boolean(),
+  completed: z.boolean().default(false),
   errorCode: ErrorCodeSchema.optional(),
   observationVersion: z.number().int().nonnegative(),
 });

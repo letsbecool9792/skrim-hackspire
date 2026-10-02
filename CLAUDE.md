@@ -32,6 +32,7 @@ Settled in the setup session. Do not reopen without a reason.
 | **MV3 on both browsers** | Firefox MV3 event pages keep DOM access, so we get the offscreen-free path *and* "MV3 everywhere" on the slide. WXT defaults Firefox to MV2 — override it |
 | **Eval runs in a real browser** via Playwright | The rubric scores precision/recall on the shipped path. Node-side numbers would measure different code than we demo |
 | Ollama `qwen3-vl:4b` for air-gap | 6 GB VRAM ceiling. See "Hardware reality" |
+| **WS1 exposes registration hooks instead of owning perception/privacy/planning** | WS2 supplies the graph, WS3 supplies token resolution, and WS4 supplies one action per cycle; this prevents duplicate extractors and keeps browser execution independent |
 
 ### Provider config
 
@@ -260,6 +261,7 @@ Needs: base setup.
 - [`apps/extension/CLAUDE.md`](apps/extension/CLAUDE.md) — overall extension rules
 - [`apps/extension/lib/capture/CLAUDE.md`](apps/extension/lib/capture/CLAUDE.md) — screenshots, change detection
 - [`apps/extension/lib/actions/CLAUDE.md`](apps/extension/lib/actions/CLAUDE.md) — executing the 8 verbs
+- [`docs/ws1-workflow.md`](docs/ws1-workflow.md) — runtime flow and cross-workstream registration contracts
 - `apps/extension/wxt.config.ts` — manifest and permissions
 
 ### 2 · Screen graph — DOM extraction and vision fusion
