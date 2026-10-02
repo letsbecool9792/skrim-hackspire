@@ -34,6 +34,7 @@ export default defineConfig({
       // history" install warning. Nothing reads those fields today; see
       // CLAUDE.md "Open findings" before keeping it long-term.
       "tabs",
+      "offscreen", // model inference on Chrome (WebGPU/WASM unavailable in SW)
     ],
 
     browser_specific_settings: {
