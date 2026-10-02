@@ -1,0 +1,54 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+build/
+.output/          # wxt
+.wxt/             # wxt generated types
+*.zip
+
+# turbo
+.turbo/
+
+# env — never commit API keys
+.env
+.env.*
+!.env.example
+
+# python (scripts/)
+.venv/
+__pycache__/
+*.pyc
+
+# model weights — fetched by `pnpm models:fetch`, never committed
+*.onnx
+*.gguf
+*.pt
+*.safetensors
+*.traineddata
+*.tflite
+apps/extension/public/models/
+
+# ...except artifacts we export ourselves and must ship, because nobody
+# should need the Python venv just to run the extension. Git cannot negate
+# a path inside an ignored directory, so these live outside public/models/
+# and fetch-models.mjs copies them into place.
+!scripts/artifacts/
+!scripts/artifacts/*.onnx
+
+# editor / os
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# eval output
+packages/eval/results/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

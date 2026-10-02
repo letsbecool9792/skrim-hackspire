@@ -1,0 +1,30 @@
+{
+  "name": "skrim",
+  "version": "1.0.0",
+  "description": "A browser agent that never shows the server your data",
+  "private": true,
+  "scripts": {
+    "models:fetch": "node scripts/fetch-models.mjs",
+    "dev:extension": "pnpm --filter @skrim/extension dev",
+    "dev:server": "pnpm --filter @skrim/server dev",
+    "dev:dashboard": "pnpm --filter @skrim/dashboard dev",
+    "dev:web": "pnpm --filter @skrim/web dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run compile"
+  },
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.25.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@11.25.0",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "turbo": "^2.10.12",
+    "typescript": "^6.0.3"
+  }
+}

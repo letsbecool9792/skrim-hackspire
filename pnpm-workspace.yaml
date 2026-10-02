@@ -1,0 +1,13 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+# Node-side artifacts of @huggingface/transformers stay unbuilt: the extension
+# runs in a browser via onnxruntime-web, and Vite resolves the `browser` field
+# at bundle time, so none of it reaches the build output.
+# Flip onnxruntime-node + sharp to true ONLY if we ever run inference in Node.
+allowBuilds:
+  esbuild: true             # required - Vite's bundler, resolves native binary
+  onnxruntime-node: false   # 86MB native bindings, browser never loads them
+  protobufjs: false         # postinstall only wires up its CLI, unused
+  sharp: false              # libvips fetch; prebuilt binary already resolved
+  tesseract.js: false       # browser wasm ships via tesseract.js-core
