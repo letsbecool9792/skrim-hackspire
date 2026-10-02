@@ -52,7 +52,7 @@ type Mode = "all" | "page";
 const normalise = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
 /** Whether a page shows the user's own data. Regex and field hints only: no model. */
-export function isPersonalPage(observation: PageObservationMessage, texts: readonly string[]): boolean {
+export function isPersonalPage(observation: PageObservationMessage, texts: readonly string[], faces: number = 0): boolean {
   if (texts.some((text) => findRegexCandidates(text).length > 0)) return true;
   const elements = observation.elements ?? [];
   return elements.some((element, index) => {
@@ -97,13 +97,21 @@ export class PrivateNames {
   ) {}
 
   /** Before redacting a page view: decides whether it is personal, runs the model where needed, and learns its private names. */
-  async preparePage(observation: PageObservationMessage, texts: readonly string[]): Promise<{ personal: boolean; lookup: NameLookup }> {
-    const personal = isPersonalPage(observation, texts);
+  async preparePage(observation: PageObservationMessage, texts: readonly string[], faces: number = 0): Promise<{ personal: boolean; lookup: NameLookup }> {
+    const personal = isPersonalPage(observation, texts, faces);
     this.mode = personal ? "all" : "page";
     for (const element of observation.elements ?? []) {
       const field = observation.fields?.[element.id];
       const category = field ? fieldCategory(field.inputType, field.autocomplete) : undefined;
       if ((category === "NAME" || category === "ADDRESS") && element.value) this.remember(element.value, category);
+    }
+    for (const text of texts) {
+      for (const candidate of findRegexCandidates(text)) {
+        if (candidate.category === "EMAIL") {
+          const local = candidate.text.split("@")[0].replace(/[._+-]/g, " ");
+          if (local.length >= MIN_KNOWN_LENGTH) this.remember(local, "NAME");
+        }
+      }
     }
     await this.scan(personal ? texts : texts.filter((text) => MENTIONS_PAGE_CUE.test(text)));
     // Learn first, redact after: a name hidden in the header must be hidden
