@@ -213,10 +213,18 @@ directly.
 as the token resolver, and something still needs to register a planner that calls the server.
 That wiring *is* the vertical slice.
 
-**Screenshot permission is unverified.** WS1 cut the manifest permissions down to `tabs`.
-`captureVisibleTab` normally needs `activeTab` or all-sites host access; the static
-`<all_urls>` content script may or may not count. Test with the popup's **Capture page** button
-on a normal website.
+**Screenshot capture only works right after the user clicks the extension icon.** WS1 cut
+the permissions to `tabs`, and capture then failed on `https://example.com`. The `<all_urls>`
+content script does not count for `captureVisibleTab`, which needs `activeTab` or `<all_urls>`
+host access. Fixed by adding `activeTab`, which adds no install warning. The catch: `activeTab`
+ends when the tab navigates. Once the agent loop clicks through to a new page, background
+captures will fail again. At that point, either request `<all_urls>` host access or re-grant
+per page.
+
+**`tabs` looks unnecessary.** It only unlocks reading a tab's URL and title, and nothing in
+the extension reads them; `tabs.query`, `tabs.sendMessage` and `captureVisibleTab` all work
+without it. It also shows users a "Read your browsing history" install warning. Try removing it
+once the loop is wired and tested.
 
 **Re-run `pnpm models:fetch` after pulling.** WS3's PR now saves GLiNER's config as `config.json`,
 so existing local model folders have the old filename. WS3's PR description also notes a

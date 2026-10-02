@@ -25,7 +25,15 @@ export default defineConfig({
     // read this list in ten seconds. Every entry must be justifiable out loud.
     // Do not add one without saying why in the PR.
     permissions: [
-      "tabs", // captureVisibleTab for the vision pass
+      // captureVisibleTab requires activeTab or <all_urls>. The <all_urls>
+      // content script does NOT count - capture failed with "tabs" alone.
+      // activeTab is granted when the user clicks the extension icon, lasts
+      // until that tab navigates or closes, and adds no install warning.
+      "activeTab",
+      // Grants reading tab URLs and titles, and shows a "Read your browsing
+      // history" install warning. Nothing reads those fields today; see
+      // CLAUDE.md "Open findings" before keeping it long-term.
+      "tabs",
     ],
 
     browser_specific_settings: {
