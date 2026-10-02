@@ -4,13 +4,14 @@ import { log } from "@skrim/shared";
 import type { ErrorCode } from "../errors.ts";
 import { newActionId, newTaskId } from "../id.ts";
 import type { ActionPlanner } from "../integration.ts";
-import { parseMessage, type ActionResultMessage, type Message, type PageObservationMessage } from "../messages.ts";
+import { parseMessage, type ActionResultMessage, type Message } from "../messages.ts";
 import type { NameFinder } from "../pii/gliner.js";
-import { redactDomData, type NameLookup } from "../pii/redact.js";
+import { redactDomData } from "../pii/redact.js";
 import { DEFAULT_MAX_STEPS, DEFAULT_TIMEOUT_MS, MAX_CONSECUTIVE_UNVERIFIED } from "../task-state.ts";
 import { TokenVault } from "../vault/vault.js";
 import { PrivateNames } from "./private-names.ts";
-import { pageTexts, redactPage, redactText, resolveTokens, type RedactionCounts } from "./redact.ts";
+import { readPage } from "./read-page.ts";
+import { redactText, resolveTokens, type RedactionCounts } from "./redact.ts";
 
 /**
  * THE AGENT LOOP: observe -> redact -> plan -> act -> verify, one action per
@@ -140,20 +141,17 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     let previousGraph: ScreenGraph | undefined;
 
     for (step = 0; step < maxSteps; step++) {
-      const observation = await observe(link, taskId, signal);
-      if (!observation) {
+      const reading = await readPage(link, taskId, signal, names, vault, step);
+      if (!reading) {
         const reason = (await link.whyUnreachable?.()) ?? "Skrim cannot read this tab. Reload the page and try again.";
         return finish({ outcome: "failed", errorCode: "CONTENT_SCRIPT_ERROR", message: reason });
       }
-      if (!observation.graphAvailable) {
+      if (!reading.observation.graphAvailable) {
         return finish({ outcome: "failed", errorCode: "OBSERVATION_FAILED", message: "The page did not produce a screen graph." });
       }
-
-      const view = await names.preparePage(observation, pageTexts(observation));
-      signal.throwIfAborted();
-      const page = redactPage(observation, step, vault, view.lookup);
+      const { page } = reading;
       if (goal === undefined) {
-        goal = redactText(options.goal, vault, await names.prepareGoal(options.goal, view.personal));
+        goal = redactText(options.goal, vault, await names.prepareGoal(options.goal, reading.personal));
         onEvent({ type: "started", taskId, redactedGoal: goal });
       }
       onEvent({ type: "observed", step, elements: page.graph.elements.length, redactions: page.redactions, page: `${page.graph.url.origin}${page.graph.url.pathTemplate}` });
@@ -304,23 +302,6 @@ function joinNotes(first: string | undefined, second: string): string {
   return clip(first ? `${first}; ${second}` : second, 200);
 }
 
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
-  });
-}
-
-async function observe(link: PageLink, taskId: string, signal: AbortSignal): Promise<PageObservationMessage | null> {
-  // Right after a page load the new page's content script may not be ready.
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const reply = parseMessage(await link.send({ type: "page.observe", taskId }));
-    signal.throwIfAborted();
-    if (reply?.type === "page.observation") return reply;
-    await sleep(400, signal);
-  }
-  return null;
-}
 
 interface ActOutcome {
   verified: boolean;
