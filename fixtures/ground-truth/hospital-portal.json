@@ -1,0 +1,1 @@
+{"page":"hospital-portal.html","about":"A reconstructed hospital portal with fake patient identifiers and contact data.","pii":[{"category":"NAME","value":"Farah Siddiqui","where":"text"},{"category":"OTHER","value":"HP-482901","where":"text"},{"category":"PHONE","value":"+91 98111 22009","where":"text"}],"notPii":["Next appointment: 18 October","View care plan"]}

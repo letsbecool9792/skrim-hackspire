@@ -37,7 +37,7 @@ const PAGES = join(ROOT, "fixtures", "pages");
 const EXTENSION = join(ROOT, "apps", "extension", ".output", "chrome-mv3-eval");
 const RESULTS = join(ROOT, "packages", "eval", "results");
 
-/** Tall enough that no fixture has elements left out below the view: this scores detection. */
+/** Width and height of one evaluation viewport. */
 const VIEWPORT = { width: 1280, height: 2400 };
 
 /**
@@ -83,6 +83,42 @@ function serveFixtures(): Promise<{ server: Server; port: number }> {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, port: (server.address() as { port: number }).port })));
 }
 
+/**
+ * Merge two or more sequential viewport readings of the same long page.
+ *
+ * raw/redacted element arrays are concatenated in order: the index alignment
+ * within each reading is preserved because we append whole blocks. The scorer
+ * does a substring search over every element text, so elements from later
+ * viewports are naturally found alongside those from the first.
+ */
+function mergeReadings(readings: Reading[]): Reading {
+  const first = readings[0]!;
+  const last = readings[readings.length - 1]!;
+  return {
+    raw: {
+      title: first.raw.title,
+      elements: readings.flatMap((r) => r.raw.elements),
+    },
+    redacted: {
+      title: first.redacted.title,
+      elements: readings.flatMap((r) => r.redacted.elements),
+    },
+    personal: readings.some((r) => r.personal),
+    beyondView: {
+      above: first.beyondView.above,
+      below: last.beyondView.below,
+    },
+    timings: {
+      observeMs: readings.reduce((s, r) => s + r.timings.observeMs, 0),
+      visionMs: readings.reduce((s, r) => s + r.timings.visionMs, 0),
+      namesMs: readings.reduce((s, r) => s + r.timings.namesMs, 0),
+      redactMs: readings.reduce((s, r) => s + r.timings.redactMs, 0),
+    },
+    // "on" > "failed" > "off": prefer the most complete name-detection result.
+    nameModel: readings.some((r) => r.nameModel === "on") ? "on" : readings.some((r) => r.nameModel === "failed") ? "failed" : "off",
+  };
+}
+
 async function main(): Promise<void> {
   if (!existsSync(join(EXTENSION, "manifest.json"))) {
     throw new Error(`No eval build at ${EXTENSION}. Run: pnpm --filter @skrim/extension build:eval`);
@@ -104,6 +140,13 @@ async function main(): Promise<void> {
     await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
     await panel.waitForFunction(() => "__skrimEval" in window, undefined, { timeout: 15_000 });
 
+    /** Ask the side panel's eval hook to read the tab currently at `url`. */
+    const callReadTab = (url: string): Promise<Reading> =>
+      panel.evaluate(
+        (target) => (window as unknown as { __skrimEval: { readTab(url: string): Promise<Reading> } }).__skrimEval.readTab(target),
+        url,
+      );
+
     const read = async (page: string): Promise<Reading> => {
       const url = `${origin}/${page}`;
       const tab = await context.newPage();
@@ -111,10 +154,27 @@ async function main(): Promise<void> {
         await tab.goto(url, { waitUntil: "load" });
         // Text in pixels is read from a capture of the tab on screen.
         await tab.bringToFront();
-        return await panel.evaluate(
-          (target) => (window as unknown as { __skrimEval: { readTab(url: string): Promise<Reading> } }).__skrimEval.readTab(target),
-          url,
-        );
+
+        // First viewport (scrollY = 0).
+        const firstReading = await callReadTab(url);
+
+        // For long pages whose content extends beyond one viewport, scroll and
+        // read each subsequent viewport, then merge all readings. This ensures
+        // PII placed below the fold (e.g. after a tall spacer div) is included
+        // in the eval score rather than reported as "not in the page's text".
+        const scrollHeight: number = await tab.evaluate(() => document.documentElement.scrollHeight);
+        if (scrollHeight <= VIEWPORT.height) {
+          return firstReading;
+        }
+
+        const readings: Reading[] = [firstReading];
+        for (let scrollY = VIEWPORT.height; scrollY < scrollHeight; scrollY += VIEWPORT.height) {
+          await tab.evaluate((y) => window.scrollTo(0, y), scrollY);
+          // Brief pause so the content script observes the updated viewport.
+          await tab.waitForTimeout(200);
+          readings.push(await callReadTab(url));
+        }
+        return mergeReadings(readings);
       } finally {
         await tab.close();
       }

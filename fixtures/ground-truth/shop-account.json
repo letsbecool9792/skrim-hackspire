@@ -1,0 +1,1 @@
+{"page":"shop-account.html","about":"A reconstructed shop account page with fake account and delivery data.","pii":[{"category":"NAME","value":"Neel Das","where":"text"},{"category":"EMAIL","value":"neel.das@example.com","where":"text"},{"category":"ADDRESS","value":"22 River Lane, Chennai 600018","where":"text"}],"notPii":["Willow Market","#WM-2026-10384","Manage addresses"]}

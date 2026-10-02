@@ -1,0 +1,1 @@
+{"page":"bank-dashboard.html","about":"A reconstructed bank-dashboard layout with fake customer and account data.","pii":[{"category":"NAME","value":"Priya Menon","where":"text"},{"category":"ACCOUNT","value":"563210098765","where":"text"}],"notPii":["Northstar Bank","Available balance ₹84,250","Transfer money"]}
