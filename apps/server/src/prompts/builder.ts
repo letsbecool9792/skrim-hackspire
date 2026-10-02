@@ -49,7 +49,7 @@ export function renderRequest(request: PlanRequest): string {
   lines.push('', 'History, oldest first (element ids refer to the page as it was then):');
   if (request.history.length === 0) lines.push('(nothing yet, this is the first step)');
   request.history.forEach((step, index) => {
-    const outcome = step.verified ? 'verified' : `NOT verified${step.note ? `: ${step.note}` : ''}`;
+    const outcome = `${step.verified ? 'verified' : 'NOT verified'}${step.note ? `: ${step.note}` : ''}`;
     lines.push(`${index + 1}. ${renderAction(step.action)} -> ${outcome}`);
   });
 
