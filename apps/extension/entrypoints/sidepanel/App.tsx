@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { Action, PiiCategory } from "@skrim/schema";
-import { log } from "@skrim/shared";
 import type { ErrorCode } from "@/lib/errors.ts";
 import { getActionPlanner } from "@/lib/integration.ts";
 import { runAgentTask, type AgentEvent } from "@/lib/agent/loop.ts";
 import type { RedactionCounts } from "@/lib/agent/redact.ts";
 import type { NameFinder } from "@/lib/pii/gliner.ts";
 import { fetchServerInfo, type ServerInfo } from "@/lib/agent/server-planner.ts";
-import { explainTabAccess, tabLink } from "@/lib/agent/tab-link.ts";
-import { captureTab, type CaptureResult } from "@/lib/capture/screenshot.ts";
+import { tabLink } from "@/lib/agent/tab-link.ts";
 import { SERVER_URL } from "./config.ts";
 
 // ─── Chat model ────────────────────────────────────────────────────────────
@@ -35,15 +33,6 @@ interface TaskItem {
   warnings: string[];
   finished?: Finished;
 }
-
-interface NoteItem {
-  kind: "note";
-  id: number;
-  text: string;
-  tone: "info" | "error";
-}
-
-type ChatItem = TaskItem | NoteItem;
 
 function applyEvent(task: TaskItem, event: AgentEvent): TaskItem {
   switch (event.type) {
@@ -182,10 +171,38 @@ function StepRow({ step }: { step: StepView }) {
   );
 }
 
+/** How the task ended, with what stayed on the device one click away rather than under every answer. */
+function ResultCard({ finished }: { finished: Finished }) {
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const kept = describeCounts(finished.tokens);
+  return (
+    <div className={`result result-${finished.outcome}`}>
+      {finished.outcome === "completed" && <strong>✓ Done</strong>}
+      {finished.outcome === "cancelled" && <strong>Stopped</strong>}
+      {finished.outcome === "failed" && <strong>{ERROR_TITLES[finished.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? "Something went wrong"}</strong>}
+      {finished.summary && <p><Tokenised text={finished.summary} /></p>}
+      {finished.message && <p>{finished.message}</p>}
+      <div className="result-foot">
+        <small>
+          {finished.steps} step{finished.steps === 1 ? "" : "s"}
+          {finished.errorCode && finished.outcome === "failed" ? ` · ${finished.errorCode}` : ""}
+        </small>
+        <button className="info-button" type="button" onClick={() => setShowPrivacy((shown) => !shown)} aria-expanded={showPrivacy} aria-label="What stayed on this device" title="What stayed on this device">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 7.2v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /><circle cx="8" cy="4.9" r="0.9" fill="currentColor" /></svg>
+        </button>
+      </div>
+      {showPrivacy && (
+        <p className="privacy-detail">
+          {kept ? `Kept on this device: ${kept}. The server only saw placeholders.` : "No personal data found on these pages."}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function TaskView({ task }: { task: TaskItem }) {
   const { finished } = task;
   const showRedactedGoal = task.redactedGoal && task.redactedGoal !== task.goal;
-  const kept = finished ? describeCounts(finished.tokens) : "";
   return (
     <section className="turn">
       <div className="bubble-user">{task.goal}</div>
@@ -198,24 +215,7 @@ function TaskView({ task }: { task: TaskItem }) {
         {task.phase !== "done" && (
           <div className="working"><span className="spinner" aria-hidden="true" /> {PHASE_WORDS[task.phase]}…</div>
         )}
-        {finished && (
-          <div className={`result result-${finished.outcome}`}>
-            {finished.outcome === "completed" && <strong>✓ Done</strong>}
-            {finished.outcome === "cancelled" && <strong>Stopped</strong>}
-            {finished.outcome === "failed" && <strong>{ERROR_TITLES[finished.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? "Something went wrong"}</strong>}
-            {finished.summary && <p><Tokenised text={finished.summary} /></p>}
-            {finished.message && <p>{finished.message}</p>}
-            <small>
-              {finished.steps} step{finished.steps === 1 ? "" : "s"}
-              {finished.errorCode && finished.outcome === "failed" ? ` · ${finished.errorCode}` : ""}
-            </small>
-          </div>
-        )}
-        {finished && (
-          <p className="privacy-line">
-            🔒 {kept ? `Kept on this device: ${kept}. The server only saw placeholders.` : "No personal data found on these pages."}
-          </p>
-        )}
+        {finished && <ResultCard finished={finished} />}
       </div>
     </section>
   );
@@ -231,12 +231,14 @@ const findNames: NameFinder = async (texts) => {
   return texts.length === 0 ? [] : finder(texts);
 };
 
+const MAX_INPUT_HEIGHT = 160;
+
 const EXAMPLES = ["Click the first link on this page", "Search this site for wireless headphones", "Tick the checkbox and continue"];
 
 // ─── App ───────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [items, setItems] = useState<ChatItem[]>([]);
+  const [items, setItems] = useState<TaskItem[]>([]);
   const [draft, setDraft] = useState("");
   const [running, setRunning] = useState(false);
   const [server, setServer] = useState<ServerInfo | null | "checking">("checking");
@@ -266,13 +268,11 @@ export default function App() {
     const input = inputRef.current;
     if (!input) return;
     input.style.height = "auto";
-    input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+    input.style.height = `${Math.min(input.scrollHeight, MAX_INPUT_HEIGHT)}px`;
+    // A scrollbar only once the text outgrows the box. Before that, a
+    // fraction of a pixel of rounding showed its arrows on a one-line box.
+    input.style.overflowY = input.scrollHeight > MAX_INPUT_HEIGHT ? "auto" : "hidden";
   }, [draft]);
-
-  const addNote = (text: string, tone: NoteItem["tone"] = "info") => {
-    const id = nextId.current++;
-    setItems((current) => [...current, { kind: "note", id, text, tone }]);
-  };
 
   const start = async (text: string) => {
     const goal = text.trim();
@@ -282,7 +282,7 @@ export default function App() {
     const id = nextId.current++;
     setItems((current) => [...current, { kind: "task", id, goal, phase: "starting", steps: [], warnings: [] }]);
     const update = (event: AgentEvent) =>
-      setItems((current) => current.map((item) => (item.kind === "task" && item.id === id ? applyEvent(item, event) : item)));
+      setItems((current) => current.map((item) => (item.id === id ? applyEvent(item, event) : item)));
 
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     if (tab?.id === undefined) {
@@ -304,35 +304,6 @@ export default function App() {
 
   const stop = () => controllerRef.current?.abort();
 
-  const readPageText = async () => {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id === undefined) {
-      addNote("There is no tab to read.", "error");
-      return;
-    }
-    let capture: CaptureResult;
-    try {
-      capture = await captureTab(tab.id);
-    } catch {
-      addNote(`Could not capture this tab. ${await explainTabAccess(tab.id)}`, "error");
-      return;
-    }
-    addNote("Reading this tab's text with on-device OCR…");
-    try {
-      const startedAt = performance.now();
-      const { recognizeText } = await import("@/lib/vision/ocr");
-      const words = await recognizeText(capture.dataUri);
-      const seconds = ((performance.now() - startedAt) / 1000).toFixed(1);
-      const confident = words.filter((word) => word.confidence >= 0.6).length;
-      const preview = words.slice(0, 12).map((word) => word.text).join(" ");
-      // Shown here only. Page text is never logged or sent anywhere.
-      addNote(`OCR read ${words.length} words (${confident} confident) in ${seconds} s, on this device. It starts: “${preview}”`);
-    } catch (error) {
-      log.warn("sidepanel.ocrFailed", { error: error instanceof Error ? error.name : "unknown" });
-      addNote(`OCR failed: ${error instanceof Error ? error.message : String(error)}. If this persists, run pnpm models:fetch, rebuild, and reload the extension.`, "error");
-    }
-  };
-
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -347,7 +318,6 @@ export default function App() {
         <div className="brand"><span className="mark" aria-hidden="true">S</span><strong>Skrim</strong></div>
         <ServerChip info={server} onRetry={() => void checkServer()} />
         <div className="topbar-actions">
-          <button className="icon-button" type="button" onClick={() => void readPageText()} title="Test: read this tab's text with on-device OCR" aria-label="Read this tab's text with OCR">Aa</button>
           <button className="icon-button" type="button" onClick={() => setItems([])} disabled={running || items.length === 0} title="Clear the chat" aria-label="Clear the chat">⌫</button>
         </div>
       </header>
@@ -365,11 +335,7 @@ export default function App() {
             <p className="fine">Nothing is saved. Closing this panel stops the task and clears the chat.</p>
           </div>
         )}
-        {items.map((item) =>
-          item.kind === "task"
-            ? <TaskView key={item.id} task={item} />
-            : <p key={item.id} className={`note note-${item.tone}`}>{item.text}</p>,
-        )}
+        {items.map((item) => <TaskView key={item.id} task={item} />)}
         <div ref={endRef} />
       </main>
 

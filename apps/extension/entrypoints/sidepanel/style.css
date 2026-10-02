@@ -103,13 +103,16 @@ button:disabled { cursor: default; opacity: 0.45; }
 
 .result { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .result p { margin: 4px 0 0; }
-.result small { display: block; margin-top: 6px; color: var(--muted); font-size: 11.5px; }
+.result small { color: var(--muted); font-size: 11.5px; }
+.result-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.info-button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
+.info-button:hover, .info-button[aria-expanded="true"] { background: var(--surface-2); color: var(--text); }
+.result .privacy-detail { margin-top: 6px; color: var(--muted); font-size: 12px; }
 .result-completed { border-color: var(--ok); }
 .result-completed strong { color: var(--ok); }
 .result-failed { border-color: var(--bad); background: var(--bad-soft); }
 .result-failed strong { color: var(--bad); }
 .result-cancelled strong { color: var(--muted); }
-.privacy-line { margin: 0; color: var(--muted); font-size: 12px; }
 
 .token { display: inline-block; padding: 0 6px; border-radius: 6px; background: var(--token-bg); color: var(--token-text); font-size: 0.9em; font-weight: 600; white-space: nowrap; }
 .bubble-user .token { background: rgba(255, 255, 255, 0.25); color: inherit; }
@@ -120,7 +123,7 @@ button:disabled { cursor: default; opacity: 0.45; }
 /* ── Composer ────────────────────────────────────────────── */
 .composer { display: flex; align-items: flex-end; gap: 8px; margin: 0 12px 12px; padding: 8px 8px 8px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
 .composer:focus-within { border-color: var(--accent); }
-.composer textarea { flex: 1; max-height: 160px; padding: 5px 0; border: 0; outline: none; background: transparent; resize: none; }
+.composer textarea { flex: 1; max-height: 160px; padding: 5px 0; border: 0; outline: none; background: transparent; resize: none; overflow-y: hidden; }
 .composer textarea::placeholder { color: var(--muted); }
 .send { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-size: 16px; font-weight: 800; }
 .send.stop { background: var(--bad); color: #fff; font-size: 12px; }
