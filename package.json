@@ -11,6 +11,7 @@
     "dev:web": "pnpm --filter @skrim/web dev",
     "smoke:server": "pnpm --filter @skrim/server smoke",
     "demo:pii": "pnpm --filter @skrim/extension demo:pii",
+    "test:agent": "pnpm --filter @skrim/extension test:agent",
     "build": "turbo run build",
     "typecheck": "turbo run compile",
     "test": "turbo run test",
