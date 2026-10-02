@@ -16,9 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `version:` here on purpose. The root package.json has a
+      # "packageManager": "pnpm@x.y.z" field, and action-setup HARD FAILS if the
+      # version is specified in both places. package.json wins because it also
+      # pins the version for everyone locally.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - uses: actions/setup-node@v4
         with:
