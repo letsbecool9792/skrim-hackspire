@@ -26,7 +26,7 @@ export function createContentHandler(getObservationVersion: () => number) {
       }
       const result = await provider();
       currentRegistry = result.registry;
-      return { type: "page.observation", taskId: message.taskId, observationVersion: getObservationVersion(), elementCount: result.elements.length, hasVisualCapture: result.hasVisualCapture, graphAvailable: true, elements: result.elements, fields: result.fields, ...page };
+      return { type: "page.observation", taskId: message.taskId, observationVersion: getObservationVersion(), elementCount: result.elements.length, hasVisualCapture: result.hasVisualCapture, graphAvailable: true, elements: result.elements, fields: result.fields, ...(result.beyondView ? { beyondView: result.beyondView } : {}), ...page };
     }
 
     if (message.type === "action.execute") {

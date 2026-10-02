@@ -74,6 +74,7 @@ export function redactPage(observation: PageObservationMessage, cycle: number, v
       title,
       viewport: observation.viewport ?? { width: 0, height: 0 },
       elements,
+      ...(observation.beyondView ? { beyondView: observation.beyondView } : {}),
       manifest: { regions: [], tokensInPlay: [...tokensInPlay] },
     },
     redactions,

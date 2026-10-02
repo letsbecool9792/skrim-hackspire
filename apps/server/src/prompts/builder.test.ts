@@ -64,4 +64,11 @@ describe('renderRequest', () => {
   test('never sends the screenshot as text', () => {
     assert.doesNotMatch(text, /base64/);
   });
+
+  test('says how much of the page is not listed, and only when something is', () => {
+    const long = renderRequest({ ...request, graph: { ...request.graph, beyondView: { above: 0, below: 950 } } });
+    assert.match(long, /^Not listed: 0 more elements above the view and 950 below\. Scroll to reach them\.$/m);
+    assert.doesNotMatch(text, /Not listed/);
+    assert.doesNotMatch(renderRequest({ ...request, graph: { ...request.graph, beyondView: { above: 0, below: 0 } } }), /Not listed/);
+  });
 });

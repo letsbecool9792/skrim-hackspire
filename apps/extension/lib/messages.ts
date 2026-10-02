@@ -63,6 +63,8 @@ export const PageObservationSchema = z.object({
   /** RAW document.title. */
   title: z.string().optional(),
   viewport: z.object({ width: z.number(), height: z.number() }).optional(),
+  /** How many elements were left out, above and below the view. */
+  beyondView: z.object({ above: z.number().int().nonnegative(), below: z.number().int().nonnegative() }).optional(),
 });
 export type PageObservationMessage = z.infer<typeof PageObservationSchema>;
 

@@ -23,7 +23,23 @@ export interface DomScreenGraph {
   registry: Map<string, Element>;
   /** Element id -> field type and autocomplete hint, for form fields that have them. */
   fields: Record<string, FieldInfo>;
+  /** How many elements were left out for being too far above or below the view. */
+  beyondView: { above: number; below: number };
 }
+
+/**
+ * How far past the edges of the view, in viewport heights, elements are
+ * still listed. The planner works on what the user could see; the rest is a
+ * count and a scroll away.
+ */
+const VIEW_MARGIN = 0.25;
+/**
+ * Most elements listed in one view, nearest the view first. Wikipedia's main
+ * page has about 1,900; at ~20 prompt tokens each that is far past Groq's
+ * 7,000 tokens a minute, a local model's context, and seconds of name
+ * detection, all to find a search box at the top.
+ */
+const MAX_ELEMENTS = 120;
 
 /**
  * Extracts a generic representation of the current page.
@@ -48,21 +64,9 @@ export function extractScreenGraph(): DomScreenGraph {
   const registry = new Map<string, Element>();
   const fields: Record<string, FieldInfo> = {};
   const includedElements = new Map<Element, ScreenElement>();
-  const candidates = document.querySelectorAll("*");
+  const { listed, beyondView } = elementsNearView();
 
-  for (const element of candidates) {
-    if (!isRelevantElement(element)) {
-      continue;
-    }
-
-    if (!isVisible(element)) {
-      continue;
-    }
-
-    if (isAriaHidden(element)) {
-      continue;
-    }
-
+  for (const element of listed) {
     const label = getAccessibleName(element);
     const value = getValue(element, label);
     const hint = getHint(element);
@@ -90,7 +94,41 @@ export function extractScreenGraph(): DomScreenGraph {
     ScreenElementSchema.parse(element);
   }
 
-  return { elements, registry, fields };
+  return { elements, registry, fields, beyondView };
+}
+
+/**
+ * The visible elements in or near the view, in document order, and a count
+ * of those left out above and below. Position is checked before style: on a
+ * long page most elements are far away, and getComputedStyle is the slow part.
+ */
+function elementsNearView(): { listed: Element[]; beyondView: { above: number; below: number } } {
+  const top = -VIEW_MARGIN * window.innerHeight;
+  const bottom = (1 + VIEW_MARGIN) * window.innerHeight;
+  const beyondView = { above: 0, below: 0 };
+  const near: { element: Element; index: number; distance: number; above: boolean }[] = [];
+
+  for (const element of document.querySelectorAll("*")) {
+    if (!isRelevantElement(element)) continue;
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    if (rect.bottom < top || rect.top > bottom) {
+      // A count, so no style check: having a size is visible enough.
+      if (!isAriaHidden(element)) beyondView[rect.bottom < top ? "above" : "below"]++;
+      continue;
+    }
+    if (!isVisible(element) || isAriaHidden(element)) continue;
+    const distance = rect.bottom < 0 ? -rect.bottom : rect.top > window.innerHeight ? rect.top - window.innerHeight : 0;
+    near.push({ element, index: near.length, distance, above: rect.bottom < 0 });
+  }
+
+  if (near.length > MAX_ELEMENTS) {
+    const dropped = [...near].sort((left, right) => left.distance - right.distance || left.index - right.index).slice(MAX_ELEMENTS);
+    const droppedSet = new Set(dropped);
+    for (const item of dropped) beyondView[item.above ? "above" : "below"]++;
+    return { listed: near.filter((item) => !droppedSet.has(item)).map((item) => item.element), beyondView };
+  }
+  return { listed: near.map((item) => item.element), beyondView };
 }
 
 /**
