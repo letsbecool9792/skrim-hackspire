@@ -184,6 +184,46 @@ skrim/
 
 ---
 
+## Open findings — revisit later
+
+Noted while merging the team's first PRs. None of these block the merges; each needs a
+decision or a follow-up. Delete an entry once it is dealt with.
+
+**The server's model probably does not exist on NVIDIA.** NVIDIA's public model list
+(`https://integrate.api.nvidia.com/v1/models`, 81 models) contains no Qwen models at all.
+That rules out both `qwen/qwen3.5-397b-a17b` (the `.env.example` value) and
+`qwen/qwen2-vl-72b-instruct` (the fallback in `apps/server/src/config.ts`, used when
+`NVIDIA_MODEL` is unset). If that holds, every `/plan` call fails with `provider_error`.
+Open-weight vision models that *are* listed: `meta/llama-3.2-11b-vision-instruct`,
+`meta/llama-3.2-90b-vision-instruct`, `google/gemma-3-4b-it`, `google/gemma-3-12b-it`,
+`microsoft/phi-3-vision-128k-instruct`. The public list may not be exhaustive, so confirm with
+one authenticated request per slug before changing anything. This also puts the locked
+"Qwen3-VL as the server brain" decision in question.
+
+**The server's fallback model and `.env.example` disagree.** Pick one value for both once the
+model question above is settled.
+
+**`openai` is an unused dependency in `apps/server`.** The provider adapter calls `fetch`
+directly.
+
+**The agent loop does not close, even after all four PRs merge.** WS1's hooks in
+`apps/extension/lib/integration.ts` (`registerScreenGraphProvider`, `registerTokenResolver`,
+`registerActionPlanner`) had no callers, and nothing in the extension calls the server's
+`/plan`. The WS2 merge wires the screen-graph provider. The WS3 vault still needs registering
+as the token resolver, and something still needs to register a planner that calls the server.
+That wiring *is* the vertical slice.
+
+**Screenshot permission is unverified.** WS1 cut the manifest permissions down to `tabs`.
+`captureVisibleTab` normally needs `activeTab` or all-sites host access; the static
+`<all_urls>` content script may or may not count. Test with the popup's **Capture page** button
+on a normal website.
+
+**Re-run `pnpm models:fetch` after pulling.** WS3's PR now saves GLiNER's config as `config.json`,
+so existing local model folders have the old filename. WS3's PR description also notes a
+GLiNER model-loading limitation still under investigation.
+
+---
+
 ## Setup — fresh clone
 
 ```powershell
