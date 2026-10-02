@@ -66,13 +66,13 @@ crunch, and a study run can use up the day's quota before a demo.
 
 ### Naming
 
-The product is **Skrim**; the team is **tropical crush**.
+The product is **Skrim**; the team is **Chipotle**.
 
 | Where | Spelling |
 |---|---|
 | Anything a person reads: extension name, side panel, landing page, docs | `Skrim` |
 | GitHub repo, npm scope `@skrim/*`, `window.__skrimEval` in eval builds | `skrim` |
-| Firefox add-on id (`wxt.config.ts`) | `skrim@tropical-crush` |
+| Firefox add-on id (`wxt.config.ts`) | `skrim@chipotle` |
 
 If the name ever changes:
 - Search with `git grep -i` for the old name, not just the npm scope. The message strings, the

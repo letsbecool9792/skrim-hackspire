@@ -72,7 +72,7 @@ export default defineConfig({
 
     browser_specific_settings: {
       gecko: {
-        id: "skrim@tropical-crush",
+        id: "skrim@chipotle",
         strict_min_version: "128.0",
         // Required of new Firefox add-ons since 3 Nov 2025. The planning
         // server receives the page's structure and text, with personal data

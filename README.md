@@ -8,7 +8,7 @@ model that does the thinking only ever sees a scrubbed description of the page, 
 private value swapped for a placeholder like `<PII:EMAIL:1>`. The extension swaps the real value
 back in only at the moment it types it.
 
-Built by team **tropical crush**. Chrome and Firefox (MV3); Firefox is untried so far.
+Built by team **Chipotle**. Chrome and Firefox (MV3); Firefox is untried so far.
 
 ## Contents
 
