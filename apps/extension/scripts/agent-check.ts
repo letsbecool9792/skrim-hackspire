@@ -44,6 +44,7 @@ const { domScreenGraphProvider } = await import("../lib/dom/provider.ts");
 const { registerScreenGraphProvider } = await import("../lib/integration.ts");
 const { runAgentTask } = await import("../lib/agent/loop.ts");
 const { createServerPlanner, fetchServerInfo } = await import("../lib/agent/server-planner.ts");
+const { loadNameFinderNode } = await import("../lib/pii/ner-node.ts");
 
 const SERVER_URL = (process.env.SKRIM_SERVER_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const FIXTURES = fileURLToPath(new URL("../../../fixtures/pages/", import.meta.url));
@@ -69,7 +70,8 @@ const SCENARIOS: Scenario[] = [
     goal: "Send support a message saying my parcel is late. Use my email from the account box.",
     check: () => byId<HTMLInputElement>("email").value === "asha.rao@example.com" && /Thanks/.test(byId("status").textContent ?? ""),
     expected: "the form was sent with the account's email",
-    secrets: ["asha.rao@example.com", "+91 98765 43210", "98765 43210"],
+    // The name and address are only caught by the GLiNER model.
+    secrets: ["asha.rao@example.com", "+91 98765 43210", "98765 43210", "Asha Rao", "12 MG Road"],
   },
 ];
 
@@ -89,7 +91,9 @@ if (!info) {
   console.error(`\nNo server at ${SERVER_URL}. Start it in another terminal first:\n\n  pnpm dev:server\n`);
   process.exit(1);
 }
-console.log(`\nServer ${SERVER_URL} - provider ${info.provider}, model ${info.model}\n`);
+const findNames = (await loadNameFinderNode()) ?? undefined;
+console.log(`\nServer ${SERVER_URL} - provider ${info.provider}, model ${info.model}`);
+console.log(`Name and address detection: ${findNames ? "on (GLiNER)" : "OFF - run pnpm models:fetch"}\n`);
 
 initObserver();
 registerScreenGraphProvider(domScreenGraphProvider);
@@ -117,6 +121,7 @@ for (const [index, scenario] of SCENARIOS.entries()) {
       watchNavigation: () => ({ started: false, loaded: async () => true, stop: () => {} }),
     },
     signal: new AbortController().signal,
+    findNames,
     onEvent: (event) => {
       if (event.type === "planned") {
         const { reason: _reason, ...action } = event.action;

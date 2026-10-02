@@ -5,6 +5,7 @@ import type { ErrorCode } from "@/lib/errors.ts";
 import { getActionPlanner } from "@/lib/integration.ts";
 import { runAgentTask, type AgentEvent } from "@/lib/agent/loop.ts";
 import type { RedactionCounts } from "@/lib/agent/redact.ts";
+import type { NameFinder } from "@/lib/pii/gliner.ts";
 import { fetchServerInfo, type ServerInfo } from "@/lib/agent/server-planner.ts";
 import { explainTabAccess, tabLink } from "@/lib/agent/tab-link.ts";
 import { captureTab, type CaptureResult } from "@/lib/capture/screenshot.ts";
@@ -31,6 +32,7 @@ interface TaskItem {
   phase: "starting" | "reading" | "planning" | "acting" | "done";
   steps: StepView[];
   redactions?: RedactionCounts;
+  warnings: string[];
   finished?: Finished;
 }
 
@@ -54,6 +56,8 @@ function applyEvent(task: TaskItem, event: AgentEvent): TaskItem {
       return { ...task, phase: "acting", steps: [...task.steps, { step: event.step, action: event.action, targetLabel: event.targetLabel, latencyMs: event.latencyMs }] };
     case "acted":
       return { ...task, phase: "reading", steps: task.steps.map((s) => (s.step === event.step ? { ...s, verified: event.verified, note: event.note } : s)) };
+    case "warning":
+      return { ...task, warnings: [...task.warnings, event.message] };
     case "finished":
       return { ...task, phase: "done", finished: event };
   }
@@ -189,6 +193,7 @@ function TaskView({ task }: { task: TaskItem }) {
         {showRedactedGoal && (
           <p className="sent-as">Sent to the server as: <Tokenised text={task.redactedGoal!} /></p>
         )}
+        {task.warnings.map((warning) => <p key={warning} className="note note-error">{warning}</p>)}
         {task.steps.length > 0 && <ol className="steps">{task.steps.map((step) => <StepRow key={step.step} step={step} />)}</ol>}
         {task.phase !== "done" && (
           <div className="working"><span className="spinner" aria-hidden="true" /> {PHASE_WORDS[task.phase]}…</div>
@@ -216,6 +221,16 @@ function TaskView({ task }: { task: TaskItem }) {
   );
 }
 
+/**
+ * GLiNER finds names and addresses. Loaded on demand, so ONNX Runtime stays out
+ * of the panel's first paint.
+ */
+const findNames: NameFinder = async (texts) => {
+  const { loadNameFinder } = await import("@/lib/pii/ner-browser.ts");
+  const finder = await loadNameFinder();
+  return texts.length === 0 ? [] : finder(texts);
+};
+
 const EXAMPLES = ["Click the first link on this page", "Search this site for wireless headphones", "Tick the checkbox and continue"];
 
 // ─── App ───────────────────────────────────────────────────────────────────
@@ -237,6 +252,8 @@ export default function App() {
 
   useEffect(() => {
     void checkServer();
+    // Start loading the name model now, so the first task does not wait for it.
+    findNames([]).catch(() => {});
     // Closing the panel ends the task: the loop and its vault live here.
     return () => controllerRef.current?.abort();
   }, [checkServer]);
@@ -263,7 +280,7 @@ export default function App() {
     if (!goal || running || !planner) return;
     setDraft("");
     const id = nextId.current++;
-    setItems((current) => [...current, { kind: "task", id, goal, phase: "starting", steps: [] }]);
+    setItems((current) => [...current, { kind: "task", id, goal, phase: "starting", steps: [], warnings: [] }]);
     const update = (event: AgentEvent) =>
       setItems((current) => current.map((item) => (item.kind === "task" && item.id === id ? applyEvent(item, event) : item)));
 
@@ -277,7 +294,7 @@ export default function App() {
     controllerRef.current = controller;
     setRunning(true);
     try {
-      await runAgentTask({ goal, planner, link: tabLink(tab.id), signal: controller.signal, onEvent: update });
+      await runAgentTask({ goal, planner, link: tabLink(tab.id), signal: controller.signal, onEvent: update, findNames });
     } finally {
       controllerRef.current = null;
       setRunning(false);

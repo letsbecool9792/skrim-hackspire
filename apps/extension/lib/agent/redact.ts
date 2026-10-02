@@ -6,7 +6,7 @@ import {
   type ScreenGraph,
 } from "@skrim/schema";
 
-import { detectText, redactDomData, redactMatches } from "../pii/redact.js";
+import { detectText, redactDomData, redactMatches, type NameLookup } from "../pii/redact.js";
 import { TokenVault } from "../vault/vault.js";
 import type { PageObservationMessage } from "../messages.ts";
 
@@ -24,19 +24,29 @@ export interface RedactedPage {
   redactions: RedactionCounts;
 }
 
-export function redactText(text: string, vault: TokenVault): string {
-  return redactMatches(text, detectText(text, vault));
+export function redactText(text: string, vault: TokenVault, names?: NameLookup): string {
+  return redactMatches(text, detectText(text, vault, undefined, names));
 }
 
-export function redactPage(observation: PageObservationMessage, cycle: number, vault: TokenVault): RedactedPage {
+/** Every raw text in a page view that redaction will look at: what the name finder must scan. */
+export function pageTexts(observation: PageObservationMessage): string[] {
+  const texts = new Set<string>();
+  if (observation.title) texts.add(observation.title);
+  for (const element of observation.elements ?? []) {
+    for (const text of [element.label, element.value, element.hint]) if (text) texts.add(text);
+  }
+  return [...texts];
+}
+
+export function redactPage(observation: PageObservationMessage, cycle: number, vault: TokenVault, names?: NameLookup): RedactedPage {
   const redactions: RedactionCounts = {};
   const count = (category: PiiCategory) => { redactions[category] = (redactions[category] ?? 0) + 1; };
 
   const elements: ScreenElement[] = (observation.elements ?? []).map((element) => {
     const field = observation.fields?.[element.id];
-    const redacted = redactDomData({ label: element.label, value: element.value, ...field }, vault);
+    const redacted = redactDomData({ label: element.label, value: element.value, ...field }, vault, names);
     redacted.detections.forEach((detection) => count(detection.category));
-    const hintMatches = element.hint ? detectText(element.hint, vault) : [];
+    const hintMatches = element.hint ? detectText(element.hint, vault, undefined, names) : [];
     hintMatches.forEach((match) => count(match.category));
     return {
       ...element,
@@ -46,7 +56,7 @@ export function redactPage(observation: PageObservationMessage, cycle: number, v
     };
   });
 
-  const titleMatches = detectText(observation.title ?? "", vault);
+  const titleMatches = detectText(observation.title ?? "", vault, undefined, names);
   titleMatches.forEach((match) => count(match.category));
   const title = redactMatches(observation.title ?? "", titleMatches);
 
