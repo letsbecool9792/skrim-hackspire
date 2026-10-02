@@ -224,70 +224,156 @@ function hasTextContainerAncestor(element: HTMLElement): boolean {
   return false;
 }
 
+const MAX_ACCESSIBLE_NAME_LENGTH = 200;
+
+const TEXT_ENTRY_INPUT_TYPES = new Set([
+  "text",
+  "email",
+  "password",
+  "search",
+  "tel",
+  "url",
+  "number",
+]);
+
+const TEXT_FALLBACK_ROLES = new Set<ScreenElement["role"]>([
+  "button",
+  "link",
+  "heading",
+  "option",
+  "menuitem",
+  "tab",
+  "cell",
+  "listitem",
+  "text",
+]);
+
 function getAccessibleName(element: Element): string | undefined {
   const htmlElement = element as HTMLElement;
 
   // 1. aria-label
-  const ariaLabel = htmlElement.getAttribute("aria-label")?.trim();
+  const ariaLabel = normalizeText(htmlElement.getAttribute("aria-label"));
   if (ariaLabel) {
     return ariaLabel;
   }
 
   // 2. aria-labelledby
-  const labelledBy = htmlElement.getAttribute("aria-labelledby");
+  const labelledBy = getAriaLabelledByText(element);
   if (labelledBy) {
-    const text = labelledBy
-      .split(/\s+/)
-      .map((id) => document.getElementById(id)?.textContent?.trim())
-      .filter(Boolean)
-      .join(" ");
-
-    if (text) {
-      return text;
-    }
+    return labelledBy;
   }
 
   // 3. Associated <label>
-  if (htmlElement instanceof HTMLInputElement) {
-    if (htmlElement.id) {
-      const label = document.querySelector(
-        `label[for="${CSS.escape(htmlElement.id)}"]`,
-      );
-
-      const text = label?.textContent?.trim();
-      if (text) {
-        return text;
-      }
-    }
+  const associatedLabel = getAssociatedLabelText(element);
+  if (associatedLabel) {
+    return associatedLabel;
   }
 
   // 4. Placeholder
-  if (
-    htmlElement instanceof HTMLInputElement ||
-    htmlElement instanceof HTMLTextAreaElement
-  ) {
-    const placeholder = htmlElement.placeholder?.trim();
+  if (isTextEntryControl(element)) {
+    const placeholder = normalizeText(element.placeholder);
     if (placeholder) {
       return placeholder;
     }
   }
 
   // 5. Text content
-  const textContent = htmlElement.textContent?.trim();
+  const textContent = getTextFallback(element);
   if (textContent) {
-    return textContent.slice(0, 200);
+    return textContent;
   }
 
   // 6. title
-  const title = htmlElement.getAttribute("title")?.trim();
+  const title = normalizeText(htmlElement.getAttribute("title"));
   if (title) {
     return title;
   }
 
   // 7. alt text for images
-  const alt = htmlElement.getAttribute("alt")?.trim();
+  const alt = getAltText(element);
   if (alt) {
     return alt;
+  }
+
+  return undefined;
+}
+
+function normalizeText(text: string | null | undefined): string | undefined {
+  const normalized = text?.trim().replace(/\s+/g, " ");
+  return normalized ? normalized.slice(0, MAX_ACCESSIBLE_NAME_LENGTH) : undefined;
+}
+
+function getAriaLabelledByText(element: Element): string | undefined {
+  const labelledBy = element.getAttribute("aria-labelledby");
+  if (!labelledBy) {
+    return undefined;
+  }
+
+  const seenIds = new Set<string>();
+  const parts: string[] = [];
+
+  for (const id of labelledBy.trim().split(/\s+/)) {
+    if (!id || seenIds.has(id)) {
+      continue;
+    }
+
+    seenIds.add(id);
+    const text = normalizeText(document.getElementById(id)?.textContent);
+    if (text) {
+      parts.push(text);
+    }
+  }
+
+  return normalizeText(parts.join(" "));
+}
+
+function getAssociatedLabelText(element: Element): string | undefined {
+  if (!isLabelableControl(element)) {
+    return undefined;
+  }
+
+  return normalizeText(
+    Array.from(element.labels ?? [])
+      .map((label) => normalizeText(label.textContent))
+      .filter((text): text is string => Boolean(text))
+      .join(" "),
+  );
+}
+
+function isLabelableControl(
+  element: Element,
+): element is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
+  return (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLSelectElement
+  );
+}
+
+function isTextEntryControl(
+  element: Element,
+): element is HTMLInputElement | HTMLTextAreaElement {
+  return (
+    element instanceof HTMLTextAreaElement ||
+    (element instanceof HTMLInputElement && TEXT_ENTRY_INPUT_TYPES.has(element.type))
+  );
+}
+
+function getTextFallback(element: Element): string | undefined {
+  if (!TEXT_FALLBACK_ROLES.has(getRole(element))) {
+    return undefined;
+  }
+
+  return normalizeText(element.textContent);
+}
+
+function getAltText(element: Element): string | undefined {
+  if (element instanceof HTMLImageElement) {
+    return normalizeText(element.alt);
+  }
+
+  if (element instanceof HTMLInputElement && element.type === "image") {
+    return normalizeText(element.alt);
   }
 
   return undefined;
