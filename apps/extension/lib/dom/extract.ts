@@ -1,5 +1,6 @@
 import {
   ScreenElementSchema,
+  type ElementState,
   type ScreenElement,
 } from "@skrim/schema";
 
@@ -503,39 +504,171 @@ function getBoundingBox(element: Element): ScreenElement["bbox"] {
 }
 
 function getState(element: Element): ScreenElement["state"] {
-  if (!(element instanceof HTMLElement)) {
-    return [];
+  const states = new Set<ElementState>();
+  const nativeDisabled = isNativeDisabled(element);
+  const ariaDisabled = getAriaBoolean(element, "aria-disabled");
+  const disabled = nativeDisabled || ariaDisabled === true;
+  const nativeReadonly = isNativeReadonly(element);
+
+  if (disabled) {
+    states.add("disabled");
   }
 
-  const states: NonNullable<ScreenElement["state"]> = [];
-
-  if ("disabled" in element && element.disabled) {
-    states.push("disabled");
+  if (isNativeCheckableControl(element)) {
+    const nativeChecked = getNativeCheckedState(element);
+    if (nativeChecked) {
+      setCheckedState(states, nativeChecked);
+    }
+  } else {
+    const ariaChecked = getAriaBoolean(element, "aria-checked");
+    if (ariaChecked !== undefined) {
+      setCheckedState(states, ariaChecked ? "checked" : "unchecked");
+    }
   }
 
-  if ("checked" in element && element.checked) {
-    states.push("checked");
+  if (element instanceof HTMLOptionElement) {
+    if (element.selected) {
+      states.add("selected");
+    }
+  } else if (getAriaBoolean(element, "aria-selected") === true) {
+    states.add("selected");
   }
 
-  if ("selected" in element && element.selected) {
-    states.push("selected");
+  if (
+    (isNativeRequiredControl(element) && element.required) ||
+    getAriaBoolean(element, "aria-required") === true
+  ) {
+    states.add("required");
   }
 
-  if ("required" in element && element.required) {
-    states.push("required");
+  if (nativeReadonly) {
+    states.add("readonly");
+  }
+
+  if (isNativeEditable(element) && !disabled && !nativeReadonly) {
+    setEditableState(states);
+  }
+
+  if (isAriaInvalid(element)) {
+    states.add("invalid");
+  }
+
+  const ariaExpanded = getAriaBoolean(element, "aria-expanded");
+  if (ariaExpanded !== undefined) {
+    setExpandedState(states, ariaExpanded ? "expanded" : "collapsed");
   }
 
   if (document.activeElement === element) {
-    states.push("focused");
+    states.add("focused");
   }
 
-  if ("readOnly" in element && element.readOnly) {
-    states.push("readonly");
+  return [...states];
+}
+
+function isNativeDisabled(element: Element): boolean {
+  return isNativeDisableable(element) && element.matches(":disabled");
+}
+
+function isNativeDisableable(
+  element: Element,
+): element is
+  | HTMLButtonElement
+  | HTMLInputElement
+  | HTMLSelectElement
+  | HTMLTextAreaElement
+  | HTMLOptionElement
+  | HTMLOptGroupElement
+  | HTMLFieldSetElement {
+  return (
+    element instanceof HTMLButtonElement ||
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLSelectElement ||
+    element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLOptionElement ||
+    element instanceof HTMLOptGroupElement ||
+    element instanceof HTMLFieldSetElement
+  );
+}
+
+function getNativeCheckedState(element: Element): "checked" | "unchecked" | undefined {
+  if (!isNativeCheckableControl(element)) {
+    return undefined;
   }
 
-  if (element.isContentEditable) {
-    states.push("editable");
+  if (element.indeterminate) {
+    return undefined;
   }
 
-  return states;
+  return element.checked ? "checked" : "unchecked";
+}
+
+function isNativeCheckableControl(element: Element): element is HTMLInputElement {
+  return (
+    element instanceof HTMLInputElement &&
+    (element.type === "checkbox" || element.type === "radio")
+  );
+}
+
+function isNativeRequiredControl(
+  element: Element,
+): element is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
+  return (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLSelectElement
+  );
+}
+
+function isNativeReadonly(element: Element): boolean {
+  return (
+    (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) &&
+    element.readOnly
+  );
+}
+
+function isNativeEditable(element: Element): boolean {
+  return (
+    (element instanceof HTMLElement && element.isContentEditable) ||
+    isTextEntryControl(element)
+  );
+}
+
+function getAriaBoolean(element: Element, attribute: string): boolean | undefined {
+  const value = element.getAttribute(attribute)?.trim().toLowerCase();
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  return undefined;
+}
+
+function isAriaInvalid(element: Element): boolean {
+  const value = element.getAttribute("aria-invalid")?.trim().toLowerCase();
+  return value === "true" || value === "grammar" || value === "spelling";
+}
+
+function setCheckedState(
+  states: Set<ElementState>,
+  state: "checked" | "unchecked",
+): void {
+  states.delete(state === "checked" ? "unchecked" : "checked");
+  states.add(state);
+}
+
+function setExpandedState(
+  states: Set<ElementState>,
+  state: "expanded" | "collapsed",
+): void {
+  states.delete(state === "expanded" ? "collapsed" : "expanded");
+  states.add(state);
+}
+
+function setEditableState(states: Set<ElementState>): void {
+  states.delete("readonly");
+  states.add("editable");
 }
