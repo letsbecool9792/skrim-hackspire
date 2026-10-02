@@ -1,0 +1,12 @@
+{
+  "page": "checkout.html",
+  "about": "A checkout form filled in by the browser: shipping name, street, PIN, phone and a card number, next to a coupon code and a SKU.",
+  "pii": [
+    { "category": "NAME", "value": "Priya Sharma", "where": "field" },
+    { "category": "ADDRESS", "value": "221B, 3rd Cross, Indiranagar", "where": "field" },
+    { "category": "ADDRESS", "value": "560038", "where": "field" },
+    { "category": "PHONE", "value": "+91 90000 12345", "where": "field" },
+    { "category": "CARD", "value": "4539 5787 6362 1486", "where": "field" }
+  ],
+  "notPii": ["SAVE10", "SKU-88213-B", "₹4,999", "08/29", "Place order"]
+}

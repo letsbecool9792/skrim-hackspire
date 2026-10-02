@@ -1,0 +1,12 @@
+{
+  "page": "bank-statement.html",
+  "about": "A bank statement: holder's name, account number, IFSC and UPI id, a transfer to a person, and 12-digit references that are not Aadhaar numbers.",
+  "pii": [
+    { "category": "NAME", "value": "Meera Iyer", "where": "text" },
+    { "category": "ACCOUNT", "value": "50100234567891", "where": "text" },
+    { "category": "ACCOUNT", "value": "HDFC0001234", "where": "text" },
+    { "category": "ACCOUNT", "value": "meera.iyer@okhdfc", "where": "text" },
+    { "category": "NAME", "value": "Karan Mehta", "where": "text" }
+  ],
+  "notPii": ["402918374650", "402918374711", "402918375032", "Acme Corp", "Amazon Pay", "MG Road branch", "01 Sep 2026", "₹45,000.00"]
+}

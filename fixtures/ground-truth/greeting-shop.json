@@ -1,0 +1,9 @@
+{
+  "page": "greeting-shop.html",
+  "about": "A shop's home page that greets the user by first name and shows their delivery area, among products named after public figures.",
+  "pii": [
+    { "category": "NAME", "value": "Asha", "where": "text" },
+    { "category": "ADDRESS", "value": "Bengaluru 560001", "where": "text" }
+  ],
+  "notPii": ["Virat Kohli", "J.K. Rowling", "A.P.J. Abdul Kalam", "Deals of the day", "Search ShopKart", "₹12,499"]
+}

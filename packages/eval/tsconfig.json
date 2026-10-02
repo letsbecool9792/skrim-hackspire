@@ -6,8 +6,11 @@
     "module": "NodeNext",
     "moduleResolution": "nodenext",
     "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": []
+    // The harness runs in Node: it serves the fixtures and drives Chromium.
+    // src/reading.ts, which the extension imports, uses no Node API.
+    "types": ["node"]
   },
   "include": ["src"]
 }

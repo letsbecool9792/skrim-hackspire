@@ -1,0 +1,13 @@
+{
+  "page": "inbox.html",
+  "about": "A mail inbox: the user's address in the title and header, senders' names and emails, a phone number in a message.",
+  "pii": [
+    { "category": "EMAIL", "value": "asha.rao@example.com", "where": "text" },
+    { "category": "NAME", "value": "Priya Sharma", "where": "text" },
+    { "category": "EMAIL", "value": "priya.sharma@example.org", "where": "text" },
+    { "category": "NAME", "value": "Asha", "where": "text" },
+    { "category": "NAME", "value": "Karan Mehta", "where": "text" },
+    { "category": "PHONE", "value": "+91 91234 56789", "where": "text" }
+  ],
+  "notPii": ["INV-2025-0042", "#4567890", "7789 5561 2230", "12 Sep", "Friday", "ShopKart Orders", "Search mail"]
+}

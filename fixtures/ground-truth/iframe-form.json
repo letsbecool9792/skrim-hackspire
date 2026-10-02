@@ -1,0 +1,9 @@
+{
+  "page": "iframe-form.html",
+  "about": "Account details inside a cross-origin iframe, which the content script cannot read. Expected misses until frames are handled.",
+  "pii": [
+    { "category": "EMAIL", "value": "karan.mehta@example.com", "where": "iframe" },
+    { "category": "PHONE", "value": "+91 91234 00000", "where": "iframe" }
+  ],
+  "notPii": ["Account settings", "Close account"]
+}

@@ -1,0 +1,6 @@
+{
+  "page": "product-page.html",
+  "about": "A product page full of codes: model number, SKU, a 13-digit EAN barcode, prices and anonymous reviews. Nothing should be hidden.",
+  "pii": [],
+  "notPii": ["WH-1000XM5", "SKU-88213-B", "4548736132610", "₹24,990", "ShopKart Retail", "Mumbai", "Pune"]
+}

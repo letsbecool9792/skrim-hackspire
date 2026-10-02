@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Account settings</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 20px; }
+    iframe { width: 100%; height: 160px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>Account settings</h1>
+  <p>Your details are shown below by our identity provider.</p>
+  <!-- The harness serves this page twice, on two origins, and fills in the
+       other one, so the frame is cross-origin as on real sites. -->
+  <iframe src="{{OTHER_ORIGIN}}/iframe-content.html" title="Identity details"></iframe>
+  <button>Close account</button>
+</body>
+</html>

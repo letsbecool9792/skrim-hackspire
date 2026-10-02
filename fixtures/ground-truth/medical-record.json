@@ -1,0 +1,11 @@
+{
+  "page": "medical-record.html",
+  "about": "A health record: patient name, birth date, Aadhaar number and doctor, next to an appointment date and a clinic's public address.",
+  "pii": [
+    { "category": "NAME", "value": "Meera Iyer", "where": "text" },
+    { "category": "DOB", "value": "12/03/1990", "where": "text" },
+    { "category": "GOV_ID", "value": "2345 6789 0123", "where": "text" },
+    { "category": "NAME", "value": "Anil Kumar", "where": "text" }
+  ],
+  "notPii": ["14 October 2026, 10:30", "Apollo Clinic", "Bannerghatta Road", "Next appointment", "Book a follow-up"]
+}

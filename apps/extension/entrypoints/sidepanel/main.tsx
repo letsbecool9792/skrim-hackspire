@@ -11,6 +11,9 @@ import "./style.css";
 // eval harness register their own.
 registerActionPlanner(createServerPlanner(SERVER_URL));
 log.info("sidepanel.opened");
+// The eval harness's way in (packages/eval). A constant condition, so other
+// builds drop the import and the file with it.
+if (import.meta.env.MODE === "eval") void import("./eval-hook.ts");
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

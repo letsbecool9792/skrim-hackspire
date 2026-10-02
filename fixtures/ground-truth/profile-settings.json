@@ -1,0 +1,15 @@
+{
+  "page": "profile-settings.html",
+  "about": "A profile form with every field filled in: name, email, phone, birth date, address, PIN code and PAN, plus a greeting.",
+  "pii": [
+    { "category": "NAME", "value": "Asha", "where": "text" },
+    { "category": "NAME", "value": "Asha Rao", "where": "field" },
+    { "category": "EMAIL", "value": "asha.rao@example.com", "where": "field" },
+    { "category": "PHONE", "value": "+91 98765 43210", "where": "field" },
+    { "category": "DOB", "value": "1994-03-12", "where": "field" },
+    { "category": "ADDRESS", "value": "12 MG Road", "where": "field" },
+    { "category": "ADDRESS", "value": "560001", "where": "field" },
+    { "category": "GOV_ID", "value": "ABCDE1234F", "where": "field" }
+  ],
+  "notPii": ["Bengaluru", "English", "Save changes", "Notification settings", "Date of birth", "PIN code"]
+}

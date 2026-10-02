@@ -1,0 +1,10 @@
+{
+  "page": "canvas-card.html",
+  "about": "An ID card drawn on a canvas: name, birth date and PAN exist only as pixels. Expected misses until vision is in the loop.",
+  "pii": [
+    { "category": "NAME", "value": "Asha Rao", "where": "canvas" },
+    { "category": "DOB", "value": "12/03/1994", "where": "canvas" },
+    { "category": "GOV_ID", "value": "ABCDE1234F", "where": "canvas" }
+  ],
+  "notPii": ["Your digital ID", "Download PDF"]
+}

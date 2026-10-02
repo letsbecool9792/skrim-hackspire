@@ -1,0 +1,10 @@
+{
+  "page": "order-details.html",
+  "about": "An order page: the recipient's name, flat address and phone among order numbers, SKUs, a masked card and a tracking number.",
+  "pii": [
+    { "category": "NAME", "value": "Rahul Sharma", "where": "text" },
+    { "category": "ADDRESS", "value": "Flat 4B, Lake View Apartments, Koramangala, Bengaluru 560034", "where": "text" },
+    { "category": "PHONE", "value": "+91 99887 76655", "where": "text" }
+  ],
+  "notPii": ["#4567890", "3 September 2026", "WH-1000", "SKU-88213-B", "₹4,999", "ShopKart Retail Pvt Ltd", "Visa ending in 4242", "7789 5561 2230"]
+}
