@@ -37,7 +37,8 @@ const REMOTE = [
   { url: `${HF}/tokenizer.json`,             to: "gliner-pii/tokenizer.json",        approxKB: 3000 },
   { url: `${HF}/tokenizer_config.json`,      to: "gliner-pii/tokenizer_config.json", approxKB: 5 },
   { url: `${HF}/special_tokens_map.json`,    to: "gliner-pii/special_tokens_map.json", approxKB: 0 },
-  { url: `${HF}/gliner_config.json`,         to: "gliner-pii/gliner_config.json",    approxKB: 1 },
+  // Transformers.js resolves local model metadata from the standard config.json name.
+  { url: `${HF}/gliner_config.json`,         to: "gliner-pii/config.json",           approxKB: 1 },
 
   // --- Face detection: BlazeFace short-range ----------------------------
   {
