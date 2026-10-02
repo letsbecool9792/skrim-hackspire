@@ -50,8 +50,8 @@ actually needed.
 
 | Profile | Status | Use | Cost |
 |---|---|---|---|
-| `nvidia` | **wired** | dev default; fast, but its only reliable model (Llama 3.2 11B) cannot finish tasks | free, no card, ~40 RPM |
-| `groq` | **wired** | hosted Qwen (`qwen/qwen3.8-27b`), the best planner measured | free, no card, 30 RPM, **7,000 input tokens/min** (about 4–5 steps), 200k tokens/day |
+| `nvidia` | **wired** | still the default, with Llama 3.2 11B: 0 of 42 in the provider study. Its best, `nvidia/nemotron-3-super-120b-a12b`, 31 of 42 | free, no card, ~40 RPM, no daily cap |
+| `groq` | **wired** | hosted Qwen (`qwen/qwen3.8-27b`), 42 of 42 in the provider study | free, no card, per model: 1,000 requests/day, 8,000 tokens/min (7,000 input; about 4–5 steps); the server waits out short 429s |
 | `ollama` | **wired** | air-gap demo, offline dev | free, local |
 | `cloudflare` | not wired | also hosts `qwen3.8-27b` | free, no card, 10k neurons/day |
 | `openrouter` | not wired | last resort | **50 req/day** without credits — unusable as a daily driver |
@@ -166,7 +166,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (158 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (166 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       before the OmniParser detector. The built extension is 86.6 MB, including ONNX
@@ -227,19 +227,25 @@ add to it whenever a change needs a manual check, and tick items off when report
   - the form fixture still hides the name, email, phone and address (ⓘ)
   - `fixtures/pages/canvas-card.html`, `What is the PAN on my ID?`: the answer shows an
     "ID number 1" pill (read from the canvas by OCR, then hidden)
+  - `fixtures/pages/checkout.html`, `Change the coupon code to SAVE20`: no order is placed;
+    if the model tries, its step says "not clicked: it would place an order or pay"
+  - with Groq (`$env:MODEL_PROVIDER = "groq"`), several tasks in a row: steps slow down to
+    ~14 s when the minute's tokens run out, but no task fails with "rate limit reached"
 - [ ] **Run the eval in Chromium** once: `pnpm --filter @skrim/eval exec playwright install
       chromium` (~150 MB, once), then `pnpm eval`; compare with `pnpm eval:node`
 - [ ] **Export the OmniParser icon detector** (Python venv, `scripts/`): the one-time setup in
       "Setup — fresh clone"
 - [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
-- [ ] **Pick the default provider**, from the provider study (see "Open findings")
+- [ ] **Pick the default provider**: the study ([`docs/provider-study.md`](docs/provider-study.md))
+      points to Groq's Qwen 3.8 27B; the default is still NVIDIA Llama 3.2 11B (0 of 42)
 
 ### What's left, in order
 
 **1. Prove it in a real browser, and pick the model.**
 - [x] Run [`docs/testing.md`](docs/testing.md) section 5 in Chrome (its bugs fixed)
 - [x] Measure Groq's Qwen 3.8 with `pnpm test:agent`: 6 of 6 (see "Open findings")
-- [ ] A proper provider study: task success against free-tier limits, per model
+- [x] A proper provider study: task success against free-tier limits, per model
+      ([`docs/provider-study.md`](docs/provider-study.md), `pnpm study`)
 
 **2. Perception beyond the DOM** (WS2, WS3)
 - [x] GLiNER inference for names and addresses in free text
@@ -270,28 +276,23 @@ Collected while merging the team's first PRs, while testing and closing the loop
 the first Chrome test. Each needs a decision or a follow-up. Delete an entry once it is
 dealt with.
 
-**Pick the default provider. Groq's Qwen is the best planner, but slow to get to.**
-Measured with `pnpm test:agent` (the fixture goals through the real loop) and
-`pnpm smoke:server`:
+**Pick the default provider: the study says Groq's Qwen 3.8 27B.** The full study is in
+[`docs/provider-study.md`](docs/provider-study.md): 8 free open-weight models, 14 agent
+tasks, 3 runs each. In short:
+- Groq `qwen/qwen3.8-27b` and `openai/gpt-oss-120b` passed 42 of 42; Qwen is twice as fast
+  (0.5 s a step) and needs fewer steps. Groq's limits: 8,000 tokens a minute (7,000 input),
+  about 4–5 steps, which the server now waits out when Groq says how long (usually 2–3 s),
+  so back-to-back steps take ~14 s; and a daily cap that two study runs in a row used up
+  (which one was not captured; the study now records it). Each teammate needs a key.
+- NVIDIA's best, Nemotron 3 Super, passed 31 of 42 (37 with the new prompt rule), slower,
+  with the odd 503, but no daily cap: a fallback.
+- **Today's default, NVIDIA Llama 3.2 11B, passed 0 of 42.** It never says done.
+- Local Qwen3-VL 4B passed 31 of 42 and, asked to change a coupon, **placed the order**. A
+  prompt rule did not stop it; the loop now refuses such clicks (`lib/agent/commit-guard.ts`).
 
-| Model | Result |
-|---|---|
-| **`qwen/qwen3.8-27b` on Groq (hosted)** | **Best**. 6 of 6 fixture goals with no wasted step: on the form it also filled the name via its token, chose the right topic and wrote a proper message. 0.5–0.9 s a step. But see the rate limit below |
-| **`qwen3-vl:4b-instruct` on Ollama (local)** | 6 of 6, 0.3–0.9 s a step on the dev laptop after an ~8 s first load, 4 of 4 smoke checks. Sloppier: clicks a field before typing into it, picked "Billing" for a late parcel. Before the history notes it scored 4 of 5 and toggled "Click show panel" in circles |
-| `meta/llama-3.2-11b-vision-instruct`, NVIDIA (default) | Right first action, about 1 s a step, but **never answers done**: clicked the counter 25 times while its history said "now it shows Count: 25". 0 of 5 fixture goals |
-| `qwen3-vl:4b` on Ollama (the thinking build; the plain tag) | Answers done after one click on 3 of 4 click goals, but 5–40 s a step, and twice spent its whole reply thinking and returned nothing. Its thinking cannot be switched off through the OpenAI-compatible API |
-| Other NVIDIA models (Gemma 4, gpt-oss-20b, GLM, DeepSeek, Nemotron) | Most never reply within 60 s on the free tier; Mistral Large and one Nemotron are "not found". Nemotron 3.5 Lightning got the stop case right but took 20–70 s |
-
-**Groq's free tier allows 7,000 input tokens a minute** for this model (from its 429
-reply), and one step is about 1,500 (the system prompt plus ~20 per element), so **4–5
-steps a minute**. An unpaced `pnpm test:agent` hit the limit on its 5th request; paced at
-one request per 14 s it passed 6 of 6. Today a 429 fails the task ("rate limit
-reached"). Groq's 429 says how long to wait (about 3 s), so waiting and retrying in the
-server would turn failures into pauses; not built, by choice, until it is needed.
-NVIDIA hosts no Qwen at all (81 models listed); Cloudflare Workers AI hosts Qwen 3.8 too.
-
-Still to decide: the default provider for teammates without a GPU. NVIDIA's only fast
-model cannot finish tasks; Groq's can but is rate limited.
+The default in `apps/server/src/config.ts` is still NVIDIA Llama: switching it, and
+whether gpt-oss (OpenAI's open-weight model) is acceptable at all, is the owner's call.
+Cloudflare Workers AI hosts Qwen 3.8 too, if Groq's limits ever bite.
 
 **Which names are private is a rule; where it must trade, privacy wins.** GLiNER cannot tell
 the user's name from a public figure's (it hid 52 names on Wikipedia's main page), and
