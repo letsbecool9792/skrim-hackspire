@@ -15,7 +15,9 @@ export function getConfig(): { port: number, providerConfig: ProviderConfig } {
 
   if (provider === 'nvidia') {
     baseURL = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
-    model = process.env.NVIDIA_MODEL || 'qwen/qwen2-vl-72b-instruct'; // Fallback just in case
+    // Must match .env.example. The only vision model that answered on a free
+    // NVIDIA account when checked; Qwen is not hosted there.
+    model = process.env.NVIDIA_MODEL || 'meta/llama-3.2-11b-vision-instruct';
     apiKey = process.env.NVIDIA_API_KEY;
     if (!apiKey) {
       throw new Error('NVIDIA_API_KEY is required when using the nvidia provider.');
