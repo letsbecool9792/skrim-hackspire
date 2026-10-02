@@ -55,17 +55,17 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 158 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 166 tests:
 
 | Tests | Covers |
 |---|---|
-| 20 in `@skrim/schema` | The wire contract: PII tokens, URL sanitising, action validation, the "beyond the view" counts, the outbound PII tripwire (ISBNs are not cards) |
-| 12 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks) and the prompt format |
+| 21 in `@skrim/schema` | The wire contract: PII tokens, URL sanitising, action validation, the "beyond the view" counts, token usage, the outbound PII tripwire (ISBNs are not cards) |
+| 15 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks), the prompt format, and how long a rate limit asks to wait |
 | 9 in `@skrim/eval` | Scoring: lining redacted text up with the original, recall, precision, IoU, over-redaction |
 | 59 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection (birth dates, labels from the element before), form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), whole addresses, the token vault |
 | 19 in `lib/vision` | DOM + vision fusion, the escalation policy, and which regions to read with OCR |
 | 17 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons, only what is near the view) and click verification, in a simulated DOM |
-| 22 in `lib/agent` | The whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel), and which names are private |
+| 26 in `lib/agent` | The whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order), which names are private, and which clicks commit the user |
 
 The same command runs in CI on every PR.
 
@@ -120,11 +120,14 @@ provider. Stop it with Ctrl+C in that terminal, then start the one you want. Cha
 
 ### Choosing the model
 
+From the provider study ([`provider-study.md`](provider-study.md), 14 tasks x 3 runs):
+
 | Setup | How | Result |
 |---|---|---|
-| **Groq, Qwen 3.8 27B (hosted)** | `GROQ_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "groq"; pnpm dev:server` | **Best**: fixtures 6 of 6 with no wasted steps, 0.5–0.9 s a step. But the free tier allows **7,000 input tokens a minute** and a step is about 1,500, so **4–5 steps a minute**; past that the task fails with "rate limit reached". `pnpm test:agent` hits it on its 5th request |
-| **Ollama, Qwen3-VL 4B instruct (local)** | `ollama pull qwen3-vl:4b-instruct`, then `$env:MODEL_PROVIDER = "ollama"; pnpm dev:server` | Fixtures 6 of 6, 0.3–0.9 s a step after an ~8 s first load; sometimes clicks a field before typing into it. Smoke 4 of 4 |
-| NVIDIA, Llama 3.2 11B Vision (the default) | `NVIDIA_API_KEY` in `.env` | Fast (about 1 s) but **never says done**: on the fixtures it repeated its click until the 25-step limit. Smoke 3 of 4 |
+| **Groq, Qwen 3.8 27B (hosted)** | `GROQ_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "groq"; pnpm dev:server` | **Best: 42 of 42**, 0.5 s a step. The free tier allows about 4–5 steps a minute (8,000 tokens); the server waits out Groq's short "try again in 2 s" instead of failing |
+| **Ollama, Qwen3-VL 4B instruct (local)** | `ollama pull qwen3-vl:4b-instruct`, then `$env:MODEL_PROVIDER = "ollama"; pnpm dev:server` | 31 of 42, 0.6 s a step after an ~8 s first load. Overreaches: it placed an order when asked to change a coupon, which the loop now refuses |
+| NVIDIA, Nemotron 3 Super 120B | `NVIDIA_API_KEY` in `.env`, then `$env:NVIDIA_MODEL = "nvidia/nemotron-3-super-120b-a12b"` | 31 of 42, 2.6 s a step; 40 requests a minute and no daily cap |
+| NVIDIA, Llama 3.2 11B Vision (still the default) | `NVIDIA_API_KEY` in `.env` | **0 of 42**: it never says done |
 
 `$env:...` settings last until you close that terminal. To make one permanent, set
 `MODEL_PROVIDER` (and `OLLAMA_MODEL=qwen3-vl:4b-instruct`, if your `.env` names a model) in
@@ -146,8 +149,30 @@ told about it afterwards (`told: now it is expanded; appeared: ...`), the outcom
 the page ended up right, and, for the form, whether any raw personal data reached the
 server (it should say "none").
 
-This is the quickest way to judge a model: run it with each provider from section 3. On
-Groq's free tier it runs into the rate limit (section 3).
+`pnpm test:agent -- --all` runs all 14 tasks: the six above, plus a goal the page cannot do,
+filling a sign-up form, changing a coupon, saving a profile field, a search, opening a
+result, replying in a chat, and following a nav link. A task passes only when the page ends
+right, the task ends as it should, nothing unasked was touched (no "Place order" when asked
+to change a coupon), and no raw personal data reached the server.
+
+### Comparing models: the provider study
+
+To choose a model, run the 14 tasks several times per model and compare, with what each
+free tier allows:
+
+```powershell
+pnpm --filter @skrim/server probe                  # which free models answer, and Groq's limits
+pnpm study -- groq:qwen/qwen3.8-27b                # one model per terminal; several can run at once
+pnpm study -- nvidia:openai/gpt-oss-20b
+pnpm study -- ollama:qwen3-vl:4b-instruct
+pnpm study:report                                  # all results so far, side by side
+```
+
+Each `pnpm study` starts its own server for that model (your `pnpm dev:server` is left alone),
+waits out rate limits and counts them, and writes `packages/eval/results/study/`. The
+report shows passes per task, steps, latency, tokens a step, and how many steps a minute
+and tasks a day each free tier allows. The findings are in
+[`provider-study.md`](provider-study.md).
 
 ---
 
