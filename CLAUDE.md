@@ -171,7 +171,7 @@ skrim/
 
 - [ ] **Vertical slice: DOM-only graph → regex PII → server → one action → verify.**
       *Everything below is blocked on this.*
-- [ ] Server provider adapter + prompt + JSON repair
+- [x] Server provider adapter + prompt + JSON repair
 - [ ] Token vault + referential redaction
 - [ ] OmniParser icon detector ONNX export (`scripts/artifacts/omniparser-icon.onnx`)
 - [ ] Vision fusion into the screen graph
