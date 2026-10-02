@@ -141,15 +141,17 @@ describe("runAgentTask", () => {
     assert.ok(labels?.includes("Winston Churchill praised the codebreakers"));
   });
 
-  test("warns and carries on when the name finder cannot start", async () => {
-    await page(`<button>Go</button>`);
-    const { planner } = scripted(() => ({ type: "done", success: true, summary: "ok" }));
+  test("stops before sending anything when the name finder cannot start", async () => {
+    await page(`<p>Signed in as Asha Rao</p><button>Go</button>`);
+    const { planner, requests } = scripted(() => ({ type: "done", success: true, summary: "ok" }));
     const events: AgentEvent[] = [];
 
     await runAgentTask({ goal: "Go", planner, link, signal: new AbortController().signal, onEvent: (e) => events.push(e), findNames: async () => { throw new Error("no model"); } });
 
-    assert.ok(events.some((e) => e.type === "warning" && /NOT being hidden/.test(e.message)));
-    assert.equal(events.at(-1)?.type === "finished" && events.at(-1)?.type, "finished");
+    const finished = events.at(-1) as Extract<AgentEvent, { type: "finished" }>;
+    assert.equal(finished.outcome, "failed");
+    assert.equal(finished.errorCode, "NAME_DETECTION_FAILED");
+    assert.equal(requests.length, 0);
   });
 
   test("never types a token the task did not issue", async () => {
