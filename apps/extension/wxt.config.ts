@@ -12,7 +12,8 @@ export default defineConfig({
   // See BRIEF.md section 13.1.
   manifestVersion: 3,
 
-  manifest: {
+  // A function, not an object, so permissions can differ per browser.
+  manifest: ({ browser }) => ({
     // Set explicitly. Without this WXT derives it from package.json and the
     // extension shows up as "@skrim/extension" on chrome://extensions,
     // which a judge will see.
@@ -34,7 +35,11 @@ export default defineConfig({
       // history" install warning. Nothing reads those fields today; see
       // CLAUDE.md "Open findings" before keeping it long-term.
       "tabs",
-      "offscreen", // model inference on Chrome (WebGPU/WASM unavailable in SW)
+      // Model inference on Chrome needs an offscreen document, because WebGPU
+      // and WASM are unavailable in its service worker. Chrome only: Firefox
+      // has no offscreen API (its event page keeps DOM access) and reports the
+      // permission as invalid.
+      ...(browser === "chrome" ? ["offscreen"] : []),
     ],
 
     browser_specific_settings: {
@@ -43,5 +48,5 @@ export default defineConfig({
         strict_min_version: "128.0",
       },
     },
-  },
+  }),
 });
