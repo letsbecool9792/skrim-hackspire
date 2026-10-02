@@ -74,9 +74,21 @@ function findContextualNumbers(text: string, pattern: RegExp, contextPattern: Re
     .filter((candidate) => contextPattern.test(labelBefore(text, candidate.start)));
 }
 
+/**
+ * Luhn passes one number in ten, so it needs help: a 13-digit number starting
+ * 978 or 979 is a book's ISBN (seven on Wikipedia's Alan Turing article
+ * passed as cards), and no card number starts with 0. The same
+ * rule is in @skrim/schema's tripwire, which must not fire on an ISBN.
+ */
+function looksLikeCard(digits: string): boolean {
+  if (digits.startsWith("0")) return false;
+  if (digits.length === 13 && /^97[89]/.test(digits)) return false;
+  return passesLuhn(digits);
+}
+
 function findCards(text: string): PiiCandidate[] {
   return findMatches(text, "CARD", "regex", 1, CARD_PATTERN)
-    .filter((candidate) => passesLuhn(candidate.text.replace(/[ -]/g, "")));
+    .filter((candidate) => looksLikeCard(candidate.text.replace(/[ -]/g, "")));
 }
 
 /**

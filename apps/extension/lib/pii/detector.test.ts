@@ -140,6 +140,13 @@ describe("card detection", () => {
     assert.deepEqual(detectCards("1234567890123456 and 4539 5787 6362 1487", vault), []);
     assert.deepEqual(vault.stats(), {});
   });
+
+  test("leaves a book's ISBN alone, though it passes Luhn", () => {
+    const vault = new TokenVault();
+
+    // From the references of Wikipedia's Alan Turing article.
+    assert.deepEqual(detectCards("ISBN 978-0-307-33598-2, ISBN 9781402067082, 0161-110191889734", vault), []);
+  });
 });
 
 describe("PAN detection", () => {
