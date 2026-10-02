@@ -1,0 +1,174 @@
+/*
+ * Skrim's design language: one file, imported by the side panel, the dashboard
+ * and, later, the landing page. Change a value here and all of them follow.
+ *
+ * The idea: calm and exact, like a security tool you trust. Cool neutral
+ * greys, one green for "Skrim did this", and one violet kept for a single
+ * job: the placeholders that stand in for private data. Violet means
+ * "this is hidden" everywhere, so a reader learns it once.
+ *
+ * Fonts are bundled (@fontsource-variable), never fetched: a privacy product
+ * does not ask a font server who is looking, and the offline demo needs them.
+ * Each app imports "@fontsource-variable/inter" and
+ * "@fontsource-variable/jetbrains-mono" itself.
+ *
+ * Sizes are in rem so a surface scales by setting its root size: the side
+ * panel reads at 14px, the dashboard on a projector at 16px.
+ */
+
+:root {
+  /* Type */
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --text-xs: 0.75rem;   /* labels, timings */
+  --text-sm: 0.8125rem; /* secondary text */
+  --text-base: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --leading-tight: 1.25;
+  --leading-body: 1.5;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Space: a 4px grid. Use these and nothing in between. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+  --border-width: 1px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --duration: 140ms;
+
+  /* Colour: light */
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --sunken: #e9ecf0;
+  --border: #e1e5ea;
+  --border-strong: #c9d0d8;
+  --text: #11161c;
+  --text-2: #46525e;
+  --text-3: #6f7b87;
+
+  --accent: #0a7f6f;
+  --accent-hover: #086b5d;
+  --accent-soft: #dff3ee;
+  --accent-border: #b6e2d8;
+  --on-accent: #ffffff;
+
+  --private: #4b3bb0;
+  --private-soft: #ece9fb;
+  --private-border: #d6cff5;
+
+  --ok: #15803d;
+  --ok-soft: #e3f4e9;
+  --warn: #a8530a;
+  --warn-soft: #fcefd9;
+  --bad: #be2a32;
+  --bad-soft: #fbe6e7;
+
+  --code-bg: #0f151b;
+  --code-text: #d7dee5;
+  --code-muted: #7d8a96;
+
+  --shadow-sm: 0 1px 2px rgb(17 22 28 / 0.06);
+  --shadow-md: 0 4px 16px rgb(17 22 28 / 0.08);
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0f13;
+    --surface: #12181e;
+    --surface-2: #181f26;
+    --sunken: #0e1318;
+    --border: #232c35;
+    --border-strong: #33404c;
+    --text: #e9edf1;
+    --text-2: #a4afba;
+    --text-3: #727f8b;
+
+    --accent: #3ccfb4;
+    --accent-hover: #62dcc5;
+    --accent-soft: #0f2d28;
+    --accent-border: #1c5047;
+    --on-accent: #04201b;
+
+    --private: #c8bfff;
+    --private-soft: #241f47;
+    --private-border: #3b3373;
+
+    --ok: #4ade80;
+    --ok-soft: #10301d;
+    --warn: #fbbf24;
+    --warn-soft: #36290f;
+    --bad: #f87b82;
+    --bad-soft: #3a1b1e;
+
+    --code-bg: #090d11;
+    --code-text: #d7dee5;
+    --code-muted: #6e7b87;
+
+    --shadow-sm: none;
+    --shadow-md: 0 4px 20px rgb(0 0 0 / 0.4);
+    --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+
+    color-scheme: dark;
+  }
+}
+
+/* Shared base: the same reset and the same hairline focus ring everywhere. */
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+  font-feature-settings: "cv11", "ss03";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: 0.45; }
+:focus-visible { outline: none; box-shadow: var(--focus); }
+code, pre, kbd { font-family: var(--font-mono); }
+
+/* The placeholder for a private value. One look, on every surface. */
+.token {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border: var(--border-width) solid var(--private-border);
+  border-radius: var(--radius-sm);
+  background: var(--private-soft);
+  color: var(--private);
+  font-family: var(--font-sans);
+  font-size: 0.92em;
+  font-weight: var(--weight-medium);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
