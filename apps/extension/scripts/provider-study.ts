@@ -89,7 +89,14 @@ let serverErrors = "";
 const errorLines: string[] = [];
 server.stderr.on("data", (chunk) => {
   serverErrors = (serverErrors + chunk).slice(-2000);
-  for (const line of String(chunk).split("\n")) if (line.startsWith("[plan]") && line.includes("->")) errorLines.push(line.slice(line.indexOf("->") + 3).replace(/ after \d+ ms/, ""));
+  for (const line of String(chunk).split("\n")) {
+    if (line.startsWith("[plan]") && line.includes("->")) errorLines.push(line.slice(line.indexOf("->") + 3).replace(/ after \d+ ms/, ""));
+    // Which limit the provider named: Groq's "on tokens per day (TPD): Limit 200000". No
+    // account ids, and no used/requested counts, so the same limit counts as one line.
+    const limit = /on ([a-z ]+\([A-Z]+\)): Limit (\d+)/.exec(line);
+    if (line.includes("provider said") && limit) errorLines.push(`limit hit: ${limit[1]}, ${limit[2]}`);
+    if (line.includes("as it asked")) errorLines.push("short rate limit, waited out by the server");
+  }
 });
 const stopServer = () => { if (server.exitCode === null) server.kill(); };
 process.on("exit", stopServer);
