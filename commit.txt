@@ -1,7 +1,0 @@
-feat(dashboard): split-screen dashboard, message format, and feed
-
-- `packages/schema/src/dashboard.ts`: Zod message schema for the dashboard relay, carrying `PlanRequest` (redacted), `PlanResponse`, loop events, and resource numbers. It doesn't rely on app internals and passes `pnpm check`.
-- `apps/extension`: Added a dashboard feed (`lib/agent/dashboard-feed.ts`) that wraps the server planner without touching it. It hooks into `App.tsx`'s loop events (one-line) and routes messages through `content/index.ts` via `window.postMessage`, avoiding background scripts.
-- `apps/dashboard`: Rewritten from the Vite template. Includes live feed, pretty-printed wire view (with `<PII:EMAIL:1>` tokens highlighted as pills), elements table, and a resource panel. It maintains state in-memory and shows disconnected warnings appropriately.
-
-The code strictly uses `assertOutboundSafe` on messages to guarantee no raw PII leaves the extension for the dashboard.
