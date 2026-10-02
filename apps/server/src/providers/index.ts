@@ -46,7 +46,13 @@ function isRetryable(error: ProviderError): boolean {
   return error.kind === 'timeout' || (error.kind === 'http' && error.status !== undefined && error.status >= 500);
 }
 
-export async function createChatCompletion(config: ProviderConfig, messages: ChatMessage[]): Promise<string> {
+export interface Completion {
+  text: string;
+  /** Tokens the provider counted, when it says. */
+  usage?: { promptTokens: number; completionTokens: number };
+}
+
+export async function createChatCompletion(config: ProviderConfig, messages: ChatMessage[]): Promise<Completion> {
   try {
     return await requestCompletion(config, messages);
   } catch (error) {
@@ -56,7 +62,7 @@ export async function createChatCompletion(config: ProviderConfig, messages: Cha
   }
 }
 
-async function requestCompletion(config: ProviderConfig, messages: ChatMessage[]): Promise<string> {
+async function requestCompletion(config: ProviderConfig, messages: ChatMessage[]): Promise<Completion> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -102,5 +108,10 @@ async function requestCompletion(config: ProviderConfig, messages: ChatMessage[]
   // An empty string is a model problem, not a provider one: a thinking model
   // can spend its whole reply on reasoning. The planner re-asks, like any
   // unparseable output.
-  return content;
+  const prompt = data.usage?.prompt_tokens;
+  const completion = data.usage?.completion_tokens;
+  return {
+    text: content,
+    ...(Number.isInteger(prompt) && Number.isInteger(completion) ? { usage: { promptTokens: prompt, completionTokens: completion } } : {}),
+  };
 }
