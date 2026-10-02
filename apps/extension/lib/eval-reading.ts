@@ -17,5 +17,6 @@ export function toEvalReading(reading: PageReading, nameModel: Reading["nameMode
     beyondView: observation.beyondView ?? { above: 0, below: 0 },
     timings: reading.timings,
     nameModel,
+    faces: reading.faces,
   };
 }

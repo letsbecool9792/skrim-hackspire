@@ -19,6 +19,8 @@ export interface PageReading {
   page: RedactedPage;
   /** Whether the page shows the user's data, so every name on it is hidden. */
   personal: boolean;
+  /** Faces in the images and canvases in view. Counted on the device and kept nowhere. */
+  faces: number;
   timings: { observeMs: number; visionMs: number; namesMs: number; redactMs: number };
 }
 
@@ -28,11 +30,13 @@ export async function readPage(link: PageLink, taskId: string, signal: AbortSign
   if (!observation) return null;
   const observed = performance.now();
 
+  let faces = 0;
   const targets = pixels && observation.elements ? pixelTargets(observation.elements) : [];
   if (pixels && targets.length > 0) {
-    const lines = await pixels(targets, observation.viewport ?? { width: 0, height: 0 });
+    const read = await pixels(targets, observation.viewport ?? { width: 0, height: 0 });
     signal.throwIfAborted();
-    if (lines && lines.length > 0) observation = { ...observation, elements: withPixelText(observation.elements ?? [], lines) };
+    faces = read?.faces ?? 0;
+    if (read && read.lines.length > 0) observation = { ...observation, elements: withPixelText(observation.elements ?? [], read.lines) };
   }
   const seen = performance.now();
 
@@ -44,6 +48,7 @@ export async function readPage(link: PageLink, taskId: string, signal: AbortSign
     observation,
     page,
     personal: view.personal,
+    faces,
     timings: { observeMs: observed - started, visionMs: seen - observed, namesMs: named - seen, redactMs: performance.now() - named },
   };
 }
