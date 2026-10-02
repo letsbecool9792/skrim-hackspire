@@ -29,6 +29,7 @@ export class ProviderError extends Error {
  */
 const TIMEOUT_MS: Record<ProviderConfig['provider'], number> = {
   nvidia: 60_000,
+  groq: 60_000,
   ollama: 120_000,
 };
 
@@ -51,6 +52,7 @@ export async function createChatCompletion(config: ProviderConfig, messages: Cha
         model: config.model,
         messages,
         temperature: 0.2, // low temp for planning
+        ...config.extraBody,
       }),
       signal: AbortSignal.timeout(timeoutMs),
     });
