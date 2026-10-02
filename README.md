@@ -8,45 +8,210 @@ model that does the thinking only ever sees a scrubbed description of the page, 
 private value swapped for a placeholder like `<PII:EMAIL:1>`. The extension swaps the real value
 back in only at the moment it types it.
 
-Built by team **tropical crush**.
+Built by team **tropical crush**. Chrome and Firefox (MV3); Firefox is untried so far.
+
+## Contents
+
+[How it works](#how-it-works) · [What the server sees](#what-the-server-sees) ·
+[Finding private data](#finding-private-data) · [The numbers](#the-numbers) ·
+[Which model plans](#which-model-plans) · [What stops it going wrong](#what-stops-it-going-wrong) ·
+[Known limits](#known-limits) · [Run it](#run-it) · [The repo](#the-repo)
 
 ## How it works
 
-For every step of a task, in a side panel in Chrome:
+```
+ page (DOM, canvas, images, iframes)                                  your machine
+ ─────────────────────────────────────────────────────────────────────────────────
+  content script ──► observe ──► read pixels ──► find names ──► redact ──┐
+  (element graph)               (OCR + faces)    (GLiNER + rule)  token vault │
+                                                                  (memory only)│
+                                                                              ▼
+                                                 request: placeholders only ──┼───► planning server ──► Qwen
+                                                                              │     (stateless, open-weight)
+  act ◄── resolve tokens (only when typing) ◄── one action: click / type ... ◄─┘
+   │
+   └──► verify the page changed ──► next step (max 25 steps, 5 minutes)
+```
 
-1. **Observe.** The extension reads the page: its structure, text, fields, and the text inside
-   canvases, images and frames (local OCR).
-2. **Redact.** Everything private is replaced by a placeholder, on the device, against a token
-   vault that lives in memory only. A rule decides which names are private. Regexes find
-   emails, phones, cards, Aadhaar, PAN and more; a small local model (GLiNER) finds names and
-   addresses in free text.
-3. **Plan.** The scrubbed page goes to a server that asks an open-weight model (Qwen) for one
-   action: click, type, select, scroll, navigate, extract, wait, done. A tripwire refuses to
-   send any request that still holds raw personal data.
-4. **Act.** The extension carries the action out, putting real values back only when typing, and
-   checks that the page changed. Orders, payments, deletes and sign-ups the user did not ask for
-   are refused.
-5. **Repeat** until done.
+The loop runs in the side panel, not the background worker: Chrome kills a service worker whose
+`fetch()` takes over 30 s, and a local model takes up to 40 s a step. Closing the panel stops the
+task and drops its vault.
 
-The server is stateless and open-weight only, so it can run on a laptop with no network: swap
-the hosted Qwen for a local one with one setting. A dashboard shows, live, exactly what the
-server received, beside what the models cost on the device.
+1. **Observe.** The content script builds an element graph of what is in and near the view (at
+   most 120 elements, a quarter of a view of margin, with a count of what lies beyond): role,
+   label, value, hint, position, state. Field hints (`autocomplete`, `type`) ride along.
+2. **Read pixels.** Canvases, big images and cross-origin iframes hold text the DOM cannot see.
+   One capture of the tab, then on-device OCR on just those regions; each line becomes an element
+   and is redacted like any other text. Faces in those regions are counted (never kept).
+3. **Redact.** Regexes, field hints, a small local NER model and a rule for which names are
+   private. Every value gets one token per task however it is written; the vault maps back.
+4. **Plan.** The server renders the scrubbed graph as compact text, asks the model for one
+   JSON action (click, type, select, scroll, navigate, extract, wait, done), repairs and
+   validates it against the shared schema, and replies.
+5. **Act and verify.** The extension swaps tokens for real values at typing time only, runs
+   the action, and checks that the page changed. A step that did nothing is told so, not repeated.
 
-## What it measures like
+## What the server sees
 
-The eval opens fixture pages in a real Chromium with the extension and scores what Skrim hid
-against what was actually private (`pnpm eval`, 37 fixtures):
+A step, as the server receives it (illustrative; compact text, not JSON: one line per element
+instead of about ten, which is the difference between one and several steps a minute on Groq's
+free tier):
+
+```
+Goal: fill in the support form with my name and email
+
+Page: "Contact support" at https://shop.example/help/{id}
+Viewport: 1280x720
+Elements:
+e3 textbox "Full name" = "<PII:NAME:1>" [412,180,320,36]
+e4 textbox "Email" = "<PII:EMAIL:1>" [412,232,320,36]
+e5 textbox "How can we help?" [412,284,320,120]
+e6 button "Send message" [412,430,140,40]
+Tokens on this page: <PII:NAME:1> <PII:EMAIL:1>
+
+History, oldest first:
+1. {"type":"type","target":"e3","value":"<PII:NAME:1>"} -> verified
+```
+
+The dashboard (`apps/dashboard`) renders exactly this, live, beside the page, next to what each
+stage cost on the device. There is no screenshot in the request: **pixels are a fallback, not
+the default** (see [`BRIEF.md`](BRIEF.md) 4.1). Anything text-like in an image is read by OCR
+locally and sent as redacted text.
+
+URLs are cut down too: digit runs, uuids, hashes and anything with an `@` become `{id}`,
+`{uuid}`, `{hash}`, `{email}`, a name the task knows becomes `{name}`, and the query string is
+reduced to "there is one".
+
+## Finding private data
+
+Two independent finders, both local, merged per text (the earliest and longest match wins):
+
+| Finder | Catches | Notes |
+|---|---|---|
+| Regex bank | emails, phone numbers with a country code, cards (13-19 digits and Luhn, so ISBNs and order numbers pass), PAN, IFSC, UPI ids; dates of birth, Aadhaar and account numbers **only with a label** ("Aadhaar", "ID card", "Date of birth", "Account no.") from the text or the element before it | Labels read across `<dt>/<dd>` and `<th>/<td>`; 8-18 digit numbers with no label stay readable on purpose |
+| Form-field hints | `autocomplete` and `type` (name, address, tel, email, cc-number, bday, password...) | The whole value is trusted, so "221B" in a street field is hidden, not just the part a model recognised |
+| GLiNER (`gliner-pii-edge`, uint8) | names and addresses in free text | Threshold 0.6; person and address labels only (organisations are what a planner navigates by). About 12 ms a text on one WASM thread |
+| OCR (Tesseract 4 fast, English) | text in canvases, images and cross-origin frames | OCR's slips are handled: "karan mehta@x.com" for "karan.mehta@x.com" is joined to the address |
+| Face detector (BlazeFace short range) | faces in those regions | Counts only; there is no screenshot to blur because none is sent |
+
+**Which names are private is a rule, not a guess.** NER cannot tell your name from a public
+figure's (it hid 52 names on Wikipedia's main page). So a name is hidden when it is in the goal
+(your own words), anywhere on a page that shows your data, right after words that address you
+("Welcome back", "Deliver to"), or already hidden earlier in the task. Public pages stay readable
+and cost no model time. Where it has to trade, privacy wins: "search for alan turing" goes out as
+"search for `<PII:NAME:1>`".
+
+The name model runs only on pages that show your data, and only on what is in view: about 1 s on a
+big personal page. If it cannot start, the task stops before sending anything (fail closed).
+
+## The numbers
+
+### Detection (`pnpm eval`)
+
+The harness opens each fixture in a real Chromium with the extension loaded and scores what
+`readPage()` sent, the same function the agent runs. Fixtures carry a list of what is private on
+the page and a list of look-alikes that must stay readable.
 
 | | |
 |---|---|
-| Recall (private values hidden) | 92.9% (91 of 98) |
-| Precision (hidden values that were private) | 86.8% |
-| Ordinary text hidden by mistake | 1.9% |
+| Fixtures / private values / look-alikes | 37 / 98 / 183 |
+| Recall (hidden everywhere they appear) | **92.9%** (91 of 98) |
+| Precision (hidden spans that were private) | **86.8%** |
+| Right category | 90 of 91 |
+| Span IoU | 0.91 |
+| Look-alikes hidden (order numbers, ISBNs, public names) | 8 of 183 |
+| Ordinary characters hidden | 1.9% |
+| Faces counted | 4 of 5 |
 
-These are our own pages, written by the same hands as the fixes, so expect lower on pages we
-did not write. The misses and what they are: [`CLAUDE.md`](CLAUDE.md), "What the eval finds".
-The planner: Groq's Qwen 3.8 27B finished all 42 runs of the provider study, and the local
-Qwen3-VL 4B finished 37 of 42: [`docs/provider-study.md`](docs/provider-study.md).
+By category: ACCOUNT 5/5, ADDRESS 12/12, CARD 2/2, DOB 8/8, EMAIL 12/12, PHONE 14/14, GOV_ID 7/8,
+NAME 31/36, OTHER 0/1. By where it sits: in a field 17/17, in a canvas 3/3, an image 3/3, an iframe
+2/2, in the page's text 66/73. The first 22 fixtures scored 100% recall; 15 harder ones found the
+gaps, which are listed under Known limits. The fixtures are ours, written by the same hands as the
+fixes: expect lower on pages we did not write ([`docs/real-site-tests.md`](docs/real-site-tests.md)
+is the plan for that).
+
+### On the device
+
+| Model (all run in the side panel, WASM) | On disk |
+|---|---|
+| GLiNER PII edge, uint8 ONNX + tokenizer | 49.4 MB |
+| ONNX Runtime WASM (not a model, but it ships) | about 14 MB |
+| Tesseract: English traineddata + LSTM core | 2.1 MB + 7.8 MB |
+| MediaPipe WASM + BlazeFace | 12.1 MB + 0.2 MB |
+| OmniParser icon detector (YOLO, 1280x1280; exported, not yet used) | 80.9 MB, optional |
+| **Built extension** | **87 MB** without the icon detector, 168 MB with it |
+
+Per page view, medians in Chromium: read the page **5 ms**, find names **137 ms** (up to about 1 s
+on a big personal page), OCR **0.4 to 0.8 s** when the page has a canvas, image or frame (0
+otherwise), redact **under 1 ms**. The first name lookup also loads the model.
+
+### Per step, end to end
+
+| Planner | Tasks passed (14 fixture goals x 3 runs) | Step time p50 / p90 | Tokens a step (in + out) | Free-tier ceiling |
+|---|---|---|---|---|
+| Groq `qwen/qwen3.8-27b` | **42 of 42** | 0.5 / 0.9 s | 1,566 + 39 | 8,000 tokens a minute, about 4-5 steps; 1,000 requests a day |
+| Groq `openai/gpt-oss-120b` | 42 of 42 | 1.0 / 1.6 s | 1,469 + 76 | same, separate quota |
+| NVIDIA `nemotron-3-super-120b-a12b` | 37 of 42 (with the prompt rule) | 2.6 / 8.3 s | 1,670 + 222 | 40 requests a minute, no daily cap |
+| Ollama `qwen3-vl:4b-instruct`, local | 37 of 42 (with the guards) | 0.6 / 1.1 s | 1,544 + 21 | none; needs about 3.7 GB of VRAM |
+
+Eight models were studied ([`docs/provider-study.md`](docs/provider-study.md)); NVIDIA's old
+default, Llama 3.2 11B, did 0 of 42 because it never says "done". The local numbers were measured
+while Ollama silently cut long requests to its 4k context (found later; fixed with
+`pnpm ollama:setup`, which gives it 16k), so they are probably too low and are being re-measured.
+
+## Which model plans
+
+One OpenAI-compatible adapter, three profiles, swapped by an environment variable: **Groq**
+(hosted Qwen 3.8 27B, the default), **Ollama** (local Qwen3-VL 4B, runs with no network: the
+air-gap beat of the demo) and **NVIDIA** (Nemotron, no daily cap). When Groq says to come back
+later, `FALLBACK_PROVIDER` plans that step instead. The server is stateless: no user identity, no
+session, nothing stored. It is open-weight only by rule: no GPT, Gemini or Claude as the brain,
+so the whole thing can be deployed offline.
+
+## What stops it going wrong
+
+Rules enforced by machine, not by hoping ([`CLAUDE.md`](CLAUDE.md), "Guardrails"):
+
+- **Outbound tripwire.** `assertOutboundSafe()` scans every request body and throws on a raw
+  email, Luhn-valid card, PAN or international phone. The shared logger throws on the same in dev.
+- **Five invariant rules** run on every PR (`pnpm check`): nothing is persisted
+  (`localStorage`, `chrome.storage`, IndexedDB), no raw `console.*`, no closed-model SDK, the
+  schema package imports nothing, no analytics. A text scan, so no inline comment can silence it.
+- **The vault is memory only**, one per task. Unknown tokens in a planned value fail the step:
+  typing `<PII:EMAIL:7>` into a real form is the one thing never done.
+- **Unasked commitments are refused**: place an order, pay, delete, create an account,
+  subscribe or transfer, unless the goal says so. This exists because the local model once placed
+  an order when asked to change a coupon code.
+- **Limits**: 25 steps, 5 minutes, a stop after repeated unverified steps, and a refused repeat
+  of the same step on an unchanged page.
+- **No telemetry, no screenshot on disk, ids and counts in logs, never values.**
+
+## Known limits
+
+Said plainly, because a judge will find them:
+
+- **English only.** Names, labels and cue words ("Welcome back") are English; Hindi was tried
+  and dropped.
+- **Seven eval misses:** a labelled passport number and a patient ID, four names on pages that do
+  not look personal (photo captions), and one name in an inbox that the NER model did not find.
+  Plain 10-digit mobile numbers with no country code are not caught by the regex bank (only
+  `+91...` and `tel` fields are).
+- **A private name on a public-looking page is readable** unless it is in the goal or follows a
+  cue word.
+- **The planner sees text only.** A task that needs to look at a picture (a chart, a CAPTCHA) is
+  out of reach until a redacted-screenshot path exists; OCR covers text in images.
+- **Free tiers are the bottleneck.** Groq allows about 4-5 steps a minute and real pages cost
+  more tokens than our fixtures do; the 4B local model is the weakest planner of the three.
+- **Our fixtures are our own.** Real-site results are pending.
+
+## Tests
+
+`pnpm verify` runs the invariants, typechecks all 7 packages, and 225 tests: the wire contract
+(35), the server's parsing, prompt and limits (20), the scorer (11), and the extension (159:
+detectors, the loop with a scripted planner, redaction of text read from pixels, which names are
+private, URL handling, vision, DOM extraction). CI runs it on every PR. `pnpm test:agent` runs
+the whole loop against a real planner on fixture pages; `pnpm study` measures a model on 16
+tasks. [`docs/testing.md`](docs/testing.md) says how to see each part work.
 
 ## Run it
 
@@ -56,34 +221,35 @@ Needs Node 22, pnpm (`npm install -g pnpm`), and a free Groq key.
 git clone https://github.com/letsbecool9792/skrim-hackspire.git
 cd skrim-hackspire
 pnpm install
-pnpm models:fetch                 # the on-device models; the first run also sets up Python for the icon detector (~10 min)
+pnpm models:fetch                 # on-device models; the first run also sets up Python for the icon detector (~10 min, skip with --skip-icon)
 cp .env.example .env              # then put your GROQ_API_KEY in it
 pnpm dev:server                   # the planning server
 pnpm --filter @skrim/extension build
 ```
 
 Then in Chrome: `chrome://extensions`, turn on Developer mode, **Load unpacked**, and choose
-`apps/extension/.output/chrome-mv3`. Open any page, click Skrim's toolbar button, and ask it
-to do something. For the live dashboard, run `pnpm dev:dashboard` and open the address it prints.
+`apps/extension/.output/chrome-mv3`. Open any page, click Skrim's toolbar button, and ask it to do
+something. For the live dashboard, run `pnpm dev:dashboard` and open the address it prints.
 
-Step by step, with what to expect from each part: [`docs/testing.md`](docs/testing.md).
+For the offline planner: `ollama pull qwen3-vl:4b-instruct`, `pnpm ollama:setup`, then
+`$env:MODEL_PROVIDER = "ollama"; pnpm dev:server`.
 
 ## The repo
 
 | | |
 |---|---|
 | `apps/extension` | The product: side panel, agent loop, on-device models, WXT for Chrome and Firefox |
-| `apps/server` | Planner: one OpenAI-compatible adapter (Groq, Ollama, NVIDIA) |
-| `apps/dashboard` | The live view of what the server sees |
-| `packages/schema` | The contract shared by all of them |
+| `apps/server` | Planner: one OpenAI-compatible adapter (Groq, Ollama, NVIDIA), prompt, JSON repair |
+| `apps/dashboard` | The live view of what the server sees and what it costs |
+| `packages/schema` | The contract (Zod) shared by all of them, so a mismatch is a compile error |
 | `packages/eval` | The harness behind the numbers above |
-| `design/tokens.css` | The shared look |
+| `design/tokens.css` | The shared look; fonts are bundled, nothing is fetched |
 | `fixtures` | Synthetic pages with a list of what is private on each |
 
-Where the project stands, what was decided and why: [`CLAUDE.md`](CLAUDE.md). The problem,
-the scoring and the privacy design: [`BRIEF.md`](BRIEF.md).
+Where the project stands, what was decided and why: [`CLAUDE.md`](CLAUDE.md). The problem, the
+scoring and the privacy design: [`BRIEF.md`](BRIEF.md).
 
 ## Licences
 
-The code is ISC. Each model keeps its own licence: check them before shipping anything. Qwen
-is Apache 2.0; the OmniParser icon detector is **AGPL-3.0**.
+The code is ISC. Each model keeps its own licence: check them before shipping anything. Qwen is
+Apache 2.0; the OmniParser icon detector is **AGPL-3.0**.
