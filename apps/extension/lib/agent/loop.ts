@@ -36,6 +36,8 @@ export interface PageLink {
 export interface NavigationWatch {
   /** Whether the tab started loading a new page since the watch began. */
   readonly started: boolean;
+  /** Resolves true once a load starts, or false after `ms`. */
+  whenStarted(ms: number): Promise<boolean>;
   /** Resolves true once that load finishes, or false after `ms`. */
   loaded(ms: number): Promise<boolean>;
   stop(): void;
@@ -89,6 +91,12 @@ const MAX_HISTORY = 20;
 const MAX_SAME_STATE_VISITS = 3;
 /** How long a new page may take to finish loading after a click or navigate. */
 const PAGE_LOAD_TIMEOUT_MS = 15_000;
+/**
+ * How long to wait for a page load to start when an action got no reply. A
+ * link click unloads the page before the content script can answer, and the
+ * tab's "loading" event can arrive after that failed reply.
+ */
+const LOAD_START_GRACE_MS = 2_000;
 
 type Finish = Omit<Extract<AgentEvent, { type: "finished" }>, "type" | "steps" | "tokens">;
 
@@ -142,6 +150,7 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     let unverifiedInARow = 0;
     const stateVisits = new Map<string, number>();
     let lastState: string | undefined;
+    let previousGraph: ScreenGraph | undefined;
 
     for (step = 0; step < maxSteps; step++) {
       const observation = await observe(link, taskId, signal);
@@ -157,6 +166,14 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
       signal.throwIfAborted();
       const page = redactPage(observation, step, vault, names);
       onEvent({ type: "observed", step, elements: page.graph.elements.length, redactions: page.redactions, page: `${page.graph.url.origin}${page.graph.url.pathTemplate}` });
+
+      // What the last action changed on screen goes into its history entry.
+      const lastStep = history.at(-1);
+      if (lastStep && previousGraph) {
+        const change = describeChange(previousGraph, page.graph);
+        if (change) lastStep.note = joinNotes(lastStep.note, change);
+      }
+      previousGraph = page.graph;
 
       // Count arrivals, not stays: a page that did not change at all is the
       // unverified-step rule's business, not this one's.
@@ -200,8 +217,6 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
       }
 
       const outcome = await act(link, taskId, step, action, { vault, names, scanNames }, signal);
-      if ("fatal" in outcome) return finish({ outcome: "failed", errorCode: outcome.fatal, message: outcome.message });
-
       history.push({ cycle: step, action, verified: outcome.verified, ...(outcome.note ? { note: outcome.note } : {}) });
       onEvent({ type: "acted", step, verified: outcome.verified, note: outcome.note });
       if (action.type === "extract" && outcome.extractedValue) {
@@ -237,6 +252,67 @@ function pageState(graph: ScreenGraph): string {
   return `${graph.url.origin}${graph.url.pathTemplate}\u0002${graph.title}\u0002${elements.join("\u0002")}`;
 }
 
+/** At most this many elements are named in "appeared: ..." and "went away: ...". */
+const MAX_CHANGES_LISTED = 3;
+
+/**
+ * What changed on screen between two views, for the history: "appeared:
+ * text "This is the toggled panel content."". Small models tell that a goal is
+ * done from this far more reliably than from "verified": with "verified"
+ * alone, Qwen3-VL 4B clicked a panel's toggle again, closing it, and kept
+ * clicking a same-page link after it had scrolled there.
+ * Redacted input, so no PII.
+ */
+function describeChange(before: ScreenGraph, after: ScreenGraph): string | undefined {
+  if (`${before.url.origin}${before.url.pathTemplate}` !== `${after.url.origin}${after.url.pathTemplate}`) {
+    return `a new page opened: ${JSON.stringify(clip(after.title, 60))}`;
+  }
+  const was = namedElements(before);
+  const now = namedElements(after);
+  // New to the page, or scrolled into view ("Go to section 2"). Leaving the
+  // view is not listed: after any scroll that would be most of the page.
+  const appeared = [...now]
+    .filter(([key, element]) => !was.has(key) || (element.onScreen && !was.get(key)!.onScreen))
+    .map(([, element]) => element.text);
+  const wentAway = [...was].filter(([key]) => !now.has(key)).map(([, element]) => element.text);
+  const parts: string[] = [];
+  if (appeared.length > 0) parts.push(`appeared: ${listSome(appeared)}`);
+  if (wentAway.length > 0) parts.push(`went away: ${listSome(wentAway)}`);
+  return parts.length > 0 ? parts.join("; ") : undefined;
+}
+
+/**
+ * Elements by role and name, and whether any with that name is in view. Keyed
+ * by name only, so a button whose text changed is not "new": its own note
+ * says what it shows now. Off-screen elements count: a form's "Thanks, sent"
+ * line often lands below the fold.
+ */
+function namedElements(graph: ScreenGraph): Map<string, { text: string; onScreen: boolean }> {
+  const named = new Map<string, { text: string; onScreen: boolean }>();
+  for (const element of graph.elements) {
+    const name = element.label ?? element.value;
+    if (!name) continue;
+    const key = `${element.role}\u0001${name}`;
+    const onScreen = !element.state?.includes("offscreen") || named.get(key)?.onScreen === true;
+    named.set(key, { text: `${element.role} ${JSON.stringify(clip(name, 40))}`, onScreen });
+  }
+  return named;
+}
+
+function listSome(items: string[]): string {
+  const listed = items.slice(0, MAX_CHANGES_LISTED).join(", ");
+  return items.length > MAX_CHANGES_LISTED ? `${listed} and ${items.length - MAX_CHANGES_LISTED} more` : listed;
+}
+
+function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+/** The schema caps a history note at 200 characters. */
+function joinNotes(first: string | undefined, second: string): string {
+  return clip(first ? `${first}; ${second}` : second, 200);
+}
+
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, ms);
@@ -255,9 +331,11 @@ async function observe(link: PageLink, taskId: string, signal: AbortSignal): Pro
   return null;
 }
 
-type ActOutcome =
-  | { verified: boolean; note?: string; extractedValue?: string }
-  | { fatal: ErrorCode; message: string };
+interface ActOutcome {
+  verified: boolean;
+  note?: string;
+  extractedValue?: string;
+}
 
 /** Short, PII-free notes the planner reads in its history. */
 const ERROR_NOTES: Partial<Record<ErrorCode, string>> = {
@@ -306,20 +384,21 @@ async function act(link: PageLink, taskId: string, step: number, action: Action,
   try {
     const reply = await link.send({ type: "action.execute", action, actionId: newActionId(step), taskId, ...(typedValue === undefined ? {} : { typedValue }) });
     signal.throwIfAborted();
+    const result = parseMessage(reply);
 
     // A click on a link, or a navigate, unloads the page, often before the
     // content script can reply. A page load is the change we were after.
-    if (action.type === "navigate" && !watch.started) await sleep(500, signal);
+    if (action.type === "navigate" || result?.type !== "action.result") await watch.whenStarted(action.type === "navigate" ? 500 : LOAD_START_GRACE_MS);
+    signal.throwIfAborted();
     if (watch.started) {
       const loaded = await watch.loaded(PAGE_LOAD_TIMEOUT_MS);
       signal.throwIfAborted();
       return loaded ? { verified: true } : { verified: true, note: "a new page was still loading" };
     }
 
-    const result = parseMessage(reply);
-    if (result?.type !== "action.result") {
-      return { fatal: "CONTENT_SCRIPT_ERROR", message: "The page stopped answering. Reload it and try again." };
-    }
+    // No reply and no page load. If the page is really gone, the next
+    // observation says so, in words the user can act on.
+    if (result?.type !== "action.result") return { verified: false, note: "the page did not answer" };
     if (!result.ok) {
       return { verified: false, note: ERROR_NOTES[result.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? "the action failed" };
     }
