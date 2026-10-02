@@ -12,7 +12,7 @@ import { TokenVault } from "../vault/vault.js";
 import type { PixelReader } from "../vision/read-pixels.ts";
 import { unaskedCommitment } from "./commit-guard.ts";
 import { PrivateNames } from "./private-names.ts";
-import { readPage } from "./read-page.ts";
+import { readPage, type PageReading } from "./read-page.ts";
 import { redactText, resolveTokens, type RedactionCounts } from "./redact.ts";
 
 /**
@@ -52,7 +52,7 @@ export interface NavigationWatch {
  */
 export type AgentEvent =
   | { type: "started"; taskId: string; redactedGoal: string }
-  | { type: "observed"; step: number; elements: number; redactions: RedactionCounts; page: string }
+  | { type: "observed"; step: number; elements: number; redactions: RedactionCounts; page: string; timings: PageReading["timings"] }
   | { type: "planned"; step: number; action: Action; targetLabel?: string; model: string; latencyMs: number }
   /**
    * `note` is what the planner is told in its history; `message` says the same
@@ -175,7 +175,7 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
       }
       if (namesFailed) return stopForNames();
       const { page } = reading;
-      onEvent({ type: "observed", step, elements: page.graph.elements.length, redactions: page.redactions, page: `${page.graph.url.origin}${page.graph.url.pathTemplate}` });
+      onEvent({ type: "observed", step, elements: page.graph.elements.length, redactions: page.redactions, page: `${page.graph.url.origin}${page.graph.url.pathTemplate}`, timings: reading.timings });
 
       // What the last action changed on screen goes into its history entry.
       const lastStep = history.at(-1);
