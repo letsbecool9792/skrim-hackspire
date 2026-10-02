@@ -1,0 +1,1 @@
+{"page":"webmail-inbox.html","about":"A reconstructed webmail inbox with personal senders and a public organisation.","pii":[{"category":"NAME","value":"Ananya Shah","where":"text"},{"category":"EMAIL","value":"ananya.shah@example.com","where":"text"},{"category":"PHONE","value":"+91 99001 11122","where":"text"}],"notPii":["City Library","Compose","Return reminder"]}

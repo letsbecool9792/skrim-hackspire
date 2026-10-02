@@ -1,0 +1,1 @@
+{"page":"long-account.html","about":"A page over 5,000 pixels tall with account contact PII at the bottom.","pii":[{"category":"NAME","value":"Leena Bose","where":"text"},{"category":"EMAIL","value":"leena.bose@example.com","where":"text"},{"category":"PHONE","value":"+91 98760 12345","where":"text"}],"notPii":["Recent public product updates.","Account activity"]}

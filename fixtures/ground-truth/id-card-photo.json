@@ -1,0 +1,1 @@
+{"page":"id-card-photo.html","about":"An ID-card layout using a locally stored AI-generated synthetic portrait, with one face.","faces":1,"pii":[{"category":"NAME","value":"Arjun Nair","where":"text"},{"category":"GOV_ID","value":"P4829017","where":"text"},{"category":"DOB","value":"18/07/1994","where":"text"}],"notPii":["ID photograph","Confirm document"]}
