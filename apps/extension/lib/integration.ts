@@ -1,21 +1,33 @@
-import type { Action, ScreenElement } from "@skrim/schema";
-import type { PageObservationMessage } from "./messages.ts";
+import type { PlanRequest, PlanResponse, ScreenElement } from "@skrim/schema";
+
+/**
+ * Registration points between workstreams. See docs/ws1-workflow.md.
+ *
+ * - The screen-graph provider (WS2) is registered in the CONTENT SCRIPT.
+ * - The action planner (WS4) is registered in the SIDE PANEL, where the agent
+ *   loop runs. The default calls the server; tests and the eval harness can
+ *   register their own.
+ */
 
 export interface ScreenGraphSnapshot {
+  /** RAW page text. The side panel redacts it before use. */
   elements: ScreenElement[];
   registry: Map<string, Element>;
   hasVisualCapture: boolean;
+  /** Element id -> field type and autocomplete hint, for PII detection. */
+  fields?: Record<string, { inputType?: string; autocomplete?: string }>;
 }
 
 export type ScreenGraphProvider = () => ScreenGraphSnapshot | Promise<ScreenGraphSnapshot>;
-export type TokenResolver = (value: string) => string | null;
-export type ActionPlanner = (input: {
-  goal: string;
-  observation: PageObservationMessage;
-}) => Action | Promise<Action | null> | null;
+
+/**
+ * One planning step: a redacted request in, one action out. `request` has
+ * already passed redaction; the planner must still call assertOutboundSafe()
+ * right before it sends anything over the network.
+ */
+export type ActionPlanner = (request: PlanRequest, signal: AbortSignal) => Promise<PlanResponse>;
 
 let screenGraphProvider: ScreenGraphProvider | null = null;
-let tokenResolver: TokenResolver | null = null;
 let actionPlanner: ActionPlanner | null = null;
 
 export function registerScreenGraphProvider(provider: ScreenGraphProvider | null): void {
@@ -24,14 +36,6 @@ export function registerScreenGraphProvider(provider: ScreenGraphProvider | null
 
 export function getScreenGraphProvider(): ScreenGraphProvider | null {
   return screenGraphProvider;
-}
-
-export function registerTokenResolver(resolver: TokenResolver | null): void {
-  tokenResolver = resolver;
-}
-
-export function getTokenResolver(): TokenResolver | undefined {
-  return tokenResolver ?? undefined;
 }
 
 export function registerActionPlanner(planner: ActionPlanner | null): void {

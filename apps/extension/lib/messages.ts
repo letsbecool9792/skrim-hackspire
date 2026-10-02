@@ -1,36 +1,25 @@
 import { z } from "zod";
 import { ActionSchema, ScreenElementSchema } from "@skrim/schema";
 import { ErrorCodeSchema } from "./errors.ts";
-import { TaskStatusSchema } from "./task-state.ts";
 
 /**
- * Intra-extension message contract.
+ * Intra-extension message contract: side panel <-> content script.
  *
  * These are NOT in @skrim/schema on purpose: that package is the
  * client ↔ server wire format, shared with the server and eval harness.
- * Messages between popup, background, and content are legitimately local
- * to the extension and would pollute the shared contract.
+ * Messages inside the extension are local to it and would pollute the
+ * shared contract.
  *
- * Every message crossing a browser.runtime.sendMessage or
- * browser.tabs.sendMessage boundary is validated against these schemas
- * at both ends. This is defence in depth: a garbled message is a parse
- * failure, not a silent wrong-click.
+ * Every message crossing a browser.tabs.sendMessage boundary is validated
+ * against these schemas at both ends. This is defence in depth: a garbled
+ * message is a parse failure, not a silent wrong-click.
+ *
+ * These messages never leave the device, and some carry raw page text: the
+ * observation's elements are unredacted, and a type action carries the real
+ * value to type. Nothing here may be logged.
  */
 
-// ─── Popup → Background ────────────────────────────────────────────────────
-
-export const TaskStartSchema = z.object({
-  type: z.literal("task.start"),
-  goal: z.string().min(1),
-});
-export type TaskStartMessage = z.infer<typeof TaskStartSchema>;
-
-export const TaskCancelSchema = z.object({
-  type: z.literal("task.cancel"),
-});
-export type TaskCancelMessage = z.infer<typeof TaskCancelSchema>;
-
-// ─── Background → Content ──────────────────────────────────────────────────
+// ─── Side panel → Content ──────────────────────────────────────────────────
 
 export const PageObserveSchema = z.object({
   type: z.literal("page.observe"),
@@ -43,10 +32,20 @@ export const ActionExecuteSchema = z.object({
   action: ActionSchema,
   actionId: z.string(),
   taskId: z.string(),
+  /**
+   * For type actions: the value with every PII token already swapped for the
+   * real text from the task's vault. The action itself keeps the tokens.
+   */
+  typedValue: z.string().optional(),
 });
 export type ActionExecuteMessage = z.infer<typeof ActionExecuteSchema>;
 
-// ─── Content → Background ──────────────────────────────────────────────────
+// ─── Content → Side panel (as the reply to the messages above) ─────────────
+
+export const FieldInfoSchema = z.object({
+  inputType: z.string().optional(),
+  autocomplete: z.string().optional(),
+});
 
 export const PageObservationSchema = z.object({
   type: z.literal("page.observation"),
@@ -55,7 +54,15 @@ export const PageObservationSchema = z.object({
   elementCount: z.number().int().nonnegative(),
   hasVisualCapture: z.boolean(),
   graphAvailable: z.boolean().default(false),
+  /** RAW. Redacted by the side panel before use. */
   elements: z.array(ScreenElementSchema).optional(),
+  /** Element id -> field type and autocomplete hint, for PII detection. */
+  fields: z.record(z.string(), FieldInfoSchema).optional(),
+  /** RAW location.href. Sanitised by the side panel before use. */
+  url: z.string().optional(),
+  /** RAW document.title. */
+  title: z.string().optional(),
+  viewport: z.object({ width: z.number(), height: z.number() }).optional(),
 });
 export type PageObservationMessage = z.infer<typeof PageObservationSchema>;
 
@@ -68,31 +75,20 @@ export const ActionResultSchema = z.object({
   completed: z.boolean().default(false),
   errorCode: ErrorCodeSchema.optional(),
   observationVersion: z.number().int().nonnegative(),
+  /** RAW text read by an extract action. Redacted by the side panel. */
+  extractedValue: z.string().optional(),
+  /** RAW: the action's target as it is now, if it is still on the page. */
+  targetAfter: ScreenElementSchema.pick({ label: true, value: true, state: true }).optional(),
 });
 export type ActionResultMessage = z.infer<typeof ActionResultSchema>;
-
-// ─── Background → Popup ────────────────────────────────────────────────────
-
-export const TaskStatusMessageSchema = z.object({
-  type: z.literal("task.status"),
-  taskId: z.string().optional(),
-  status: TaskStatusSchema,
-  stepCount: z.number().int().nonnegative().optional(),
-  maxSteps: z.number().int().positive().optional(),
-  errorCode: ErrorCodeSchema.optional(),
-});
-export type TaskStatusMessage = z.infer<typeof TaskStatusMessageSchema>;
 
 // ─── Union ─────────────────────────────────────────────────────────────────
 
 export const MessageSchema = z.discriminatedUnion("type", [
-  TaskStartSchema,
-  TaskCancelSchema,
   PageObserveSchema,
   ActionExecuteSchema,
   PageObservationSchema,
   ActionResultSchema,
-  TaskStatusMessageSchema,
 ]);
 export type Message = z.infer<typeof MessageSchema>;
 
@@ -105,4 +101,3 @@ export function parseMessage(data: unknown): Message | null {
   const result = MessageSchema.safeParse(data);
   return result.success ? result.data : null;
 }
-

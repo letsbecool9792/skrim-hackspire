@@ -1,0 +1,256 @@
+import type { Action, PlanRequest, PlanResponse, StepRecord } from "@skrim/schema";
+import { log } from "@skrim/shared";
+
+import type { ErrorCode } from "../errors.ts";
+import { newActionId, newTaskId } from "../id.ts";
+import type { ActionPlanner } from "../integration.ts";
+import { parseMessage, type ActionResultMessage, type Message, type PageObservationMessage } from "../messages.ts";
+import { redactDomData } from "../pii/redact.js";
+import { DEFAULT_MAX_STEPS, DEFAULT_TIMEOUT_MS, MAX_CONSECUTIVE_UNVERIFIED } from "../task-state.ts";
+import { TokenVault } from "../vault/vault.js";
+import { redactPage, redactText, resolveTokens, type RedactionCounts } from "./redact.ts";
+
+/**
+ * THE AGENT LOOP: observe -> redact -> plan -> act -> verify, one action per
+ * cycle, until the planner says done or a limit is hit.
+ *
+ * It runs in the side panel, not the background. Chrome terminates an
+ * extension service worker when a fetch() takes more than 30 s, and a local
+ * model can take longer than that for one step. The side panel is an ordinary
+ * extension page with no such limit, and the task, its vault and the chat all
+ * live exactly as long as the panel the user is looking at.
+ */
+
+/** How the loop reaches the page. The side panel wires it to one tab; tests wire it to a DOM in memory. */
+export interface PageLink {
+  /** Sends to the content script; resolves to its reply, or undefined when nothing answered. */
+  send(message: Message): Promise<unknown>;
+  /** Starts watching the tab for a page load. */
+  watchNavigation(): NavigationWatch;
+}
+
+export interface NavigationWatch {
+  /** Whether the tab started loading a new page since the watch began. */
+  readonly started: boolean;
+  /** Resolves true once that load finishes, or false after `ms`. */
+  loaded(ms: number): Promise<boolean>;
+  stop(): void;
+}
+
+/**
+ * What the UI shows. Everything in here is already redacted: the chat shows
+ * what the server saw, which doubles as proof of what it did not see.
+ */
+export type AgentEvent =
+  | { type: "started"; taskId: string; redactedGoal: string }
+  | { type: "observed"; step: number; elements: number; redactions: RedactionCounts; page: string }
+  | { type: "planned"; step: number; action: Action; targetLabel?: string; model: string; latencyMs: number }
+  | { type: "acted"; step: number; verified: boolean; note?: string }
+  | {
+      type: "finished";
+      outcome: "completed" | "failed" | "cancelled";
+      steps: number;
+      /** Distinct personal values this task replaced with tokens, by category. */
+      tokens: RedactionCounts;
+      summary?: string;
+      errorCode?: ErrorCode;
+      message?: string;
+    };
+
+export interface AgentOptions {
+  goal: string;
+  planner: ActionPlanner;
+  link: PageLink;
+  /** Aborted when the user presses stop or closes the panel. */
+  signal: AbortSignal;
+  onEvent: (event: AgentEvent) => void;
+  maxSteps?: number;
+  timeoutMs?: number;
+}
+
+/** The schema caps history at 20 steps; older steps matter least. */
+const MAX_HISTORY = 20;
+/** How long a new page may take to finish loading after a click or navigate. */
+const PAGE_LOAD_TIMEOUT_MS = 15_000;
+
+type Finish = Omit<Extract<AgentEvent, { type: "finished" }>, "type" | "steps" | "tokens">;
+
+export async function runAgentTask(options: AgentOptions): Promise<void> {
+  const { planner, link, onEvent } = options;
+  const maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  // Not AbortSignal.timeout(): its timer outlives a task that ended early.
+  const timeoutController = new AbortController();
+  const timeout = timeoutController.signal;
+  const timer = setTimeout(() => timeoutController.abort(new DOMException("Task time budget used up", "TimeoutError")), timeoutMs);
+  const signal = AbortSignal.any([options.signal, timeout]);
+  const taskId = newTaskId();
+  const vault = new TokenVault();
+  const history: StepRecord[] = [];
+  const extracted: Record<string, string> = {};
+  let step = 0;
+
+  const finish = (result: Finish): void => {
+    log.info("agent.finished", { taskId, outcome: result.outcome, steps: step, errorCode: result.errorCode });
+    onEvent({ type: "finished", steps: step, tokens: vault.stats(), ...result });
+  };
+
+  log.info("agent.started", { taskId });
+  try {
+    const goal = redactText(options.goal, vault);
+    onEvent({ type: "started", taskId, redactedGoal: goal });
+    let unverifiedInARow = 0;
+
+    for (step = 0; step < maxSteps; step++) {
+      const observation = await observe(link, taskId, signal);
+      if (!observation) {
+        return finish({ outcome: "failed", errorCode: "CONTENT_SCRIPT_ERROR", message: "Skrim cannot read this tab. Reload the page and try again. Browser pages such as chrome:// and the extension store are off limits to all extensions." });
+      }
+      if (!observation.graphAvailable) {
+        return finish({ outcome: "failed", errorCode: "OBSERVATION_FAILED", message: "The page did not produce a screen graph." });
+      }
+
+      const page = redactPage(observation, step, vault);
+      onEvent({ type: "observed", step, elements: page.graph.elements.length, redactions: page.redactions, page: `${page.graph.url.origin}${page.graph.url.pathTemplate}` });
+
+      const request: PlanRequest = {
+        goal,
+        graph: page.graph,
+        history: history.slice(-MAX_HISTORY),
+        ...(Object.keys(extracted).length > 0 ? { extracted: { ...extracted } } : {}),
+      };
+      let plan: PlanResponse;
+      try {
+        plan = await planner(request, signal);
+      } catch (error) {
+        if (signal.aborted) throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.startsWith("Outbound payload contains unredacted PII")) {
+          return finish({ outcome: "failed", errorCode: "PII_TRIPWIRE", message: "Stopped before sending: the request still contained personal data the detectors missed. Nothing was sent." });
+        }
+        return finish({ outcome: "failed", errorCode: "PLANNER_ERROR", message });
+      }
+
+      const { action } = plan;
+      const target = "target" in action && action.target ? page.graph.elements.find((element) => element.id === action.target) : undefined;
+      onEvent({ type: "planned", step, action, targetLabel: target?.label ?? target?.value, model: plan.model, latencyMs: plan.latencyMs });
+      log.info("agent.planned", { taskId, step, elements: page.graph.elements.length, action: action.type, latencyMs: plan.latencyMs, repairs: plan.repairs });
+
+      if (action.type === "done") {
+        return finish(action.success
+          ? { outcome: "completed", summary: action.summary }
+          : { outcome: "failed", errorCode: "GOAL_NOT_ACHIEVED", summary: action.summary });
+      }
+
+      const outcome = await act(link, taskId, step, action, vault, signal);
+      if ("fatal" in outcome) return finish({ outcome: "failed", errorCode: outcome.fatal, message: outcome.message });
+
+      history.push({ cycle: step, action, verified: outcome.verified, ...(outcome.note ? { note: outcome.note } : {}) });
+      onEvent({ type: "acted", step, verified: outcome.verified, note: outcome.note });
+      if (action.type === "extract" && outcome.extractedValue) extracted[action.as] = redactText(outcome.extractedValue, vault);
+
+      unverifiedInARow = outcome.verified ? 0 : unverifiedInARow + 1;
+      if (unverifiedInARow >= MAX_CONSECUTIVE_UNVERIFIED) {
+        step += 1;
+        return finish({ outcome: "failed", errorCode: "NO_PROGRESS", message: `The last ${MAX_CONSECUTIVE_UNVERIFIED} steps changed nothing on the page.` });
+      }
+    }
+    return finish({ outcome: "failed", errorCode: "MAX_STEPS_REACHED", message: `Stopped after ${maxSteps} steps.` });
+  } catch (error) {
+    if (timeout.aborted) return finish({ outcome: "failed", errorCode: "TASK_TIMEOUT", message: `Stopped after ${Math.round(timeoutMs / 1000)} s.` });
+    if (options.signal.aborted) return finish({ outcome: "cancelled" });
+    log.error("agent.crashed", { taskId, step, error: error instanceof Error ? error.name : "unknown" });
+    return finish({ outcome: "failed", errorCode: "CONTENT_SCRIPT_ERROR", message: "Something went wrong inside Skrim. The extension's console has the details." });
+  } finally {
+    clearTimeout(timer);
+    // The vault is the only place real values live. It dies with the task.
+    vault.clear();
+  }
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+  });
+}
+
+async function observe(link: PageLink, taskId: string, signal: AbortSignal): Promise<PageObservationMessage | null> {
+  // Right after a page load the new page's content script may not be ready.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const reply = parseMessage(await link.send({ type: "page.observe", taskId }));
+    signal.throwIfAborted();
+    if (reply?.type === "page.observation") return reply;
+    await sleep(400, signal);
+  }
+  return null;
+}
+
+type ActOutcome =
+  | { verified: boolean; note?: string; extractedValue?: string }
+  | { fatal: ErrorCode; message: string };
+
+/** Short, PII-free notes the planner reads in its history. */
+const ERROR_NOTES: Partial<Record<ErrorCode, string>> = {
+  TARGET_NOT_FOUND: "no such element on the page any more; ids change after every action",
+  TARGET_NOT_CLICKABLE: "the element is disabled or hidden",
+  NAVIGATION_BLOCKED: "navigation to another site is not allowed",
+  MALFORMED_ACTION: "the action was malformed",
+  CONTENT_SCRIPT_ERROR: "the action failed inside the page",
+};
+
+/** States worth reporting after an action. "focused" is not: every click causes it. */
+const REPORTED_STATES = new Set(["checked", "unchecked", "expanded", "collapsed", "selected", "disabled", "invalid"]);
+
+/**
+ * What the action's target shows now, for the history: "now it shows
+ * "Count: 1"", "now it is expanded". Small models notice they are done from
+ * this far more reliably than from "verified" alone. Redacted like the rest.
+ */
+function describeTarget(target: NonNullable<ActionResultMessage["targetAfter"]>, vault: TokenVault): string | undefined {
+  const { value } = redactDomData({ label: target.label, value: target.value }, vault);
+  const parts: string[] = [];
+  if (value) parts.push(`shows ${JSON.stringify(value.length > 80 ? `${value.slice(0, 77)}...` : value)}`);
+  const states = (target.state ?? []).filter((state) => REPORTED_STATES.has(state));
+  if (states.length > 0) parts.push(`is ${states.join(", ")}`);
+  return parts.length > 0 ? `now it ${parts.join(" and ")}`.slice(0, 150) : undefined;
+}
+
+async function act(link: PageLink, taskId: string, step: number, action: Action, vault: TokenVault, signal: AbortSignal): Promise<ActOutcome> {
+  let typedValue: string | undefined;
+  if (action.type === "type") {
+    const resolved = resolveTokens(action.value, vault);
+    // The model used a token this task never issued. Typing it literally is
+    // the one thing we never do, so the step is skipped and reported.
+    if (!resolved.ok) return { verified: false, note: `not typed: ${resolved.unknown.join(", ")} is not a token on this page` };
+    typedValue = resolved.value;
+  }
+
+  const watch = link.watchNavigation();
+  try {
+    const reply = await link.send({ type: "action.execute", action, actionId: newActionId(step), taskId, ...(typedValue === undefined ? {} : { typedValue }) });
+    signal.throwIfAborted();
+
+    // A click on a link, or a navigate, unloads the page, often before the
+    // content script can reply. A page load is the change we were after.
+    if (action.type === "navigate" && !watch.started) await sleep(500, signal);
+    if (watch.started) {
+      const loaded = await watch.loaded(PAGE_LOAD_TIMEOUT_MS);
+      signal.throwIfAborted();
+      return loaded ? { verified: true } : { verified: true, note: "a new page was still loading" };
+    }
+
+    const result = parseMessage(reply);
+    if (result?.type !== "action.result") {
+      return { fatal: "CONTENT_SCRIPT_ERROR", message: "The page stopped answering. Reload it and try again." };
+    }
+    if (!result.ok) {
+      return { verified: false, note: ERROR_NOTES[result.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? "the action failed" };
+    }
+    const after = result.targetAfter ? describeTarget(result.targetAfter, vault) : undefined;
+    const note = result.changed ? after : ["the page did not change", after].filter(Boolean).join("; ");
+    return { verified: result.changed, ...(note ? { note } : {}), ...(result.extractedValue === undefined ? {} : { extractedValue: result.extractedValue }) };
+  } finally {
+    watch.stop();
+  }
+}

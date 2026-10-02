@@ -18,7 +18,10 @@ export const StepRecordSchema = z.object({
   action: ActionSchema,
   /** Did the expected state change actually happen? */
   verified: z.boolean(),
-  /** Short failure note when verified is false. No PII. */
+  /**
+   * What happened, in a few words: why it failed, or what the target shows
+   * now ("now it is expanded"). Tokens only, never raw PII.
+   */
   note: z.string().max(200).optional(),
 });
 export type StepRecord = z.infer<typeof StepRecordSchema>;
