@@ -13,9 +13,10 @@ architectural decision, add it to "Locked decisions" with a one-line reason.
 ## Where the project stands
 
 The agent loop is closed end to end (DOM graph → PII redaction → server → one action →
-verify), in a chat side panel. Next milestone: **see it work in a real browser, and pick a
-planning model that finishes tasks**; the NVIDIA default does not. Then perception beyond the
-DOM. See "Status" and "Open findings".
+verify), in a chat side panel, and works in Chrome on the fixture pages. Both
+Qwen planners finish all six fixture goals. Next: **settle the default provider** (Groq's
+free tier allows only 4–5 steps a minute), then the eval harness, then perception beyond
+the DOM. See "Status" and "Open findings".
 
 ---
 
@@ -49,7 +50,7 @@ actually needed.
 | Profile | Status | Use | Cost |
 |---|---|---|---|
 | `nvidia` | **wired** | dev default; fast, but its only reliable model (Llama 3.2 11B) cannot finish tasks | free, no card, ~40 RPM |
-| `groq` | **wired** | hosted Qwen (`qwen/qwen3.8-27b`) | free, no card, 30 RPM, **8,000 tokens/min**, 200k tokens/day |
+| `groq` | **wired** | hosted Qwen (`qwen/qwen3.8-27b`), the best planner measured | free, no card, 30 RPM, **7,000 input tokens/min** (about 4–5 steps), 200k tokens/day |
 | `ollama` | **wired** | air-gap demo, offline dev | free, local |
 | `cloudflare` | not wired | also hosts `qwen3.8-27b` | free, no card, 10k neurons/day |
 | `openrouter` | not wired | last resort | **50 req/day** without credits — unusable as a daily driver |
@@ -166,7 +167,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 18 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (120 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (126 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       before the OmniParser detector. The built extension is 86.6 MB, including ONNX
@@ -178,31 +179,34 @@ Foundations:
 
 **The loop is closed**: goal → DOM graph → redaction against a per-task vault →
 server → one action → verify → repeat, in a chat side panel. Tested in Node against
-happy-dom with the real server and models (`pnpm test:agent`); **not yet tried in a real
-browser**.
+happy-dom with the real server and models (`pnpm test:agent`), and **in Chrome**:
+the click and form fixtures, GLiNER, OCR and capture all work there. Firefox is untried.
 
 Built, by workstream:
 - [x] **WS1 shell:** side panel chat, the agent loop (`lib/agent/`), all 8 actions, click
-      verification that ignores focus, page loads followed, 25-step and 5-minute limits,
-      stops for no progress and for going in circles, the tab fixed per task
-- [x] **WS2 perception:** DOM extraction with visible text, field values and dropdown
-      options. OCR works on demand (header button); fusion and escalation modules exist but
-      are not in the loop
+      verification that ignores focus, page loads followed (including a click whose page
+      unloads before it can answer), 25-step and 5-minute limits, stops for no progress
+      and for going in circles, the tab fixed per task
+- [x] **WS2 perception:** DOM extraction with visible text, field values, dropdown options,
+      and names from images and icons (alt text, svg titles). The OCR module works in
+      Chrome; fusion and escalation modules exist but are not in the loop
 - [x] **WS3 privacy:** regex detectors (precision bugs fixed), form-field hints for names and
-      phones, **GLiNER for names and addresses in free text** (side panel, ~5 ms a text), one
-      vault per task, every page view and the goal redacted, tokens resolved only at typing
-      time, tripwire on the whole request
+      phones, **GLiNER for names and addresses in free text** (side panel, ~12 ms a text),
+      one vault per task (one token per value however it is written), every page view and
+      the goal redacted, tokens resolved only at typing time, tripwire on the whole request
 - [x] **WS4 server:** `/plan` with one adapter and three profiles (NVIDIA, Groq, Ollama),
       compact prompt that reads the history, JSON repair, timeouts with one retry, errors
-      that do not leak provider detail
-- [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, `pnpm test:agent`, and the
-      OCR button. All in [`docs/testing.md`](docs/testing.md)
+      that do not leak provider detail. The history tells the planner what each action
+      changed on screen ("appeared: ...")
+- [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, `pnpm test:agent`. All in
+      [`docs/testing.md`](docs/testing.md)
 
 ### What's left, in order
 
 **1. Prove it in a real browser, and pick the model.**
-- [ ] Run [`docs/testing.md`](docs/testing.md) sections 5 and 6 in Chrome, then Firefox
-- [ ] Settle the model (see "Open findings"): measure Groq's Qwen 3.8 with `pnpm test:agent`
+- [x] Run [`docs/testing.md`](docs/testing.md) section 5 in Chrome (its bugs fixed)
+- [x] Measure Groq's Qwen 3.8 with `pnpm test:agent`: 6 of 6 (see "Open findings")
+- [ ] Settle the default provider, given Groq's rate limit (see "Open findings")
 
 **2. Perception beyond the DOM** (WS2, WS3)
 - [x] GLiNER inference for names and addresses in free text
@@ -218,56 +222,64 @@ Built, by workstream:
 - [ ] Tradeoff curve: GLiNER quint8 vs fp16; hosted vs local model accuracy and latency
 
 **4. Platform**
-- [ ] Firefox: run the tests in [`docs/testing.md`](docs/testing.md)
+- [ ] Firefox: run the tests in [`docs/testing.md`](docs/testing.md) (parked for now)
 - [ ] Cloudflare fallback provider (deferred; only if Groq's and NVIDIA's limits bite)
 
 ---
 
 ## Open findings — revisit later
 
-Collected while merging the team's first PRs and while testing and closing the loop.
-Each needs a decision or a follow-up. Delete an entry once it is dealt with.
+Collected while merging the team's first PRs, while testing and closing the loop, and from
+the first Chrome test. Each needs a decision or a follow-up. Delete an entry once it is
+dealt with.
 
-**Pick the planning model. Llama 3.2 11B cannot finish a task.** Measured
-with `pnpm test:agent` (the fixture goals through the real loop) and `pnpm smoke:server`:
+**Pick the default provider. Groq's Qwen is the best planner, but slow to get to.**
+Measured with `pnpm test:agent` (the fixture goals through the real loop) and
+`pnpm smoke:server`:
 
 | Model | Result |
 |---|---|
+| **`qwen/qwen3.8-27b` on Groq (hosted)** | **Best**. 6 of 6 fixture goals with no wasted step: on the form it also filled the name via its token, chose the right topic and wrote a proper message. 0.5–0.9 s a step. But see the rate limit below |
+| **`qwen3-vl:4b-instruct` on Ollama (local)** | 6 of 6, 0.3–0.9 s a step on the dev laptop after an ~8 s first load, 4 of 4 smoke checks. Sloppier: clicks a field before typing into it, picked "Billing" for a late parcel. Before the history notes it scored 4 of 5 and toggled "Click show panel" in circles |
 | `meta/llama-3.2-11b-vision-instruct`, NVIDIA (default) | Right first action, about 1 s a step, but **never answers done**: clicked the counter 25 times while its history said "now it shows Count: 25". 0 of 5 fixture goals |
 | `qwen3-vl:4b` on Ollama (the thinking build; the plain tag) | Answers done after one click on 3 of 4 click goals, but 5–40 s a step, and twice spent its whole reply thinking and returned nothing. Its thinking cannot be switched off through the OpenAI-compatible API |
-| **`qwen3-vl:4b-instruct` on Ollama (local)** | **Best so far.** 4 of 5 fixture goals, including the whole form (email typed via its token, submitted, no raw PII sent); 4 of 4 smoke checks; **0.3–0.9 s a step** on the dev laptop after an ~8 s first load. Missed "Click show panel": the button then says "Hide Panel" and it kept toggling, until the loop's circle guard stopped it |
-| `qwen/qwen3.8-27b` on Groq | Not measured: needs a `GROQ_API_KEY` |
 | Other NVIDIA models (Gemma 4, gpt-oss-20b, GLM, DeepSeek, Nemotron) | Most never reply within 60 s on the free tier; Mistral Large and one Nemotron are "not found". Nemotron 3.5 Lightning got the stop case right but took 20–70 s |
 
-NVIDIA hosts no Qwen at all (81 models listed). Groq's free tier has
-`qwen/qwen3.8-27b` (open weights, vision-capable, no card), limited to 8,000 tokens a minute:
-one step is about 700 tokens plus ~20 per element. Cloudflare Workers AI hosts it too.
+**Groq's free tier allows 7,000 input tokens a minute** for this model (from its 429
+reply), and one step is about 1,500 (the system prompt plus ~20 per element), so **4–5
+steps a minute**. An unpaced `pnpm test:agent` hit the limit on its 5th request; paced at
+one request per 14 s it passed 6 of 6. Today a 429 fails the task ("rate limit
+reached"). Groq's 429 says how long to wait (about 3 s), so waiting and retrying in the
+server would turn failures into pauses; not built, by choice, until it is needed.
+NVIDIA hosts no Qwen at all (81 models listed); Cloudflare Workers AI hosts Qwen 3.8 too.
 
-So: local Qwen3-VL 4B instruct is the working planner today, and fast on this laptop.
-Still to decide: whether hosted Qwen 3.8 27B on Groq beats it (measure with
-`pnpm test:agent`), and whether NVIDIA stays the default provider for teammates without a
-GPU, given that its only fast model cannot finish tasks.
+Still to decide: the default provider for teammates without a GPU. NVIDIA's only fast
+model cannot finish tasks; Groq's can but is rate limited.
 
-**Not yet tried in a real browser.** The side panel, tab messaging, page-load following and
-host permission were built and tested against happy-dom, not in Chrome or Firefox.
-[`docs/testing.md`](docs/testing.md) sections 5 and 6 are the checklist.
+**Public names are hidden too.** GLiNER cannot tell the user's name from anyone else's. On
+Wikipedia's main page it tokenised 52 names; "Search for alan turing" goes to the server as
+"search for <PII:NAME:1>". Tasks still work (the token is typed back as the real name, and
+the goal's "alan turing" and the page's "Alan Turing" share one token), but the planner
+reads a news page full of placeholders. That is over-redaction, which is scored. Open: how
+to keep public names while hiding the user's.
+
+**Name detection is slow on big pages.** ONNX Runtime's WASM on one thread takes about
+12 ms a text, and each text is its own model call (batching changed the scores and was no
+faster). Wikipedia's main page has about 600 texts: **about 8 s** before the first step;
+later steps only scan new texts. Options: threads (needs the side panel cross-origin
+isolated), WebGPU, skipping texts that cannot hold a name, or a Worker so the chat does
+not freeze meanwhile.
 
 **The offscreen document is probably unnecessary now.** It exists because Chrome's service
 worker cannot run WebAssembly or WebGPU. The loop lives in the side panel, an ordinary page,
-and both OCR and GLiNER already run there. GLiNER runs on the panel's main thread (about
-5 ms a text, so a page is tens of milliseconds); move it to a Worker if a heavier model
-makes the chat stutter. Dropping the offscreen document would also drop the `offscreen`
-permission.
+and both OCR and GLiNER run there (both checked in Chrome). Dropping the
+offscreen document would also drop the `offscreen` permission.
 
 **Name detection fails open.** If GLiNER cannot load in the side panel, the task continues
 with the regex layer and the chat shows a red warning that names and addresses are not being
-hidden. That keeps the agent usable while the model path is unproven in a real browser.
-Once it is, consider stopping the task instead.
-
-**Not yet tried in a real browser: GLiNER.** It is tested in Node on onnxruntime-node
-against the real model (`lib/pii/gliner-model.test.ts`, `pnpm test:agent`), but the
-browser path (onnxruntime-web, the WASM asset Vite emits, fetching the model from the
-extension) has not run in Chrome.
+hidden. That kept the agent usable while the model path was unproven. It loaded in Chrome
+(the form fixture's name and address were tokenised), so consider stopping the
+task instead.
 
 **URL paths can carry names.** `sanitizeUrl()` masks long digit runs, uuids, hex and anything
 with `@`, but keeps word segments, so `/users/asha-rao/orders` reaches the server as is.

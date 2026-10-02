@@ -55,16 +55,16 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 120 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 126 tests:
 
 | Tests | Covers |
 |---|---|
 | 18 in `@skrim/schema` | The wire contract: PII tokens, URL sanitising, action validation, the outbound PII tripwire |
 | 11 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks) and the prompt format |
-| 52 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection, form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), the token vault |
+| 53 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection, form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), the token vault |
 | 16 in `lib/vision` | DOM + vision fusion and the escalation policy |
-| 12 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns) and click verification, in a simulated DOM |
-| 11 in `lib/agent` | The whole loop with a scripted planner: redaction (names included), typing via tokens, the no-progress and going-in-circles stops, tripwire, cancel |
+| 15 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons) and click verification, in a simulated DOM |
+| 13 in `lib/agent` | The whole loop with a scripted planner: redaction (names included), typing via tokens, what appeared after each action, an action whose reply never comes, the no-progress and going-in-circles stops, tripwire, cancel |
 
 The same command runs in CI on every PR.
 
@@ -115,9 +115,9 @@ provider. Stop it with Ctrl+C in that terminal, then start the one you want. Cha
 
 | Setup | How | Result |
 |---|---|---|
-| **Ollama, Qwen3-VL 4B instruct (local)** | `ollama pull qwen3-vl:4b-instruct`, then `$env:MODEL_PROVIDER = "ollama"; pnpm dev:server` | **Best so far:** smoke 4 of 4, fixtures 4 of 5, 0.3–0.9 s a step after an ~8 s first load |
+| **Groq, Qwen 3.8 27B (hosted)** | `GROQ_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "groq"; pnpm dev:server` | **Best**: fixtures 6 of 6 with no wasted steps, 0.5–0.9 s a step. But the free tier allows **7,000 input tokens a minute** and a step is about 1,500, so **4–5 steps a minute**; past that the task fails with "rate limit reached". `pnpm test:agent` hits it on its 5th request |
+| **Ollama, Qwen3-VL 4B instruct (local)** | `ollama pull qwen3-vl:4b-instruct`, then `$env:MODEL_PROVIDER = "ollama"; pnpm dev:server` | Fixtures 6 of 6, 0.3–0.9 s a step after an ~8 s first load; sometimes clicks a field before typing into it. Smoke 4 of 4 |
 | NVIDIA, Llama 3.2 11B Vision (the default) | `NVIDIA_API_KEY` in `.env` | Fast (about 1 s) but **never says done**: on the fixtures it repeated its click until the 25-step limit. Smoke 3 of 4 |
-| Groq, Qwen 3.8 27B | `GROQ_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "groq"; pnpm dev:server` | Not measured yet: needs your key. Free, no card: https://console.groq.com/keys |
 
 `$env:...` settings last until you close that terminal. To make one permanent, set
 `MODEL_PROVIDER` (and `OLLAMA_MODEL=qwen3-vl:4b-instruct`, if your `.env` names a model) in
@@ -134,11 +134,13 @@ pnpm test:agent          # terminal 2
 
 Runs the real loop on the fixture pages in a simulated DOM (happy-dom), against the real
 server and model: extraction, redaction, the vault, planning, actions and verification. For
-each goal it prints every step, whether it was verified, the outcome, whether the page ended
-up right, and, for the form, whether any raw personal data reached the server (it should
-say "none").
+each of the six goals it prints every step, whether it was verified, what the planner was
+told about it afterwards (`told: now it is expanded; appeared: ...`), the outcome, whether
+the page ended up right, and, for the form, whether any raw personal data reached the
+server (it should say "none").
 
-This is the quickest way to judge a model: run it with each provider from section 3.
+This is the quickest way to judge a model: run it with each provider from section 3. On
+Groq's free tier it runs into the rate limit (section 3).
 
 ---
 
@@ -149,33 +151,31 @@ This is the quickest way to judge a model: run it with each provider from sectio
 2. Open `file:///D:/Programming/skrim/fixtures/pages/click-test.html`.
 3. Click the Skrim icon. In the side panel, type a goal and press Enter.
 
+Each goal should take one click, then **✓ Done**:
+
 | Goal | Expected on the page |
 |---|---|
-| `Increment the counter once` | **Count: 1**, and the chat shows one verified click, then **✓ Done** |
-| `Click show panel` | The panel opens, although the button's hidden name is "Toggle panel". Known miss with Qwen3-VL 4B: the button then says "Hide Panel" and it keeps toggling, until Skrim stops it as "Stuck" |
+| `Increment the counter once` | **Count: 1** |
+| `Click show panel` | The panel opens, although the button's hidden name is "Toggle panel". It must not click again: the button then says "Hide Panel" |
 | `Accept the terms` | The checkbox gets ticked |
-| `Open the details section` | The accordion opens |
-| `Go to section 2` | The page jumps to section 2 |
+| `Open the details section` | The accordion opens, and stays open |
+| `Go to section 2` | The page jumps to section 2, and the task ends there |
 | `Find the cheapest flight` | Nothing to click: the model should give up with "Couldn't do that here" |
 
 Then the form: open `fixtures/pages/form-test.html` and try
 `Send support a message saying my parcel is late. Use my email from the account box.`
-The chat shows "Sent to the server as:" with your goal, and every step the model took; the
-email goes in as a labelled "email address 1" pill, and the page gets the real address.
-Under the result it says what stayed on the device.
+The chat shows every step the model took; the email goes in as a labelled "email address 1"
+pill, and the page gets the real address. The name and phone fields may stay empty: the
+form does not need them and the goal did not ask. The **ⓘ** button under the result says
+what stayed on the device: here a name, an email address, a phone number and an address.
+
+Then a real site, for example Wikipedia with `Search for Alan Turing`. Expect a pause of
+several seconds before the first step: name detection reads every text on a page that big
+(see "Open findings" in `CLAUDE.md`). "Alan Turing" goes to the server as a name token.
+Clicking a link that opens a new page continues the task on that page.
 
 The chat stays for as long as the panel is open. Closing the panel stops a running task and
 clears everything.
-
----
-
-## 6. Screenshot and OCR
-
-In the side panel header, click **Aa**. It captures the visible tab and reads its text with
-Tesseract, on your machine, and shows the word count, time and the first words in the chat.
-Expect a couple of seconds for a full screen. Browser pages (settings, new tab, the extension
-store) cannot be captured by any extension, and local files only with file access allowed;
-the chat says which one it hit.
 
 ---
 
@@ -184,7 +184,7 @@ the chat says which one it hit.
 | Part | Why |
 |---|---|
 | Face detection, OmniParser icon detection | Not built. The OmniParser model has not been exported |
-| Vision in the loop (OCR, fusion) | The modules exist, but the loop observes the DOM only |
+| Vision in the loop (OCR, fusion) | The modules exist, but the loop observes the DOM only. OCR itself read the fixtures in Chrome in 0.1–0.4 s, through a test button since removed |
 | Dashboard, landing page | Still the Vite templates |
 | Eval harness | Empty package, no ground truth yet |
 | Firefox | Builds, but nothing has been tried in it yet |
