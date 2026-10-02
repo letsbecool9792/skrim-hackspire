@@ -285,6 +285,7 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
 - [x] **Pick the default provider**: Groq's Qwen 3.8 27B, as the study
       ([`docs/provider-study.md`](docs/provider-study.md)) recommends (decided 2026-10-02)
+- [ ] **Rehearse demo beat 8 on Ollama (offline):** Turn Wi-Fi off, run a whole task on Ollama, and verify the dashboard updates without reaching the network. Note any network attempts.
 
 ### What's left, in order
 

@@ -14,3 +14,4 @@ export * from "./graph.js";
 export * from "./action.js";
 export * from "./protocol.js";
 export * from "./guard.js";
+export * from "./dashboard.js";
