@@ -168,7 +168,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (195 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (214 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       before the OmniParser detector. The built extension is 86.6 MB, including ONNX
@@ -229,7 +229,7 @@ Built, by workstream:
 |---|---|---|
 | Suparno | The Chrome retest's fixes (merged); finishing the dashboard (PR #15); next, the side panel's look | Ollama |
 | Aritra (WS1) | The dashboard (PR #15): built, then finished by Suparno; Aritra has stopped. The offline rehearsal (demo beat 8) is under "Waiting on Suparno" | Ollama |
-| Ayushi (WS3) | Detection: the email leak and the Aadhaar miss read by OCR, false positives, names in URL paths; then face detection and face scoring in the eval | `pnpm eval`; Groq when needed |
+| Ayushi (WS3) | Detection: the email leak and the Aadhaar miss read by OCR (PR 18, finished by Suparno), false positives (PR 17), names in URL paths; then face detection and face scoring in the eval | `pnpm eval`; Groq when needed |
 | Dhruba (WS2) | 19 more fixtures, to about 40 (faces, Hindi, long pages, real-site layouts) and reading long pages in the eval; then the OmniParser export and icon detector | `pnpm eval`; Groq when needed |
 
 **Hands off: the side panel's look.** Suparno redesigns
@@ -401,15 +401,19 @@ task. Known gaps:
   hidden: the eval's search results page loses a celebrity chef and "biryani".
 - The cue words are English.
 
-**What the eval finds** (`pnpm eval` in Chromium, 22 fixtures, 2026-10-02): **96.9% recall
-on all PII**, 98.4% on PII in the page's text (63 of 64), **79.0% precision**, 8 of 137
-near-misses hidden, 2.7% of non-PII characters hidden. OCR now reads the canvas (3 of 3), the
-ID card image (2 of 3) and the cross-origin iframe (1 of 2); the Node check (`pnpm eval:node`)
-cannot capture those and gives 87.7% recall. Name detection takes a median 250 ms a page view
-in the browser, against 38 ms in Node. Two misses:
-- the Aadhaar number on the ID card image is read but not hidden;
-- the iframe's email is read as "mehta@example.com": that part is hidden, but "karan." is
-  left readable, so part of a name leaks.
+**What the eval finds** (`pnpm eval` in Chromium, 22 fixtures, 2026-10-03): **100% recall
+on all PII** (65 of 65), **80.5% precision**, 8 of 137 near-misses hidden, 2.5% of non-PII
+characters hidden. OCR reads the canvas, the ID card image and the cross-origin iframe, and
+everything on them is hidden; the Node check (`pnpm eval:node`) cannot capture those and gives
+87.7% recall. Name detection takes a median 250 ms a page view in the browser, against 38 ms
+in Node. The last two misses were fixed with Ayushi (PR 18):
+- the Aadhaar number on the ID card image had no label of its own: a line read from pixels
+  now also has its image's label ("Uploaded ID card") as context, and "ID card" counts as
+  one for an Aadhaar number;
+- Tesseract read the iframe's "karan.mehta@example.com" as "karan mehta@example.com", so
+  "karan" was sent: text read from pixels now joins a word to the address it touches.
+  `pnpm eval -- --show-text <page>` prints what a page was read as. Values that exist only
+  as pixels are scored allowing OCR's slips, since what counts is whether they were hidden.
 
 The false positives: single capitalised words taken for names ("Aadhaar", "biryani",
 "Koramangala"), business addresses on personal pages ("Apollo Clinic, Bannerghatta Road", "MG
