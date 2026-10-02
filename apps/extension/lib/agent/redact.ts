@@ -87,6 +87,25 @@ function contextFor(elements: readonly ScreenElement[], index: number): string |
   return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
+/**
+ * A path segment can hold a name: "/users/asha-rao/orders". The names the task
+ * knows (lib/agent/private-names.ts) are looked for in each segment, written
+ * with spaces as a page would, and a segment holding one becomes "{name}".
+ * Only names already known are found: the model does not read URLs.
+ */
+export function hideNamesInPath(pathTemplate: string, vault: TokenVault, names?: NameLookup): string {
+  return pathTemplate
+    .split("/")
+    .map((segment) => {
+      if (!segment || segment.startsWith("{")) return segment;
+      let decoded = segment;
+      try { decoded = decodeURIComponent(segment); } catch { /* not valid percent-encoding: use it as is */ }
+      const spaced = decoded.replace(/[-_+.]+/g, " ");
+      return detectText(spaced, vault, undefined, names).some((match) => match.category === "NAME") ? "{name}" : segment;
+    })
+    .join("/");
+}
+
 export function redactPage(observation: PageObservationMessage, cycle: number, vault: TokenVault, names?: NameLookup): RedactedPage {
   const redactions: RedactionCounts = {};
   const count = (category: PiiCategory) => { redactions[category] = (redactions[category] ?? 0) + 1; };
@@ -121,26 +140,13 @@ export function redactPage(observation: PageObservationMessage, cycle: number, v
     }
   }
 
-  const sanitizedUrl = sanitizeUrl(observation.url ?? "");
-  sanitizedUrl.pathTemplate = sanitizedUrl.pathTemplate
-    .split("/")
-    .map((segment) => {
-      if (!segment || segment.startsWith("{")) return segment;
-      // Replace URL hyphens with spaces ("asha-rao" -> "asha rao") so the 
-      // known-name lookup matches it against names found in the page text.
-      const spaced = segment.replace(/-/g, " ");
-      const matches = detectText(spaced, vault, undefined, names);
-      if (matches.some((m) => m.category === "NAME")) {
-        return "{name}";
-      }
-      return segment;
-    })
-    .join("/");
+  const url = sanitizeUrl(observation.url ?? "");
+  url.pathTemplate = hideNamesInPath(url.pathTemplate, vault, names);
 
   return {
     graph: {
       cycle,
-      url: sanitizedUrl,
+      url,
       title,
       viewport: observation.viewport ?? { width: 0, height: 0 },
       elements,
