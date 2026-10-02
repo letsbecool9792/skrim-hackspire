@@ -16,7 +16,9 @@ export interface PiiMatch extends PiiDetection {
 export type PiiCandidate = Omit<PiiMatch, "token" | "text"> & { text: string };
 
 const EMAIL_PATTERN = /\b[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+\b/gi;
-const PHONE_PATTERN = /\+\d{1,3}(?:[\s.-]?\d){7,12}\b/g;
+// Up to three separators between digits: "+91  98765  43210" (double spaces)
+// is still a phone number, and the outbound tripwire treats it as one.
+const PHONE_PATTERN = /\+\d{1,3}(?:[\s.-]{0,3}\d){7,12}\b/g;
 const CARD_PATTERN = /\b\d(?:[ -]?\d){12,18}\b/g;
 const PAN_PATTERN = /\b[A-Z]{5}\d{4}[A-Z]\b/gi;
 const IFSC_PATTERN = /\b[A-Z]{4}0[A-Z0-9]{6}\b/gi;

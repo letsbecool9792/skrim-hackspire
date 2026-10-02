@@ -86,6 +86,14 @@ describe("phone detection", () => {
     assert.equal(vault.resolve(matches[0]?.token ?? "<PII:PHONE:99>"), "+91 98765 43210");
   });
 
+  test("detects a phone number with doubled separators", () => {
+    const vault = new TokenVault();
+
+    const matches = detectPhones("Call +91  98765  43210 today", vault);
+
+    assert.equal(matches[0]?.text, "+91  98765  43210");
+  });
+
   test("reuses a token for a repeated phone number", () => {
     const vault = new TokenVault();
 
