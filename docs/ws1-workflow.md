@@ -29,7 +29,6 @@ to browser storage.
 | Side panel | The chat, the agent loop (`lib/agent/loop.ts`): task lifecycle, the vault, redaction, planner calls, step and time limits, the fixed target tab | DOM access to the page |
 | Background | Open the side panel from the toolbar button | Anything long-running: Chrome kills the service worker when a `fetch()` takes over 30 s |
 | Content script | Answer `page.observe` and `action.execute` (`lib/content-handler.ts`), keep the current DOM registry | Build a second screen graph, redact, or talk to the server |
-| Chrome offscreen page | Unused so far | — |
 
 The loop runs in the side panel rather than the background because of that 30-second rule:
 a local model can take longer than that for one step. See CLAUDE.md "Locked decisions".

@@ -15,14 +15,15 @@ export default defineConfig({
 
   // WXT defaults Firefox to MV2. We override to MV3 on BOTH browsers.
   //
-  // Firefox's MV3 background is an *event page*, not a service worker, so it
-  // keeps DOM and Web API access - which means no chrome.offscreen equivalent
-  // is needed there. Chrome is the constrained runtime, not Firefox.
+  // Firefox's MV3 background is an *event page*, not a service worker.
+  // Neither background runs models: the agent, OCR and GLiNER all run in the
+  // side panel, an ordinary extension page on both browsers.
   // See BRIEF.md section 13.1.
   manifestVersion: 3,
 
-  // A function, not an object, so permissions can differ per browser.
-  manifest: ({ browser }) => ({
+  // The same on both browsers today. WXT also takes a function of the
+  // browser, if a permission ever has to differ.
+  manifest: {
     // Set explicitly. Without this WXT derives it from package.json and the
     // extension shows up as "@skrim/extension" on chrome://extensions,
     // which a judge will see.
@@ -43,16 +44,13 @@ export default defineConfig({
     // reads (the content script reports its own page), and it shows users a
     // "Read your browsing history" warning. WXT adds "sidePanel" on Chrome,
     // for the side panel the agent runs in; it has no install warning.
+    // Not here either: "offscreen". It was for running
+    // models outside Chrome's service worker; they run in the side panel.
     permissions: [
       // Starts the content script in tabs that were already open when Skrim
       // was installed or reloaded, instead of asking the user to reload the
       // page. No install warning of its own.
       "scripting",
-      // Model inference on Chrome needs an offscreen document, because WebGPU
-      // and WASM are unavailable in its service worker. Chrome only: Firefox
-      // has no offscreen API (its event page keeps DOM access) and reports the
-      // permission as invalid.
-      ...(browser === "chrome" ? ["offscreen"] : []),
     ],
 
     // Every site. The <all_urls> content script already gives Skrim this
@@ -83,5 +81,5 @@ export default defineConfig({
         data_collection_permissions: { required: ["websiteContent"] },
       },
     },
-  }),
+  },
 });

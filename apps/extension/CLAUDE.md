@@ -9,9 +9,8 @@ Read [`/CLAUDE.md`](../../CLAUDE.md) for current status and locked decisions.
 
 | Path | Runs where | Purpose |
 |---|---|---|
-| `entrypoints/sidepanel/` | Extension page beside the tab | The chat UI. **The agent loop runs here** (`lib/agent/`), with the task's vault |
+| `entrypoints/sidepanel/` | Extension page beside the tab | The chat UI. **The agent loop runs here** (`lib/agent/`), with the task's vault, and so does every model (GLiNER, OCR). Eval builds add `eval-hook.ts` |
 | `entrypoints/background/` | Chrome: service worker. Firefox: event page | Opens the side panel on the toolbar click. Nothing else |
-| `entrypoints/offscreen/` | Chrome only, hidden document | Meant for model inference; unused, and maybe unnecessary now (see CLAUDE.md "Open findings") |
 | `entrypoints/content/` | Injected into the page | Answers the side panel: the page graph, and actions (`lib/content-handler.ts`) |
 | `lib/*` | Imported by the above | The actual logic. Most folders have their own CLAUDE.md |
 
@@ -51,7 +50,7 @@ vault. The content script refuses any value that still contains a token.
 
 Write for Chrome's constraints; Firefox is strictly more permissive. Branch with
 `import.meta.env.FIREFOX` only where the platforms genuinely differ (opening the side panel,
-the offscreen document). Never fork a whole module per browser.
+file-URL access). Never fork a whole module per browser.
 
 ```powershell
 pnpm dev              # chrome
