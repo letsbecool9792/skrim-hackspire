@@ -127,9 +127,14 @@ export function decodeSpans(logits: Float32Array, wordCount: number, labelCount:
 
 /** Longest piece of one text the model sees at once; longer texts are split. */
 const MAX_WORDS = 256;
-/** Texts per model call. Each is its own batch row: packing several texts
- *  into one sequence cost most of the recall on names. */
-const BATCH_SIZE = 16;
+/**
+ * Texts per model call: one. Packing several texts into one sequence cost
+ * most of the recall on names. Batching them as padded rows
+ * made each text's scores depend on its neighbours ("Signed in as Priya":
+ * 0.64 alone, 0.44 in a batch; the brand "Skrim" crossed 0.6 as a person in
+ * one batch and not another), and on ONNX Runtime's WASM it was no faster.
+ */
+const BATCH_SIZE = 1;
 
 interface Item {
   text: number;

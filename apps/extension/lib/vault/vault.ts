@@ -2,13 +2,23 @@ import { formatPiiToken, type PiiCategory, type PiiToken } from "@skrim/schema";
 
 export type VaultStats = Partial<Record<PiiCategory, number>>;
 
+/**
+ * One value, one token, however it is written: "alan turing" in the goal and
+ * "Alan Turing" on the page, or "+91 98765 43210" and "+919876543210". With a
+ * token each, the planner cannot tell they are the same. The first spelling
+ * seen is the one typed back.
+ */
+function sameValueKey(value: string): string {
+  return value.normalize("NFKC").toLowerCase().replace(/[\s\-().,]+/g, "");
+}
+
 export class TokenVault {
   private readonly values = new Map<PiiToken, string>();
   private readonly tokensByValue = new Map<string, PiiToken>();
   private readonly nextIndex = new Map<PiiCategory, number>();
 
   set(category: PiiCategory, realValue: string): PiiToken {
-    const valueKey = `${category}\u0000${realValue}`;
+    const valueKey = `${category}\u0000${sameValueKey(realValue)}`;
     const existingToken = this.tokensByValue.get(valueKey);
     if (existingToken) return existingToken;
 

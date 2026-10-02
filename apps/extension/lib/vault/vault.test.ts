@@ -23,6 +23,19 @@ describe("TokenVault", () => {
     assert.deepEqual(vault.stats(), { EMAIL: 1 });
   });
 
+  test("gives one token to a value however it is written, and types back the first spelling", () => {
+    const vault = new TokenVault();
+
+    const fromGoal = vault.set("NAME", "alan turing");
+    const fromPage = vault.set("NAME", "Alan  Turing");
+    const phone = vault.set("PHONE", "+91 98765 43210");
+
+    assert.equal(fromGoal, fromPage);
+    assert.equal(vault.resolve(fromPage), "alan turing");
+    assert.equal(vault.set("PHONE", "+919876543210"), phone);
+    assert.notEqual(vault.set("NAME", "Alan Turner"), fromGoal);
+  });
+
   test("keeps categories separate", () => {
     const vault = new TokenVault();
 
