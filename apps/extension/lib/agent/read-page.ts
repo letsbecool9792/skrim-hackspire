@@ -40,7 +40,7 @@ export async function readPage(link: PageLink, taskId: string, signal: AbortSign
   }
   const seen = performance.now();
 
-  const view = await names.preparePage(observation, pageTexts(observation));
+  const view = await names.preparePage(observation, pageTexts(observation), faces);
   signal.throwIfAborted();
   const named = performance.now();
   const page = redactPage(observation, cycle, vault, view.lookup);
