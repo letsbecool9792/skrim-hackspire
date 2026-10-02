@@ -21,19 +21,37 @@ is pretty good".
 **Run the real extension in a real browser, via Playwright.** Load the built extension into
 Chromium, navigate to a fixture, and read out what it actually produced.
 
-Do **not** import the detection code into Node and score it there. That measures a different
+Do **not** report numbers from the detection code run in Node. That measures a different
 code path than the one we demo — different runtime, different backend, different device
 selection. The rubric scores the shipped thing. So do we.
 
-This is also why `onnxruntime-node` and `sharp` are left unbuilt in `pnpm-workspace.yaml`:
-we never run inference in Node.
+## How it runs
+
+| Command | What | Use |
+|---|---|---|
+| `pnpm eval` | `src/browser.ts`: builds the eval extension (`wxt build --mode eval`), loads it into Playwright's Chromium, serves the fixtures on two origins, and asks the side panel's `window.__skrimEval` to read each one | **The numbers to report.** Once first: `pnpm --filter @skrim/eval exec playwright install chromium` |
+| `pnpm eval:node` | `apps/extension/scripts/eval-node.ts`: the same `readPage()` in happy-dom, GLiNER on onnxruntime-node | A quick check while changing detection, and a check that ground truth matches its page. Not for the slide |
+
+Both read a page through `apps/extension/lib/agent/read-page.ts`, the function the agent
+loop calls every step, and score with `src/score.ts`. The eval hook exists only in the eval
+build; `main.tsx` imports it behind a constant condition, and production builds do not
+contain it.
+
+Scoring recovers what was hidden by lining each redacted text up with the original
+(`src/align.ts`). An item counts as caught only if every place it appears is hidden
+completely. Items that appear in no text at all (a canvas, an image, a cross-origin frame)
+are "not seen" and reported apart: those are vision's.
 
 ## Fixtures
 
-`fixtures/pages/` — 30 to 50 synthetic pages with PII in known places.
-`fixtures/ground-truth/` — annotations to score against.
+`fixtures/pages/` — synthetic pages with PII in known places (21 so far).
+`fixtures/ground-truth/` — one JSON per page: `pii` (category, exact value, where it sits)
+and `notPii` (near-misses that must stay readable).
 
-Both are empty. They are the blocker on every number in this package, so build them first.
+**PII means what Skrim promises to hide:** the user's data and the people in their private
+life. Public figures, shops, organisations and business contact details are not PII: they go
+in `notPii`, because hiding them is over-redaction. A value must appear in the page's text
+exactly as written in the JSON; the report lists near-misses it cannot find.
 
 Cover the cases that separate us from a DOM-only team, because those are the ones that
 count:
@@ -53,4 +71,5 @@ Report failure modes alongside the numbers. Detection is statistical; recall wil
 rather than pass/fail. A team claiming perfection gets taken apart in questioning. A team
 that says "94% recall, and here is what we miss and why" does not.
 
-Write results to `results/` (gitignored) and keep a committed summary for the slide.
+Results go to `results/` (gitignored); `pnpm eval -- --save` also writes `SUMMARY.md`, the
+committed summary for the slide.
