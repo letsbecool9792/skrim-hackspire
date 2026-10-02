@@ -4,7 +4,8 @@ import type { ScreenElement } from "@skrim/schema";
 
 import type { PageObservationMessage } from "../messages.ts";
 import { TokenVault } from "../vault/vault.js";
-import { redactPage } from "./redact.ts";
+import type { NameLookup } from "../pii/redact.js";
+import { hideNamesInPath, redactPage } from "./redact.ts";
 
 /**
  * Redacting a page view where some text was read from pixels: an ID card shown
@@ -58,5 +59,31 @@ describe("redactPage on text read from pixels", () => {
     const view = observation({ label: "Order reference" }, { label: "7789 5561 2230" });
 
     assert.equal(labels(view)[1], "7789 5561 2230");
+  });
+});
+
+describe("hideNamesInPath", () => {
+  /** A task that knows "Asha Rao" is private, wherever it is written. */
+  const knows: NameLookup = (text) => {
+    const start = text.toLowerCase().indexOf("asha rao");
+    return start < 0 ? [] : [{ category: "NAME", source: "ner", confidence: 0.9, text: text.slice(start, start + 8), start, end: start + 8 }];
+  };
+
+  test("hides a known name in a path, however the URL writes the space", () => {
+    for (const written of ["asha-rao", "Asha_Rao", "asha+rao", "asha.rao", "Asha%20Rao"]) {
+      assert.equal(hideNamesInPath(`/users/${written}/orders`, new TokenVault(), knows), "/users/{name}/orders", written);
+    }
+  });
+
+  test("leaves other segments alone, and every segment when no name is known", () => {
+    assert.equal(hideNamesInPath("/users/meera-iyer/orders", new TokenVault(), knows), "/users/meera-iyer/orders");
+    assert.equal(hideNamesInPath("/users/asha-rao/orders", new TokenVault()), "/users/asha-rao/orders");
+    assert.equal(hideNamesInPath("/{id}/%E0%A4%A", new TokenVault(), knows), "/{id}/%E0%A4%A");
+  });
+
+  test("reaches the server's request: the URL in a redacted page has no name", () => {
+    const view: PageObservationMessage = { ...observation({ label: "Welcome back, Asha Rao" }), url: "https://shop.example/users/asha-rao/orders" };
+
+    assert.equal(redactPage(view, 0, new TokenVault(), knows).graph.url.pathTemplate, "/users/{name}/orders");
   });
 });
