@@ -9,27 +9,30 @@
 WS1 is the runtime that turns a user goal and the other workstreams' outputs into real browser behavior:
 
 ```text
-popup goal
-    -> background task
-    -> content observation
+side panel goal
+    -> content observation (raw)
     -> WS2 screen graph
-    -> WS3 privacy-safe graph
+    -> WS3 redaction against the task's vault
     -> WS4 one-action plan
     -> WS1 action execution
     -> WS1 verification
     -> repeat
 ```
 
-The task state and vault are in memory only. No extension state is written to browser storage.
+The task state and vault are in memory only, in the side panel. No extension state is written
+to browser storage.
 
 ## 2. Browser contexts
 
 | Context | WS1 responsibility | Must not do |
 |---|---|---|
-| Background | Task lifecycle, active-tab routing, planner invocation, step limits, final status | DOM access, WebGPU/WASM inference, PII detection |
-| Content script | Receive graph/action messages, retain the current DOM registry, execute actions, return results | Build a second screen graph or send raw values to the server |
-| Popup | Collect goal, start/cancel task, show status and errors | Plan actions or inspect the active page DOM |
-| Chrome offscreen page | WS1 provides the integration location if needed | WS1 does not implement model inference here |
+| Side panel | The chat, the agent loop (`lib/agent/loop.ts`): task lifecycle, the vault, redaction, planner calls, step and time limits, the fixed target tab | DOM access to the page |
+| Background | Open the side panel from the toolbar button | Anything long-running: Chrome kills the service worker when a `fetch()` takes over 30 s |
+| Content script | Answer `page.observe` and `action.execute` (`lib/content-handler.ts`), keep the current DOM registry | Build a second screen graph, redact, or talk to the server |
+| Chrome offscreen page | Unused so far | — |
+
+The loop runs in the side panel rather than the background because of that 30-second rule:
+a local model can take longer than that for one step. See CLAUDE.md "Locked decisions".
 
 Firefox and Chrome use the same contracts. Browser-specific behavior belongs in WXT configuration or the smallest platform-specific adapter.
 
@@ -37,28 +40,34 @@ Firefox and Chrome use the same contracts. Browser-specific behavior belongs in 
 
 ### Start
 
-1. Popup sends `{ type: "task.start", goal }` to the background.
-2. Background creates an in-memory `TaskState` with a task ID and step limit.
-3. Background sends `{ type: "page.observe", taskId }` to the active tab.
-4. Content asks the registered WS2 graph provider for a snapshot.
-5. Content stores the snapshot's `registry` for later action execution.
-6. Content sends `page.observation` with the graph elements and visual-capture flag.
+1. The user sends a goal in the side panel. The loop fixes the target tab (the active tab
+   then), creates a task id and an empty vault, and redacts the goal.
+2. The side panel sends `{ type: "page.observe", taskId }` to that tab.
+3. Content asks the registered WS2 graph provider for a snapshot, stores its `registry`, and
+   replies with `page.observation`: raw elements, field hints, URL, title and viewport.
 
 ### Plan and act
 
-7. Background passes the goal and observation to the registered WS4 planner.
-8. WS4 builds a `PlanRequest` using the privacy-safe graph and calls the server.
-9. WS4 validates the server's `PlanResponse` with the shared schema.
-10. Background sends exactly one `action.execute` message to the content script.
-11. Content executes the action using the current registry.
-12. Content returns `action.result` with `ok`, `changed`, and an error code when needed.
+4. The side panel redacts the observation against the vault (`lib/agent/redact.ts`) and
+   builds a `PlanRequest`: sanitised URL, redacted title and elements, tokens in play,
+   history, extracted values.
+5. The registered WS4 planner calls `assertOutboundSafe()` on the whole request and POSTs it
+   to `/plan`. The reply is validated against `PlanResponse`.
+6. For a `type` action, the loop swaps its tokens for real values from the vault. An unknown
+   token is never typed: the step is recorded as unverified instead.
+7. The side panel sends exactly one `action.execute` to the content script, which runs it
+   against the current registry and replies `action.result` with `ok`, `changed`, an error
+   code when needed, and what the target shows now.
 
 ### Continue or finish
 
-13. Background accepts success only when the action result is verified.
-14. For a continuing task, background requests a fresh observation.
-15. For `done`, the planner ends the task and the popup receives `completed`.
-16. On failure, cancellation, timeout, or step limit, background broadcasts the final status and clears memory.
+8. The step goes into the history with `verified` and a short note. Unverified is not
+   failure: the planner sees it and chooses what next. Three unverified steps in a row end
+   the task (`NO_PROGRESS`).
+9. If the action loaded a new page, the loop waits for the load, then observes again.
+10. `done` ends the task. So do errors, cancellation, the 5-minute budget and the 25-step
+    limit. The vault is cleared when the task ends, and everything is gone when the panel
+    closes.
 
 The server never sends a batch of actions. One observation produces one action, then the page is observed again.
 
@@ -92,49 +101,45 @@ The provider must return a registry using the same IDs as `elements`. WS1 only s
 
 `ScreenElement` values crossing into `page.observation` must already satisfy the project's privacy contract. WS3 may wrap or replace the WS2 provider before registration if sanitization occurs in the content context.
 
-### WS3: token resolver
+### WS3: redaction and the vault
 
-WS3 registers the in-memory resolver in the content-script context:
+There is no registration hook. The loop creates one `TokenVault` (WS3) per task and passes
+every observation through `redactPage()` in `lib/agent/redact.ts`, which calls WS3's
+detectors. Tokens are resolved with `resolveTokens()` only when a `type` action is about to
+run, and the resolved value travels in `action.execute.typedValue`. The content script fails
+closed if a value still contains a token.
 
-```ts
-registerTokenResolver((value) => vault.resolve(value));
-```
-
-WS1 passes this callback to the type-action executor. WS1 does not inspect, detect, generate, persist, or resolve tokens itself. An unresolved PII token fails closed and is never typed literally.
-
-WS3 also owns sanitizing graph labels, values, hints, extracted data, screenshots, and any request body before the request reaches WS4/server code.
+WS3 owns the detectors and the vault; changes to what counts as PII go there, not in the loop.
 
 ### WS4: action planner
 
-WS4 registers the planner in the background context:
+The side panel registers the planner at startup (`entrypoints/sidepanel/main.tsx`):
 
 ```ts
-registerActionPlanner(async ({ goal, observation }) => {
-  const request = buildPlanRequest(goal, observation);
-  const response = await plannerClient.plan(request);
-  return response.action;
-});
+registerActionPlanner(createServerPlanner(SERVER_URL));
 ```
 
-The planner must:
+An `ActionPlanner` is `(request: PlanRequest, signal: AbortSignal) => Promise<PlanResponse>`.
+It receives an already-redacted request and must:
 
-- use the shared `PlanRequest` and `PlanResponse` schemas
-- send one action only
-- include privacy-safe graph data
-- validate the server response
-- return `null` when planning fails rather than inventing an action
+- call `assertOutboundSafe(request)` right before sending anything
+- validate the server response against the shared schema
+- throw on failure rather than inventing an action; the loop reports the error
 
-WS1 supplies the task goal and observation. WS1 does not choose a target or hardcode a verb.
+Tests and the eval harness can register their own planner. WS1 does not choose a target or
+hardcode a verb.
 
 ### WS5: evaluation
 
 WS5 should drive the real extension through the existing messages and fixture pages. Useful observable events are:
 
-- `task.status`
-- `page.observation`
-- `action.execute`
-- `action.result`
+- the loop's `AgentEvent`s (`started`, `observed`, `planned`, `acted`, `finished`), which
+  the side panel renders; `runAgentTask()` takes an `onEvent` callback
+- `page.observation`, `action.execute` and `action.result`
 - timing samples from `@skrim/shared`
+
+`apps/extension/scripts/agent-check.ts` (`pnpm test:agent`) already runs the loop over the
+fixtures in happy-dom; it is a starting point, not the eval.
 
 WS5 should test the shipped browser path rather than calling WS1 action functions alone.
 
@@ -147,16 +152,16 @@ WS6 consumes task status and timing data. It may display counts, IDs, roles, sta
 ### Task lifecycle
 
 - start, cancel, complete, fail
-- maximum step enforcement
-- in-memory timeout and cleanup
+- maximum step, time budget and no-progress enforcement
+- in-memory vault per task, cleared when it ends
 - structured error codes
-- popup status broadcasts
+- events for the side panel chat
 
 ### Messaging
 
 - Zod validation at every browser message boundary
-- active-tab lookup
-- content-script routing
+- the target tab fixed when the task starts
+- following page loads after a click or navigate
 - stale or malformed message rejection
 
 ### Action execution
@@ -199,15 +204,15 @@ WS2 owns visual interpretation and fusion. WS3 owns image redaction. WS1 must no
 
 | Failure | WS1 behavior |
 |---|---|
-| No graph provider | Return an observation with no graph and fail the task clearly |
-| Content script unavailable | Report `CONTENT_SCRIPT_ERROR` |
-| Unknown target | Report `TARGET_NOT_FOUND` |
-| Disabled/zero-size target | Report `TARGET_NOT_CLICKABLE` |
-| No expected click change | Report `ACTION_TIMEOUT` |
-| Unresolved PII token | Fail closed with `CONTENT_SCRIPT_ERROR` |
-| Cross-origin navigation | Report `NAVIGATION_BLOCKED` |
-| Invalid server action | Report `MALFORMED_ACTION` |
-| Maximum steps reached | Report `MAX_STEPS_REACHED` |
+| No graph provider | Fail the task with `OBSERVATION_FAILED` |
+| Content script unavailable | Fail the task with `CONTENT_SCRIPT_ERROR` and "reload the page" |
+| Unknown target, disabled/zero-size target, cross-origin navigation | Record the step as unverified with a note (`TARGET_NOT_FOUND`, `TARGET_NOT_CLICKABLE`, `NAVIGATION_BLOCKED` in the page) |
+| Action changed nothing | Record the step as unverified; three in a row fail with `NO_PROGRESS` |
+| Unknown PII token | Do not type; record the step as unverified |
+| Server unreachable or error | Fail the task with `PLANNER_ERROR` and the server's message |
+| Raw PII in a request | Do not send; fail the task with `PII_TRIPWIRE` |
+| Planner answers `done` with `success: false` | Fail the task with `GOAL_NOT_ACHIEVED` and its summary |
+| Maximum steps or time | `MAX_STEPS_REACHED` (25) or `TASK_TIMEOUT` (5 minutes) |
 
 Logs contain IDs, counts, statuses, timings, and error codes only. They must not contain graph values, goals, screenshots, tokens, or page HTML.
 
@@ -221,18 +226,11 @@ pnpm --filter @skrim/extension build
 pnpm --filter @skrim/extension build:firefox
 ```
 
-Integration testing should then:
-
-1. Build the extension.
-2. Load the Chrome or Firefox output.
-3. Open a normal HTTP fixture page.
-4. Confirm the content script registers a WS2 provider.
-5. Confirm a graph observation reaches the background.
-6. Register a deterministic test planner that returns a schema-valid action.
-7. Register a test WS3 resolver for token actions.
-8. Confirm the action changes the fixture page.
-9. Confirm the next observation uses a fresh registry.
-10. Confirm no raw values appear in logs or outbound requests.
+Without a browser, `pnpm test:agent` (with `pnpm dev:server` running) runs the fixture
+pages through the whole loop in happy-dom. Then in a browser, follow
+[`docs/testing.md`](testing.md) sections 5 and 6: load the build, open a fixture page, give
+the side panel a goal, and confirm the page changes, the chat shows verified steps, and the
+server log shows counts only.
 
 A build passing by itself does not prove this flow. The real-browser test is required before claiming the vertical slice is complete.
 
@@ -240,9 +238,9 @@ A build passing by itself does not prove this flow. The real-browser test is req
 
 | Workstream | Primary files | Do not edit |
 |---|---|---|
-| WS1 | `entrypoints/background/`, `entrypoints/content/index.ts`, `lib/actions/`, `lib/capture/`, `lib/integration.ts`, `lib/messages.ts`, `wxt.config.ts` | WS2 graph logic, WS3 detectors/vault, server planner |
-| WS2 | `lib/dom/`, `lib/vision/`, graph-provider registration | WS1 action dispatcher and task manager |
-| WS3 | `lib/pii/`, `lib/vault/`, privacy adapter and token resolver registration | WS1 DOM traversal and action selection |
-| WS4 | server planner/provider and planner registration | WS1 action implementation |
+| WS1 | `entrypoints/`, `lib/agent/loop.ts`, `lib/agent/tab-link.ts`, `lib/content-handler.ts`, `lib/actions/`, `lib/capture/`, `lib/integration.ts`, `lib/messages.ts`, `wxt.config.ts` | WS2 graph logic, WS3 detectors/vault, server planner |
+| WS2 | `lib/dom/`, `lib/vision/`, graph-provider registration | WS1 action dispatcher and agent loop |
+| WS3 | `lib/pii/`, `lib/vault/`, `lib/agent/redact.ts` | WS1 DOM traversal and action selection |
+| WS4 | the server, `lib/agent/server-planner.ts`, planner registration | WS1 action implementation |
 | WS5 | `packages/eval/`, fixtures, browser tests | runtime ownership files unless an integration bug is proven |
 | WS6 | dashboard and resource visualization | graph construction and privacy logic |

@@ -13,7 +13,7 @@ pnpm install
 pnpm models:fetch        # re-run after pulling: new model files get added over time
 ```
 
-Your root `.env` needs `NVIDIA_API_KEY` for section 3.
+Your root `.env` needs `NVIDIA_API_KEY` (or `GROQ_API_KEY`, see section 3).
 
 **Load the extension in Chrome**
 
@@ -22,19 +22,25 @@ pnpm --filter @skrim/extension build
 ```
 
 1. `chrome://extensions` → **Developer mode** on (top right).
-2. **Load unpacked** → `apps\extension\.output\chrome-mv3`.
+2. **Load unpacked** → `apps\extension\.output\chrome-mv3`. If an older Skrim card is there,
+   remove it first: the popup is gone and the permissions changed.
 3. On the Skrim card → **Details** → turn on **Allow access to file URLs**. The test fixtures
    are local files, and Chrome keeps extensions off `file://` pages unless you allow it.
+4. Pin Skrim to the toolbar (puzzle-piece icon → pin). Clicking it opens the **side panel**.
 
-**After every rebuild:** click **reload ↻** on the Skrim card, then reload the tab you test
-on. Chrome does not put the new content script into tabs that were already open; the task
-then fails with `CONTENT_SCRIPT_ERROR`.
+**After every rebuild:** click **reload ↻** on the Skrim card, close and reopen the side
+panel, and reload the tab you test on. Chrome does not put the new content script into tabs
+that were already open; the task then fails with "Can't work on this tab".
 
-**Where logs go:** the extension logs ids and counts only, never page content.
-- Background: `chrome://extensions` → Skrim card → **service worker** link → Console.
-- Page side: DevTools on the page you are testing (F12) → Console.
+**Where logs go.** Nothing logs page content: ids, counts and timings only.
 
-Lines look like `[skrim] {event: "...", ...}`.
+| What | Where |
+|---|---|
+| The planning server | The terminal running `pnpm dev:server`. One line per step, like `[plan] step 0, 18 elements, 0 in history -> click e12 in 912 ms, 0 repairs` |
+| The agent loop (side panel) | Right-click inside the side panel → **Inspect** → Console |
+| The content script | DevTools on the page you are testing (F12) → Console |
+
+Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 
 ---
 
@@ -44,19 +50,22 @@ Lines look like `[skrim] {event: "...", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 72 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 111 tests:
 
 | Tests | Covers |
 |---|---|
 | 18 in `@skrim/schema` | The wire contract: PII tokens, URL sanitising, action validation, the outbound PII tripwire |
-| 38 in `@skrim/extension` (`lib/pii`, `lib/vault`) | Regex PII detection and the token vault (WS3) |
-| 16 in `@skrim/extension` (`lib/vision`) | DOM + vision fusion and the escalation policy (WS2) |
+| 11 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks) and the prompt format |
+| 45 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection, form-field hints, the token vault |
+| 16 in `lib/vision` | DOM + vision fusion and the escalation policy |
+| 12 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns) and click verification, in a simulated DOM |
+| 9 in `lib/agent` | The whole loop with a scripted planner: redaction, typing via tokens, the no-progress and going-in-circles stops, tripwire, cancel |
 
 The same command runs in CI on every PR.
 
 ---
 
-## 2. PII redaction (WS3)
+## 2. PII redaction
 
 ```powershell
 pnpm demo:pii
@@ -64,123 +73,99 @@ pnpm demo:pii "Send the invoice to billing@acme.test and call +44 20 7946 0958"
 ```
 
 Prints the text as the server would see it, with PII replaced by tokens like
-`<PII:EMAIL:1>`. It also checks that every token maps back to the original value, without
+`<PII:EMAIL:1>`, and checks that every token maps back to the original value, without
 printing the originals.
 
-What you should notice with the built-in sample:
-- Email, phone, card, PAN, UPI, Aadhaar and account number are tokenised.
-- **"Suparno" stays visible.** Names need the GLiNER model, which is not wired in yet.
-- **"Order #4567890" stays visible, on purpose.** Numbers without context are not PII;
-  over-redaction is scored too.
-- **Two known bugs show up:** the account number comes out as `GOV_ID` instead of
-  `ACCOUNT`, and the vault counts more `ACCOUNT` entries than it shows. Both are in
-  CLAUDE.md "Open findings".
+With the built-in sample, expect email, phone, card, PAN, UPI, Aadhaar and account number to
+be tokenised, the Aadhaar as `GOV_ID` and the account number as `ACCOUNT`. Two things stay
+visible on purpose:
+- **"Suparno".** Free-text names need the GLiNER model, which is not wired in yet. (In forms,
+  a field marked as a name *is* redacted, from its `autocomplete` hint.)
+- **"Order #4567890".** Numbers without context are not PII; over-redaction is scored too.
 
 ---
 
-## 3. Planning server (WS4)
+## 3. Planning server
 
 Two terminals:
 
 ```powershell
-pnpm dev:server          # terminal 1: leave running
+pnpm dev:server          # terminal 1: leave running; its log is here
 pnpm smoke:server        # terminal 2
 ```
 
-Sends three hand-built requests, the kind the extension will send, and checks each answer:
+Sends four hand-built requests and checks each answer: a click, typing the token
+`<PII:EMAIL:1>` rather than an invented address, answering `done` when the history shows
+the goal is reached, and clicking a button by its visible text. Each line shows the action,
+whether it matched, and the latency.
 
-| Scenario | Pass means |
-|---|---|
-| click | The model clicks the counter button when asked to increment the counter |
-| referential redaction | Asked to enter "my email", it types the token `<PII:EMAIL:1>`, not an invented address |
-| knows when to stop | Given history showing the click already worked, it answers `done` |
+**Only one server can use port 3000.** If `pnpm dev:server` says `EADDRINUSE`, one is already
+running in another terminal. Use that one, or stop it with Ctrl+C first.
 
-Each line shows the model's action, whether it matches, and the latency.
+### Choosing the model
 
-**What to expect**:
-
-| Setup | click | types the token | stops when done | Time per step |
-|---|---|---|---|---|
-| Hosted: Llama 3.2 11B Vision on NVIDIA (the default) | ✅ | ✅ | ❌ clicks again | 1.5–6 s |
-| Local: Qwen3-VL 4B on Ollama | ✅ | ✅ | ✅ | 6–57 s |
-
-So with the default, `pnpm smoke:server` ends with **"1 of 3 scenarios failed"**, and pnpm
-prints an error after it. That is the model missing the stop case, not a crash. See "The
-planner ignores its own history" in CLAUDE.md "Open findings".
-
-**The offline path** needs Ollama running with `qwen3-vl:4b` pulled. Start the server with:
-
-```powershell
-$env:MODEL_PROVIDER = "ollama"; pnpm dev:server
-```
-
-The first request loads the model into VRAM and can take over a minute; the server waits up
-to 120 s for local models.
-
-**To try another hosted model** without editing `.env`:
-
-```powershell
-$env:NVIDIA_MODEL = "some/model-id"; pnpm dev:server
-```
-
-Being listed on build.nvidia.com does not mean your account can call it. See `.env.example`
-for what worked and what didn't.
-
-`$env:...` settings last until you close that terminal.
-
----
-
-## 4. The extension loop: observe → act → verify (WS1 + WS2)
-
-The server is not connected to the extension yet. A temporary local planner stands in
-(`entrypoints/background/dev-planner.ts`). It understands exactly one kind of goal,
-**`click <text>`**, where `<text>` is part of a button's or link's accessible name.
-
-1. Open `file:///D:/Programming/skrim/fixtures/pages/click-test.html`.
-2. Click the Skrim icon, type `click increment counter`, press **↗**. Keep the popup open.
-3. Expected:
-   - the page's counter changes to **Count: 1**
-   - the popup shows **Completed ✓**
-
-What happened: the content script built the page's element graph (WS2), the planner picked
-the element labelled "Increment counter", the click ran (WS1), and a DOM change was seen
-before the task ended.
-
-Other goals to try on the same page:
-
-| Goal | Expected on the page | Popup |
+| Setup | How | Result |
 |---|---|---|
-| `click toggle panel` | a panel appears | Completed ✓ |
-| `click accept terms` | the checkbox gets ticked | Completed ✓ |
-| `click details` | the accordion opens | Completed ✓ |
-| `click something that is not there` | nothing | `GOAL_NOT_ACHIEVED` |
-| `find the cheapest flight` | nothing | `GOAL_NOT_ACHIEVED` (the test planner only clicks) |
-| `click go to section 2` | jumps to section 2 | Completed ✓ |
-| `click skrim click test fixture` (the page title) | nothing | `ACTION_TIMEOUT`: the click changed nothing, so verification correctly fails |
+| **Ollama, Qwen3-VL 4B instruct (local)** | `ollama pull qwen3-vl:4b-instruct`, then `$env:MODEL_PROVIDER = "ollama"; pnpm dev:server` | **Best so far:** smoke 4 of 4, fixtures 4 of 5, 0.3–0.9 s a step after an ~8 s first load |
+| NVIDIA, Llama 3.2 11B Vision (the default) | `NVIDIA_API_KEY` in `.env` | Fast (about 1 s) but **never says done**: on the fixtures it repeated its click until the 25-step limit. Smoke 3 of 4 |
+| Groq, Qwen 3.8 27B | `GROQ_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "groq"; pnpm dev:server` | Not measured yet: needs your key. Free, no card: https://console.groq.com/keys |
 
-**Known gap:** for buttons, links and checkboxes the click check always passes. The click
-routine focuses the element and then counts "it has focus" as a change. So on those, Completed ✓
-proves the click was sent, not that it did anything. It is in CLAUDE.md "Open findings".
-
-**See what the DOM extractor found:** open the service-worker console (section 0). Each
-observation logs counts by role, e.g.
-`[skrim] {event: "planner.dev.observation", total: 18, button: 3, heading: 6, ...}`.
-
-It works on real sites too. On `https://example.com`, try `click learn more`.
+`$env:...` settings last until you close that terminal. To make one permanent, set
+`MODEL_PROVIDER` (and `OLLAMA_MODEL=qwen3-vl:4b-instruct`, if your `.env` names a model) in
+the root `.env`. The plain `qwen3-vl:4b` tag is the "thinking" build: 5–40 s a step.
 
 ---
 
-## 5. Screenshot and OCR (WS1 capture, WS2 OCR)
+## 4. The agent, end to end, without a browser
 
-1. On any normal website (not a `chrome://` page), open the popup → **Capture page**.
-   Expected: **✓ Page captured**.
-2. A **Read text (OCR)** button appears. Click it. Expected after a few seconds:
-   `OCR found N words (M confident). Starts: "..."`. That is the page's text, read from
-   the screenshot's pixels on your machine. The first run is slowest while the OCR model
-   loads.
+```powershell
+pnpm dev:server          # terminal 1
+pnpm test:agent          # terminal 2
+```
 
-This runs OCR directly in the popup as a test. The real pipeline runs it in the offscreen
-document, which nothing creates yet. Only tried on Chrome so far.
+Runs the real loop on the fixture pages in a simulated DOM (happy-dom), against the real
+server and model: extraction, redaction, the vault, planning, actions and verification. For
+each goal it prints every step, whether it was verified, the outcome, whether the page ended
+up right, and, for the form, whether any raw personal data reached the server (it should
+say "none").
+
+This is the quickest way to judge a model: run it with each provider from section 3.
+
+---
+
+## 5. The agent in Chrome
+
+1. Start the server (`pnpm dev:server`) and check the side panel's header shows the model's
+   name, not "Server offline".
+2. Open `file:///D:/Programming/skrim/fixtures/pages/click-test.html`.
+3. Click the Skrim icon. In the side panel, type a goal and press Enter.
+
+| Goal | Expected on the page |
+|---|---|
+| `Increment the counter once` | **Count: 1**, and the chat shows one verified click, then **✓ Done** |
+| `Click show panel` | The panel opens, although the button's hidden name is "Toggle panel". Known miss with Qwen3-VL 4B: the button then says "Hide Panel" and it keeps toggling, until Skrim stops it as "Stuck" |
+| `Accept the terms` | The checkbox gets ticked |
+| `Open the details section` | The accordion opens |
+| `Go to section 2` | The page jumps to section 2 |
+| `Find the cheapest flight` | Nothing to click: the model should give up with "Couldn't do that here" |
+
+Then the form: open `fixtures/pages/form-test.html` and try
+`Send support a message saying my parcel is late. Use my email from the account box.`
+The chat shows "Sent to the server as:" with your goal, and every step the model took; the
+email goes in as a labelled "email address 1" pill, and the page gets the real address.
+Under the result it says what stayed on the device.
+
+The chat stays for as long as the panel is open. Closing the panel stops a running task and
+clears everything.
+
+---
+
+## 6. Screenshot and OCR
+
+In the side panel header, click **Aa**. It captures the visible tab and reads its text with
+Tesseract, on your machine, and shows the word count, time and the first words in the chat.
+Expect a couple of seconds for a full screen. If it says it could not capture the tab, click
+the Skrim toolbar icon again (Chrome grants capture right after that click), then retry.
 
 ---
 
@@ -188,11 +173,9 @@ document, which nothing creates yet. Only tried on Chrome so far.
 
 | Part | Why |
 |---|---|
-| Extension ↔ server | No planner that calls `/plan` is registered. The test planner is local |
-| PII redaction inside the extension | The detectors exist, but nothing runs them on the page graph, and the vault is not registered as the token resolver |
-| Offscreen document | Nothing calls `ensureOffscreenDocument()` |
-| Name / address detection (GLiNER) | Only post-processing exists; nothing loads or runs the model |
+| Name / address detection in free text (GLiNER) | Only post-processing exists; nothing loads or runs the model |
 | Face detection, OmniParser icon detection | Not built. The OmniParser model has not been exported |
+| Vision in the loop (OCR, fusion) | The modules exist, but the loop observes the DOM only |
 | Dashboard, landing page | Still the Vite templates |
-| Eval harness | Empty package, no fixtures with ground truth |
+| Eval harness | Empty package, no ground truth yet |
 | Firefox | Builds, but nothing has been tried in it yet |

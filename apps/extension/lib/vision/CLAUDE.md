@@ -2,18 +2,23 @@
 
 **Workstream 2 and 3.** Everything that runs a neural network in the browser.
 
-## This code runs in the offscreen document
+## Where this code runs
 
 On Chrome, model inference **cannot** happen in the background service worker — WebGPU and
 WASM are both unavailable there ([transformers.js#787](https://github.com/huggingface/transformers.js/issues/787)).
-It goes in `entrypoints/offscreen/`, which the background worker talks to by message.
+That is why `entrypoints/offscreen/` exists. But the agent loop now runs in the side panel,
+an ordinary extension page, and OCR already runs there (in Tesseract's own Worker). Whether
+to keep the offscreen document at all is open; see CLAUDE.md "Open findings". Heavy models
+belong in a Worker either way, so the UI stays responsive.
 
-Firefox's event page has DOM access and needs no equivalent, but write for the Chrome path
-and let Firefox use it too. One code path.
+Every model here is WebAssembly, which the manifest's CSP allows with `'wasm-unsafe-eval'`.
+Without it, Tesseract hung with no error.
+
+One code path for both browsers.
 
 ## Models on disk
 
-`pnpm models:fetch` populates `public/models/`. Currently **63.6 MB**:
+`pnpm models:fetch` populates `public/models/`. Currently **68.3 MB**:
 
 | Path | What | Runtime |
 |---|---|---|
