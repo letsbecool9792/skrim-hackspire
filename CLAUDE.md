@@ -207,11 +207,42 @@ model question above is settled.
 directly.
 
 **The agent loop does not close, even after all four PRs merge.** WS1's hooks in
-`apps/extension/lib/integration.ts` (`registerScreenGraphProvider`, `registerTokenResolver`,
-`registerActionPlanner`) had no callers, and nothing in the extension calls the server's
-`/plan`. The WS2 merge wires the screen-graph provider. The WS3 vault still needs registering
-as the token resolver, and something still needs to register a planner that calls the server.
-That wiring *is* the vertical slice.
+`apps/extension/lib/integration.ts` had no callers. The WS2 merge registers the DOM extractor
+as the screen-graph provider, and fixes the background dropping every reply from the content
+script (before that, a started task stayed "running" forever). Two hooks are still empty:
+- `registerTokenResolver`: the WS3 vault exists but is never registered.
+- `registerActionPlanner`: nothing calls the server's `/plan`.
+
+With no planner, a started task now ends with `UNSUPPORTED_ACTION`, which is the expected
+state. That remaining wiring *is* the vertical slice.
+
+**Screen-graph labels are not redacted.** `extractScreenGraph()` puts raw accessible names and
+text content into `label`, and no PII pass sits between extraction and the background.
+Nothing leaves the extension yet. Before a planner sends the graph to `/plan`, run WS3
+detection over labels, and call `assertOutboundSafe()` right before the request.
+
+**The task timeout is not enforced.** `task-manager.ts` records `startedAt` and
+`timeoutMs` (120 s), but nothing checks them. A task that stalls for any reason other than a
+missing content script stays "running" until the user presses Stop.
+
+**Nothing creates the offscreen document.** WS2 ships `ensureOffscreenDocument()` and an OCR
+handler in `entrypoints/offscreen/`, but nothing calls it. Vision and OCR are unreachable
+until the background does.
+
+**Two screenshot helpers.** WS2's `lib/vision/capture.ts` duplicates WS1's
+`lib/capture/screenshot.ts`, is never called, and still contains a commented-out earlier
+version. Keep one. Separate helpers would each rate-limit themselves against Chrome's
+~2 captures/sec cap, and could exceed it together.
+
+**Model footprint grew and a comment is now wrong.** WS2 added Tesseract's relaxed-SIMD
+variants, including `tesseract-core-relaxedsimd-lstm.wasm.js` (an asm.js fallback, ~3.7 MB),
+plus `worker.min.js`, to `scripts/fetch-models.mjs`. The comment above that list still says
+`.wasm.js` files are not supported. Check which files tesseract.js actually loads, then trim
+the list or fix the comment.
+
+**Firefox `data_collection_permissions`.** `pnpm build:firefox` warns that new Firefox add-ons
+must declare data collection (since 3 Nov 2025). Declaring none under
+`browser_specific_settings.gecko` would satisfy it, and doubles as a privacy claim.
 
 **Screenshot capture only works right after the user clicks the extension icon.** WS1 cut
 the permissions to `tabs`, and capture then failed on `https://example.com`. The `<all_urls>`
