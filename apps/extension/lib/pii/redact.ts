@@ -30,9 +30,9 @@ function resolveOverlaps(candidates: PiiCandidate[]): PiiCandidate[] {
 }
 
 /**
- * Names and addresses the NER model found in a text, looked up by the exact
- * text. The model is async and runs once per page view over every text on it
- * (lib/agent/loop.ts); redaction itself stays synchronous.
+ * The private names and addresses in a text, looked up by the exact text. The
+ * model is async and runs before each page view is redacted
+ * (lib/agent/private-names.ts); redaction itself stays synchronous.
  */
 export type NameLookup = (text: string) => PiiCandidate[];
 
@@ -83,7 +83,7 @@ const INPUT_TYPE_CATEGORIES: Record<string, PiiCategory> = {
   tel: "PHONE",
 };
 
-function fieldCategory(inputType?: string, autocomplete?: string): PiiCategory | undefined {
+export function fieldCategory(inputType?: string, autocomplete?: string): PiiCategory | undefined {
   for (const token of autocomplete?.toLowerCase().split(/\s+/) ?? []) {
     const category = AUTOCOMPLETE_CATEGORIES[token];
     if (category) return category;
