@@ -212,6 +212,21 @@ Built, by workstream:
 - [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, `pnpm test:agent`,
       `pnpm eval:node`. All in [`docs/testing.md`](docs/testing.md)
 
+### Who is on what (from 2026-10-02)
+
+| Who | Working on | Tests on |
+|---|---|---|
+| Suparno | The four bugs from the Chrome retest (see "Open findings"); also adds per-stage timings to the loop's `observed` event for the dashboard | Ollama |
+| Aritra (WS1) | The dashboard: its message format in `packages/schema`, the feed from the side panel, `apps/dashboard`; then the offline rehearsal (demo beat 8) | Ollama |
+| Ayushi (WS3) | Detection: the email leak and the Aadhaar miss read by OCR, false positives, names in URL paths; then face detection and face scoring in the eval | `pnpm eval`; Groq when needed |
+| Dhruba (WS2) | Fixtures from 21 to 40 (faces, Hindi, long pages, real-site layouts) and reading long pages in the eval; then the OmniParser export and icon detector | `pnpm eval`; Groq when needed |
+
+**Hands off until Suparno's fixes land.** He is editing `apps/extension/lib/dom/extract.ts`,
+`lib/agent/loop.ts`, `lib/agent/read-page.ts`, `lib/vision/read-pixels.ts`,
+`entrypoints/sidepanel/App.tsx` and `style.css` (a one-line hook for the dashboard is fine),
+and `apps/server/`. Face detection and the icon detector plug into `read-page.ts` after his
+canvas fix. If a change is needed in one of these, ask him first.
+
 ### Waiting on Suparno (manual)
 
 Things only a person at the browser, or the project owner, can do. Keep this list current:
