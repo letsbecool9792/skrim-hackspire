@@ -612,7 +612,64 @@ html { font-size: 16px; scroll-behavior: smooth; }
 .text-link:hover { color: var(--accent-hover); }
 .text-link:focus-visible { box-shadow: var(--focus); border-radius: 2px; }
 
-/* ── 10. Footer ────────────────────────────────────────────────────────── */
+/* ── 9b. Download row + install steps ──────────────────────────────────── */
+
+.download-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  margin: var(--space-8) 0 var(--space-6);
+  flex-wrap: wrap;
+}
+
+.btn--download {
+  font-size: var(--text-base);
+  padding: var(--space-4) var(--space-6);
+  gap: var(--space-3);
+}
+
+.download-note {
+  font-size: var(--text-sm);
+  color: var(--text-3);
+  line-height: var(--leading-body);
+  max-width: 42ch;
+}
+
+.install-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-8);
+  padding: var(--space-5) var(--space-6);
+  border: var(--border-width) solid var(--accent-border);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+}
+
+.install-step {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-2);
+}
+
+.install-num {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+/* ── 10. Footer ──────────────────────────────────────────────────────────── */
 
 .site-footer {
   margin-top: auto;

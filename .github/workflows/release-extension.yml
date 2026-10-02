@@ -1,0 +1,89 @@
+name: release-extension
+
+# Triggers when you push a tag like v0.1.0, v1.0.0, etc.
+# Workflow:
+#   1. Build the Chrome extension with wxt zip
+#   2. Create a GitHub Release (draft so you can review before publishing)
+#   3. Attach the .zip as a downloadable asset
+#
+# To cut a release:
+#   git tag v0.1.0
+#   git push origin v0.1.0
+#
+# Then go to GitHub → Releases, review the draft, and publish.
+# The asset URL will be:
+#   https://github.com/letsbecool9792/skrim-hackspire/releases/download/v0.1.0/skrim-chrome-v0.1.0.zip
+# Update VITE_DOWNLOAD_URL in apps/web/src/content.ts to that URL.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write   # needed to create releases and upload assets
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Build a production zip (no dev source maps, no WXT overlay).
+      # wxt zip writes to apps/extension/.wxt/dist/*.zip by default.
+      # We point SKRIM_SERVER_URL at the hosted server if you have one,
+      # otherwise the default localhost:3000 is fine for local installs.
+      - name: Build extension zip
+        working-directory: apps/extension
+        run: pnpm zip
+        env:
+          # Override this in GitHub Settings → Secrets if you have a hosted server.
+          SKRIM_SERVER_URL: ${{ vars.SKRIM_SERVER_URL || 'http://localhost:3000' }}
+
+      # Rename to a predictable, version-stamped filename.
+      - name: Rename zip asset
+        run: |
+          TAG="${{ github.ref_name }}"
+          SRC=$(ls apps/extension/.wxt/dist/*.zip | head -1)
+          echo "Found zip: $SRC"
+          cp "$SRC" "skrim-chrome-${TAG}.zip"
+          echo "ASSET_PATH=skrim-chrome-${TAG}.zip" >> $GITHUB_ENV
+          echo "ASSET_NAME=skrim-chrome-${TAG}.zip" >> $GITHUB_ENV
+
+      # Creates a draft release so you can review notes before publishing.
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: ${{ env.ASSET_PATH }}
+          name: "Skrim ${{ github.ref_name }}"
+          body: |
+            ## Install
+
+            Skrim is not yet on the Chrome Web Store. To install:
+
+            1. Download **${{ env.ASSET_NAME }}** from the assets below.
+            2. Unzip the file.
+            3. Open **chrome://extensions** in Chrome.
+            4. Enable **Developer mode** (toggle, top-right).
+            5. Click **Load unpacked** and select the unzipped folder.
+            6. Start the planning server locally (`pnpm dev:server`) or point
+               `SKRIM_SERVER_URL` to a hosted instance before building.
+
+            > Firefox is not yet supported. Chrome only for now.
+
+            ## Source
+
+            Build from source: see [README](https://github.com/letsbecool9792/skrim-hackspire#readme).
