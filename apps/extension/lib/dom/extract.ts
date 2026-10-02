@@ -65,11 +65,13 @@ export function extractScreenGraph(): DomScreenGraph {
 
     const label = getAccessibleName(element);
     const value = getValue(element, label);
+    const hint = getHint(element);
     const screenElement: ScreenElement = {
       id: createElementId(elements.length),
       role: getRole(element),
       label,
       ...(value === undefined ? {} : { value }),
+      ...(hint === undefined ? {} : { hint }),
       bbox: getBoundingBox(element),
       source: "dom",
       state: getState(element),
@@ -89,6 +91,37 @@ export function extractScreenGraph(): DomScreenGraph {
   }
 
   return { elements, registry, fields };
+}
+
+/**
+ * One element's name, value and state, described the same way the graph
+ * describes it. Used after an action, to tell the planner what its target
+ * shows now. Raw text: redacted in the side panel.
+ */
+export function describeElement(element: Element): Pick<ScreenElement, "label" | "value" | "state"> {
+  const label = getAccessibleName(element);
+  const value = getValue(element, label);
+  return { label, ...(value === undefined ? {} : { value }), state: getState(element) };
+}
+
+/**
+ * A dropdown's choices. Its <option>s are left out of the graph (they cannot
+ * be clicked while it is closed), so without this the planner could not know
+ * what to pass to a select action.
+ */
+function getHint(element: Element): string | undefined {
+  if (!(element instanceof HTMLSelectElement)) return undefined;
+  const options = Array.from(element.options)
+    .map((option) => normalizeText(option.textContent))
+    .filter((text): text is string => Boolean(text));
+  return options.length > 0 ? normalizeText(`options: ${options.join(" | ")}`) : undefined;
+}
+
+/** A closed dropdown's options: part of the <select>, not elements of their own. */
+function isDropdownOption(element: Element): boolean {
+  if (!(element instanceof HTMLOptionElement)) return false;
+  const select = element.closest("select");
+  return select !== null && !select.multiple && !(select.size > 1);
 }
 
 /** Input types whose value is not text the user typed or chose. */
@@ -251,6 +284,10 @@ const SUPPORTED_ROLES = new Set<ScreenElement["role"]>([
 
 function isRelevantElement(element: Element): boolean {
   const tag = element.tagName;
+
+  if (isDropdownOption(element)) {
+    return false;
+  }
 
   if (INTERACTIVE_TAGS.has(tag) || STRUCTURAL_TAGS.has(tag) || VISION_TARGET_TAGS.has(tag)) {
     return true;
