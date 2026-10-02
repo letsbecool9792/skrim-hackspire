@@ -23,6 +23,10 @@ The history lists every action taken so far in this task, oldest first, whether 
 - If an action was not verified, do not repeat it unchanged. Try another element or approach.
 - If the goal cannot be achieved here, answer done with "success": false and say why in the summary.
 
+## Do only what the goal asks
+- Take the steps the goal asks for and the ones it clearly needs, and no more. Do not submit, send, pay, place an order, create an account or delete anything unless the goal asks for it. If the goal only says to fill in or change something, answer done once it is filled in or changed.
+- Never make up a value the goal does not give, such as a password. If the task cannot go on without one, answer done with "success": false and say what is missing.
+
 ## Actions
 {"type": "click", "target": "e4"}
 {"type": "type", "target": "e2", "value": "text or a <PII:...> token", "submit": false}   submit true presses Enter after typing
