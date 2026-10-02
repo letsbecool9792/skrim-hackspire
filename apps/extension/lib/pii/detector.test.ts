@@ -407,6 +407,56 @@ describe("password detection and redaction", () => {
     assert.equal(redacted.value, "red running shoes");
     assert.deepEqual(vault.stats(), {});
   });
+
+  test("hides the whole value of a field that says what it holds, even when a finder saw only part", () => {
+    const vault = new TokenVault();
+    const partOfIt = (text: string) => text === "221B, 3rd Cross, Indiranagar"
+      ? [{ category: "ADDRESS" as const, source: "ner" as const, confidence: 0.66, text: "3rd Cross, Indiranagar", start: 6, end: 28 }]
+      : [];
+
+    const redacted = redactDomData({ label: "Street address", value: "221B, 3rd Cross, Indiranagar", autocomplete: "shipping street-address" }, vault, partOfIt);
+
+    assert.equal(redacted.value, "<PII:ADDRESS:1>");
+  });
+
+  test("reads a value's label from the element before it, as with a <dt> and its <dd>", () => {
+    const vault = new TokenVault();
+
+    assert.equal(redactDomData({ label: "12/03/1990", context: "Date of birth" }, vault).label, "<PII:DOB:1>");
+    assert.equal(redactDomData({ label: "2345 6789 0123", context: "Aadhaar" }, vault).label, "<PII:GOV_ID:1>");
+    assert.equal(redactDomData({ label: "12/03/1990", context: "Invoice date" }, vault).label, "12/03/1990");
+  });
+});
+
+describe("birth dates", () => {
+  test("hides a date labelled as a birth date, and no other date", () => {
+    const vault = new TokenVault();
+
+    assert.equal(redactDomData({ label: "DOB: 05/11/1988" }, vault).label, "DOB: <PII:DOB:1>");
+    assert.equal(redactDomData({ label: "Born 12 March 1990 in Pune" }, vault).label, "Born <PII:DOB:2> in Pune");
+    assert.equal(redactDomData({ label: "Delivered 05/11/2025, order placed 2025-10-30" }, vault).label, "Delivered 05/11/2025, order placed 2025-10-30");
+  });
+});
+
+describe("addresses found in part", () => {
+  const tail = (address: string) => (text: string) => {
+    const start = text.indexOf(address);
+    return start < 0 ? [] : [{ category: "ADDRESS" as const, source: "ner" as const, confidence: 0.61, text: address, start, end: start + address.length }];
+  };
+
+  test("takes in the comma-separated parts before an address", () => {
+    const vault = new TokenVault();
+    const text = "Flat 4B, Lake View Apartments, Koramangala, Bengaluru 560034";
+
+    assert.equal(redactDomData({ label: text }, vault, tail("Koramangala, Bengaluru 560034")).label, "<PII:ADDRESS:1>");
+  });
+
+  test("does not take in a sentence, or parts holding something else it found", () => {
+    const vault = new TokenVault();
+
+    assert.equal(redactDomData({ label: "Deliveries go to 12 MG Road, Bengaluru" }, vault, tail("12 MG Road, Bengaluru")).label, "Deliveries go to <PII:ADDRESS:1>");
+    assert.equal(redactDomData({ label: "IFSC HDFC0001234, MG Road branch" }, vault, tail("MG Road branch")).label, "IFSC <PII:ACCOUNT:1>, <PII:ADDRESS:2>");
+  });
 });
 
 describe("GLiNER entity tokenisation", () => {

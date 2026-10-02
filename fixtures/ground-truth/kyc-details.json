@@ -1,0 +1,13 @@
+{
+  "page": "kyc-details.html",
+  "about": "Identity details as label and value pairs (dt/dd, th/td): each value sits alone in its element, so only the label next to it says what it is.",
+  "pii": [
+    { "category": "NAME", "value": "Meera Iyer", "where": "text" },
+    { "category": "DOB", "value": "12/03/1990", "where": "text" },
+    { "category": "GOV_ID", "value": "2345 6789 0123", "where": "text" },
+    { "category": "GOV_ID", "value": "ABCDE1234F", "where": "text" },
+    { "category": "ACCOUNT", "value": "50100234567891", "where": "text" },
+    { "category": "PHONE", "value": "+91 98111 22334", "where": "text" }
+  ],
+  "notPii": ["KYC details", "Verified on 2 September 2026", "Koramangala", "Home branch", "Update details"]
+}

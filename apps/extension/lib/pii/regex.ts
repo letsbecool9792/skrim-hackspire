@@ -31,6 +31,9 @@ const ACCOUNT_NUMBER_PATTERN = /\b\d{8,18}\b/g;
 
 const AADHAAR_CONTEXT = /aadhaar|aadhar|uidai/i;
 const ACCOUNT_CONTEXT = /account(?:\s+number|\s+no\.?|#)?/i;
+// A date is a birth date only when labelled as one: every page is full of dates.
+const DATE_PATTERN = /\b(?:\d{1,2}[/.-]\d{1,2}[/.-](?:19|20)\d{2}|(?:19|20)\d{2}-\d{2}-\d{2}|\d{1,2} (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* (?:19|20)\d{2})\b/gi;
+const DOB_CONTEXT = /date of birth|birth ?date|\bd\.?o\.?b\b|\bborn\b/i;
 
 /** How far back a label may sit before the number it describes. */
 const CONTEXT_WINDOW = 48;
@@ -105,6 +108,7 @@ export function findRegexCandidates(text: string): PiiCandidate[] {
     ...findMatches(text, "ACCOUNT", "regex", 1, UPI_PATTERN),
     ...findContextualNumbers(text, AADHAAR_PATTERN, AADHAAR_CONTEXT, "GOV_ID"),
     ...findContextualNumbers(text, ACCOUNT_NUMBER_PATTERN, ACCOUNT_CONTEXT, "ACCOUNT"),
+    ...findContextualNumbers(text, DATE_PATTERN, DOB_CONTEXT, "DOB"),
   ];
 }
 
