@@ -55,16 +55,16 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 111 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 120 tests:
 
 | Tests | Covers |
 |---|---|
 | 18 in `@skrim/schema` | The wire contract: PII tokens, URL sanitising, action validation, the outbound PII tripwire |
 | 11 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks) and the prompt format |
-| 45 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection, form-field hints, the token vault |
+| 52 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection, form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), the token vault |
 | 16 in `lib/vision` | DOM + vision fusion and the escalation policy |
 | 12 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns) and click verification, in a simulated DOM |
-| 9 in `lib/agent` | The whole loop with a scripted planner: redaction, typing via tokens, the no-progress and going-in-circles stops, tripwire, cancel |
+| 11 in `lib/agent` | The whole loop with a scripted planner: redaction (names included), typing via tokens, the no-progress and going-in-circles stops, tripwire, cancel |
 
 The same command runs in CI on every PR.
 
@@ -81,12 +81,14 @@ Prints the text as the server would see it, with PII replaced by tokens like
 `<PII:EMAIL:1>`, and checks that every token maps back to the original value, without
 printing the originals.
 
-With the built-in sample, expect email, phone, card, PAN, UPI, Aadhaar and account number to
-be tokenised, the Aadhaar as `GOV_ID` and the account number as `ACCOUNT`. Two things stay
-visible on purpose:
-- **"Suparno".** Free-text names need the GLiNER model, which is not wired in yet. (In forms,
-  a field marked as a name *is* redacted, from its `autocomplete` hint.)
-- **"Order #4567890".** Numbers without context are not PII; over-redaction is scored too.
+The first line says whether name and address detection (the GLiNER model) is on; it needs
+`pnpm models:fetch`. With the built-in sample, expect the name and the address (`via ner`)
+and the email, phone, card, PAN, UPI, Aadhaar and account number (`via regex`) to be
+tokenised: the Aadhaar as `GOV_ID`, the account number as `ACCOUNT`. "Order #4567890" and
+"Friday" stay visible on purpose: over-redaction is scored too.
+
+Try your own sentences to see what the model misses: a name tucked into a long sentence full
+of other data ("Hi, I'm Suparno. Email ...") often slips through.
 
 ---
 
@@ -181,7 +183,6 @@ the chat says which one it hit.
 
 | Part | Why |
 |---|---|
-| Name / address detection in free text (GLiNER) | Only post-processing exists; nothing loads or runs the model |
 | Face detection, OmniParser icon detection | Not built. The OmniParser model has not been exported |
 | Vision in the loop (OCR, fusion) | The modules exist, but the loop observes the DOM only |
 | Dashboard, landing page | Still the Vite templates |

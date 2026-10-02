@@ -27,7 +27,7 @@ Settled in the setup session. Do not reopen without a reason.
 |---|---|
 | **TypeScript end to end** | `packages/schema` is imported by extension, server *and* eval, so a client/server contract mismatch becomes a compile error instead of the agent typing `<PII:EMAIL:1>` into a form on stage |
 | **WXT** for the extension | Only framework treating Firefox as first-class; handles manifest-version and API polyfill differences from one codebase. Plasmo is Chrome-first, CRXJS means hand-wrangling Firefox at 2am |
-| **Transformers.js v3** for local inference | Pipelines + tokenisers included. Drop to raw `onnxruntime-web` only for the YOLO icon detector, where preprocessing is a resize and there is no pipeline anyway |
+| **Transformers.js v3** for local inference | Pipelines + tokenisers included. Drop to raw `onnxruntime-web` where there is no pipeline: the YOLO icon detector, and GLiNER (runs on `onnxruntime-web/wasm` with `@huggingface/tokenizers`, the tokenizer Transformers.js itself uses) |
 | **Hono on Node 22** for the server | Thin: prompt build, schema validation, retry. No ML in the server |
 | **Qwen** as the server brain | Apache 2.0, strong GUI grounding, available both hosted and via Ollama, so demo beat 8 is a base-URL swap. NVIDIA hosts no Qwen; the free hosted Qwen is `qwen/qwen3.8-27b` on Groq, and local is Qwen3-VL 4B. The NVIDIA default, Llama 3.2 11B, never finishes a task (see "Open findings") |
 | **NVIDIA Build** as the dev provider | Free, no credit card, ~40 RPM, no daily token cap, OpenAI-compatible |
@@ -166,10 +166,11 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 18 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (111 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (120 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
-      before the OmniParser detector
+      before the OmniParser detector. The built extension is 86.6 MB, including ONNX
+      Runtime's 14 MB WebAssembly
 - [x] WXT config: MV3 on both browsers, name Skrim, per-browser permissions, WebAssembly
       allowed by the CSP. Permissions: `<all_urls>` host access (the reach the content script
       already had, now also covering capture, injection and the server), `scripting`,
@@ -188,8 +189,9 @@ Built, by workstream:
       options. OCR works on demand (header button); fusion and escalation modules exist but
       are not in the loop
 - [x] **WS3 privacy:** regex detectors (precision bugs fixed), form-field hints for names and
-      phones, one vault per task, every page view and the goal redacted, tokens resolved
-      only at typing time, tripwire on the whole request
+      phones, **GLiNER for names and addresses in free text** (side panel, ~5 ms a text), one
+      vault per task, every page view and the goal redacted, tokens resolved only at typing
+      time, tripwire on the whole request
 - [x] **WS4 server:** `/plan` with one adapter and three profiles (NVIDIA, Groq, Ollama),
       compact prompt that reads the history, JSON repair, timeouts with one retry, errors
       that do not leak provider detail
@@ -203,7 +205,7 @@ Built, by workstream:
 - [ ] Settle the model (see "Open findings"): measure Groq's Qwen 3.8 with `pnpm test:agent`
 
 **2. Perception beyond the DOM** (WS2, WS3)
-- [ ] GLiNER inference for names and addresses in free text (only post-processing exists)
+- [x] GLiNER inference for names and addresses in free text
 - [ ] Face detection (the BlazeFace model is fetched; no code yet)
 - [ ] OmniParser icon detector: export (`scripts/artifacts/omniparser-icon.onnx`) and inference
 - [ ] Wire OCR and vision fusion into the loop, for canvas and image-only pages
@@ -250,11 +252,22 @@ GPU, given that its only fast model cannot finish tasks.
 host permission were built and tested against happy-dom, not in Chrome or Firefox.
 [`docs/testing.md`](docs/testing.md) sections 5 and 6 are the checklist.
 
-**The offscreen document may be unnecessary now.** It exists because Chrome's service
-worker cannot run WebAssembly or WebGPU. The loop now lives in the side panel, an ordinary
-page that can run models itself (OCR already runs there), in a Worker so the UI stays
-responsive. Dropping the offscreen document would also drop the `offscreen` permission.
-Decide before wiring GLiNER.
+**The offscreen document is probably unnecessary now.** It exists because Chrome's service
+worker cannot run WebAssembly or WebGPU. The loop lives in the side panel, an ordinary page,
+and both OCR and GLiNER already run there. GLiNER runs on the panel's main thread (about
+5 ms a text, so a page is tens of milliseconds); move it to a Worker if a heavier model
+makes the chat stutter. Dropping the offscreen document would also drop the `offscreen`
+permission.
+
+**Name detection fails open.** If GLiNER cannot load in the side panel, the task continues
+with the regex layer and the chat shows a red warning that names and addresses are not being
+hidden. That keeps the agent usable while the model path is unproven in a real browser.
+Once it is, consider stopping the task instead.
+
+**Not yet tried in a real browser: GLiNER.** It is tested in Node on onnxruntime-node
+against the real model (`lib/pii/gliner-model.test.ts`, `pnpm test:agent`), but the
+browser path (onnxruntime-web, the WASM asset Vite emits, fetching the model from the
+extension) has not run in Chrome.
 
 **URL paths can carry names.** `sanitizeUrl()` masks long digit runs, uuids, hex and anything
 with `@`, but keeps word segments, so `/users/asha-rao/orders` reaches the server as is.
