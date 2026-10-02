@@ -3,8 +3,8 @@
  * planning server. The quickest way to see the whole loop work, or not.
  *
  *   pnpm dev:server      # terminal 1
- *   pnpm test:agent      # terminal 2: the six quick goals
- *   pnpm test:agent -- --all   # all fourteen, as the provider study runs them
+ *   pnpm test:agent      # terminal 2: the seven quick goals
+ *   pnpm test:agent -- --all   # all fifteen, as the provider study runs them
  *   pnpm test:agent -- --tasks result,signup   # just these, step by step
  *
  * What is real and what is simulated: scripts/agent-harness.ts. It is not the

@@ -38,10 +38,14 @@ describe('renderElement', () => {
     );
   });
 
-  test('marks elements that came from vision', () => {
+  test('marks text read from pixels, which cannot be clicked', () => {
     assert.equal(
-      renderElement({ id: 'e4', role: 'button', bbox: [0, 0, 10, 10], source: 'vision', confidence: 0.8 }),
-      'e4 button [0,0,10,10] {vision 0.80}',
+      renderElement({ id: 'e4', role: 'text', label: 'PAN <PII:GOV_ID:1>', bbox: [24, 140, 200, 24], source: 'vision', confidence: 0.8 }),
+      'e4 text "PAN <PII:GOV_ID:1>" [24,140,200,24] {vision}',
+    );
+    assert.equal(
+      renderElement({ id: 'e5', role: 'button', label: 'Save', bbox: [0, 0, 10, 10], source: 'fused', confidence: 0.8 }),
+      'e5 button "Save" [0,0,10,10]',
     );
   });
 });

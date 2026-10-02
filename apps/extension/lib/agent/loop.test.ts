@@ -8,6 +8,7 @@ import { createContentHandler } from "../content-handler.ts";
 import { domScreenGraphProvider } from "../dom/provider.ts";
 import { registerScreenGraphProvider, type ActionPlanner } from "../integration.ts";
 import type { NameFinder } from "../pii/gliner.js";
+import type { PixelReader } from "../vision/read-pixels.ts";
 import { runAgentTask, type AgentEvent, type PageLink } from "./loop.ts";
 
 /**
@@ -252,6 +253,40 @@ describe("runAgentTask", () => {
     // The user gets the same in plain words, not the planner's instructions.
     const acted = events.find((e) => e.type === "acted");
     assert.equal(acted?.type === "acted" && acted.message, "Skipped: it would place an order or pay, which you didn't ask for.");
+  });
+
+  test("answers an extract of a line read from pixels itself: the page has no element behind it", async () => {
+    await page(`<h1>Your digital ID</h1><canvas aria-label="ID card" width="420" height="200"></canvas><button>Download PDF</button>`);
+    const readPixels: PixelReader = async (targets) => targets.map((target) => ({ targetId: target.id, bbox: [20, 120, 200, 24], text: "PAN ABCDE1234F", confidence: 0.9 }));
+    const { planner, requests } = scripted((request, step) => {
+      const line = request.graph.elements.find((e) => e.source === "vision");
+      assert.ok(line, "no line read from pixels");
+      return step === 0 ? { type: "extract", target: line.id, as: "pan" } : { type: "done", success: true, summary: `Your PAN is ${request.extracted?.pan}` };
+    });
+    const events: AgentEvent[] = [];
+
+    await runAgentTask({ goal: "What is my PAN?", planner, link, signal: new AbortController().signal, onEvent: (e) => events.push(e), readPixels });
+
+    const finished = events.at(-1) as Extract<AgentEvent, { type: "finished" }>;
+    assert.equal(finished.outcome, "completed");
+    assert.equal(requests[1]?.history[0]?.verified, true);
+    assert.equal(requests[1]?.extracted?.pan, "PAN <PII:GOV_ID:1>");
+    assert.doesNotMatch(JSON.stringify(requests), /ABCDE1234F/);
+  });
+
+  test("tells the planner a line read from pixels can be read, not clicked", async () => {
+    await page(`<canvas aria-label="ID card" width="420" height="200"></canvas>`);
+    const readPixels: PixelReader = async (targets) => targets.map((target) => ({ targetId: target.id, bbox: [20, 120, 200, 24], text: "Verify now", confidence: 0.9 }));
+    const { planner, requests } = scripted((request, step) =>
+      step === 0 ? { type: "click", target: request.graph.elements.find((e) => e.source === "vision")!.id } : { type: "done", success: true, summary: "ok" });
+    const events: AgentEvent[] = [];
+
+    await runAgentTask({ goal: "Click verify now", planner, link, signal: new AbortController().signal, onEvent: (e) => events.push(e), readPixels });
+
+    assert.equal(requests[1]?.history[0]?.verified, false);
+    assert.match(requests[1]?.history[0]?.note ?? "", /read from an image of the screen/);
+    const acted = events.find((e) => e.type === "acted");
+    assert.match(acted?.type === "acted" ? acted.message ?? "" : "", /part of an image/);
   });
 
   test("says when a scroll is already at the end, so the planner stops looking further down", async () => {
