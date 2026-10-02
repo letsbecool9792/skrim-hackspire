@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import { TokenVault } from "../vault/vault.js";
 import { glinerCandidates, isBusinessAddress } from "./gliner.js";
+import { findRegexCandidates } from "./regex.js";
 import {
   detectCards,
   detectAadhaarNumbers,
@@ -646,5 +647,31 @@ describe("Aadhaar detection — context-gated with extended label recognition", 
     const vault = new TokenVault();
     const matches = detectAadhaarNumbers("Order 123456789012 placed.", vault);
     assert.equal(matches.length, 0);
+  });
+});
+
+describe("labelled passport numbers and member ids", () => {
+  const found = (text: string) => findRegexCandidates(text).map((candidate) => [candidate.category, candidate.text]);
+
+  test("hides a passport number after its label, and only after it", () => {
+    assert.deepEqual(found("Passport number: P4829017"), [["GOV_ID", "P4829017"]]);
+    assert.deepEqual(found("Reference P4829017"), []);
+  });
+
+  test("hides a patient, member, customer or employee id, and a policy number", () => {
+    assert.deepEqual(found("Patient ID: HP-482901"), [["OTHER", "HP-482901"]]);
+    assert.deepEqual(found("Member ID: M77821A"), [["OTHER", "M77821A"]]);
+    assert.deepEqual(found("Policy number: LIC-5528-19"), [["OTHER", "LIC-5528-19"]]);
+    assert.deepEqual(found("MRN 00482913"), [["OTHER", "00482913"]]);
+  });
+
+  test("takes only the id after the label, not the words that follow it", () => {
+    assert.deepEqual(found("Patient ID: HP-482901 Next appointment: Tuesday"), [["OTHER", "HP-482901"]]);
+  });
+
+  test("leaves order, invoice and tracking numbers readable: they are not about a person", () => {
+    for (const text of ["Order ID: ORD-482901", "Invoice number: INV-2024-0042", "Tracking number: 1Z999AA10123456784", "Customer care: 1800 123 4567"]) {
+      assert.deepEqual(found(text), [], text);
+    }
   });
 });
