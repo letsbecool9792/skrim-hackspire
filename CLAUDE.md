@@ -173,11 +173,11 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (214 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (225 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
-      before the OmniParser detector. The built extension is 86.6 MB, including ONNX
-      Runtime's 14 MB WebAssembly
+      without the OmniParser detector (+77 MB once exported: the built extension is
+      87 MB without it, 168 MB with it). The 87 MB includes ONNX Runtime's 14 MB WebAssembly
 - [x] WXT config: MV3 on both browsers, name Skrim, per-browser permissions, WebAssembly
       allowed by the CSP. Permissions: `<all_urls>` host access (the reach the content script
       already had, now also covering capture, injection and the server), `scripting`, and
@@ -209,7 +209,7 @@ Built, by workstream:
       token per value however it is written), every page view and the goal redacted, tokens
       resolved only at typing time, tripwire on the whole request
 - [x] **WS5 eval:** `packages/eval` scores recall, precision, span IoU, near-misses and
-      over-redaction on 22 annotated fixtures, through the same `readPage()` the agent uses.
+      over-redaction on 37 annotated fixtures, through the same `readPage()` the agent uses.
       `pnpm eval` drives the real extension in Chromium (first run 2026-10-02: 96.9% recall,
       79.0% precision; [`docs/testing.md`](docs/testing.md) section 6); `pnpm eval:node` is a
       quick check in Node
@@ -232,10 +232,10 @@ Built, by workstream:
 
 | Who | Working on | Tests on |
 |---|---|---|
-| Suparno | The Chrome retest's fixes (merged); finishing the dashboard (PR #15); next, the side panel's look | Ollama |
+| Suparno | The Chrome retest's fixes, the dashboard, the design language (all merged); next, the real-site tests, then the demo | Ollama |
 | Aritra (WS1) | The dashboard (PR #15): built, then finished by Suparno; Aritra has stopped. The offline rehearsal (demo beat 8) is under "Waiting on Suparno" | Ollama |
-| Ayushi (WS3) | Detection: the email leak and the Aadhaar miss read by OCR (PR 18, finished by Suparno), false positives (PR 17), names in URL paths; then face detection and face scoring in the eval | `pnpm eval`; Groq when needed |
-| Dhruba (WS2) | 19 more fixtures, to about 40 (faces, Hindi, long pages, real-site layouts) and reading long pages in the eval; then the OmniParser export and icon detector | `pnpm eval`; Groq when needed |
+| Ayushi (WS3) | Her five detection PRs are merged (OCR leaks, false positives, names in URLs, faces counted). Next: the eval's seven misses (passport and patient-ID numbers, names on pages that do not look personal) | `pnpm eval`; Groq when needed |
+| Dhruba (WS2) | Fixtures and the icon detector are merged. Next: run the icon detector in the pixel reader and fuse it with the DOM, and a click at a position for what it finds | `pnpm eval`; Groq when needed |
 
 **The look is one language, in `design/tokens.css`.** The side panel and the dashboard use it
 (first pass on `design/ui-language`, 2026-10-03, waiting on Suparno's eyes). Use its tokens,
@@ -283,6 +283,9 @@ add to it whenever a change needs a manual check, and tick items off when report
   - [ ] with the default provider (Groq), several tasks in a row: steps slow down to ~14 s when
     the minute's tokens run out, but no task fails with "rate limit reached". Not confirmed:
     Groq limited so fast that testing moved to Ollama
+- [ ] **Run the real-site tests** ([`docs/real-site-tests.md`](docs/real-site-tests.md)): 14 goals on
+      Wikipedia, Amazon.in and Gmail, on Groq and on Ollama; fill in the table and copy the
+      failures and leaks into "Open findings"
 - [ ] **The new look** (`design/ui-language`; rebuild with `pnpm --filter @skrim/extension build`
       and reload Skrim, restart `pnpm dev:dashboard`). Look at both in light and dark (Windows
       colour mode) and say what to change:
@@ -296,9 +299,13 @@ add to it whenever a change needs a manual check, and tick items off when report
       `.env` still sets `MODEL_PROVIDER` (it overrides the default): change it to `groq` or
       delete the line. Needs `GROQ_API_KEY` in `.env`
 - [x] **Run the eval in Chromium** once (2026-10-02; numbers under "What the eval finds")
-- [ ] **Export the OmniParser icon detector** (Python venv, `scripts/`): the one-time setup in
-      "Setup — fresh clone". The export script, `scripts/export_icon_detector.py`, has to be
-      written first: `fetch-models.mjs` names it, but it does not exist
+- [x] **Export the OmniParser icon detector** (done 2026-10-03: `scripts/.venv`, then
+      `scripts/.venv/Scripts/python.exe scripts/export_icon_detector.py`, 10 s; its test passes)
+- [ ] **Decide what to do with the exported icon model** (`scripts/artifacts/omniparser-icon.onnx`,
+      81 MB, not committed). `.gitignore` says to commit it so nobody needs Python, but 81 MB
+      stays in the repo's history for good and GitHub warns above 50 MB. Options: commit it, keep
+      it local (each person runs the 10 s export), or shrink it first. The model is AGPL-3.0, and
+      with it the extension is 168 MB
 - [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
 - [x] **Pick the default provider**: Groq's Qwen 3.8 27B, as the study
       ([`docs/provider-study.md`](docs/provider-study.md)) recommends (decided 2026-10-02)
@@ -325,15 +332,19 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [x] GLiNER inference for names and addresses in free text
 - [x] OCR in the loop, for text in a canvas, an image or a cross-origin iframe
 - [x] Where inference runs: the side panel (the offscreen document is gone)
-- [ ] Face detection (the BlazeFace model is fetched; no code yet). It matters once a
-      screenshot goes to the server; today the planner gets text only
-- [ ] OmniParser icon detector: export (`scripts/artifacts/omniparser-icon.onnx`) and
-      inference, then vision fusion for icon-only buttons
+- [x] Face detection: faces in the regions the pixel reader captures are counted (4 of 5 on the
+      fixtures; the miss is a photo under 200 px wide, which is never read). Only the count is
+      kept: it matters once a screenshot goes to the server, and today the planner gets text only
+- [ ] OmniParser icon detector: the model is exported and its test passes, but nothing calls
+      it yet. Left: run it in the pixel reader, then fusion for icon-only buttons, and a click
+      at a position for what it finds
 
 **3. Measure and show it** (WS5, WS6)
-- [x] Eval harness, and 22 fixtures with ground truth
-- [ ] More fixtures, to 30–50: a face in a photo, pages in Hindi, long pages, real-site
-      captures (see "Open findings": ours were written by the same hand as the fixes)
+- [x] Eval harness, and 37 fixtures with ground truth
+- [x] More fixtures: a face in a photo, long pages, near-misses (Hindi was tried and dropped:
+      Skrim is English-only for now)
+- [ ] Test on three real sites (Wikipedia, Amazon.in, Gmail) with the goals real users type, not
+      our own pages: [`docs/real-site-tests.md`](docs/real-site-tests.md)
 - [x] Dashboard: split-screen wire view + resource panel
 - [ ] Landing page
 - [ ] Tradeoff curve: GLiNER quint8 vs fp16; hosted vs local model accuracy and latency
@@ -415,9 +426,10 @@ task. Known gaps:
   hidden: the eval's search results page loses a celebrity chef and "biryani".
 - The cue words are English.
 
-**What the eval finds** (`pnpm eval` in Chromium, 22 fixtures, 2026-10-03): **100% recall
-on all PII** (65 of 65), **80.5% precision**, 8 of 137 near-misses hidden, 2.5% of non-PII
-characters hidden. OCR reads the canvas, the ID card image and the cross-origin iframe, and
+**What the eval finds** (`pnpm eval` in Chromium, 37 fixtures, 2026-10-03): **92.9% recall
+on all PII** (91 of 98), **86.8% precision**, 8 of 183 near-misses hidden, 1.9% of non-PII
+characters hidden. The first 22 fixtures scored 100% recall; Dhruba's 15 harder ones found
+the gaps below, so 92.9% is the honest number. OCR reads the canvas, the ID card image and the cross-origin iframe, and
 everything on them is hidden; the Node check (`pnpm eval:node`) cannot capture those and gives
 87.7% recall. Name detection takes a median 250 ms a page view in the browser, against 38 ms
 in Node. The last two misses were fixed with Ayushi (PR 18):
@@ -428,6 +440,12 @@ in Node. The last two misses were fixed with Ayushi (PR 18):
   "karan" was sent: text read from pixels now joins a word to the address it touches.
   `pnpm eval -- --show-text <page>` prints what a page was read as. Values that exist only
   as pixels are scored allowing OCR's slips, since what counts is whether they were hidden.
+
+The seven misses: a passport number ("P4829017") and a patient ID ("HP-482901") after their
+labels; four names on pages that do not look personal (the group photo's three and the
+profile photo's: the known gap above); and "Ananya Shah" in an inbox, which GLiNER did not
+find. Hindi is out of scope. A plain 10-digit mobile number with no +91 was missed on a
+Hindi page; it is untested in English.
 
 The false positives: single capitalised words taken for names ("Aadhaar", "biryani",
 "Koramangala"), business addresses on personal pages ("Apollo Clinic, Bannerghatta Road", "MG
@@ -446,9 +464,11 @@ are listed, at most 120, and the prompt says how many more lie above and below. 
 must scroll to reach the rest, and a long paragraph is cut at 200 characters. Untried in
 Chrome: whether Qwen scrolls when what it needs is not listed.
 
-**URL paths can carry names.** `sanitizeUrl()` masks long digit runs, uuids, hex and anything
-with `@`, but keeps word segments, so `/users/asha-rao/orders` reaches the server as is.
-Consider running the PII detectors over path segments too.
+**URL paths can carry names, and only known names are hidden.** `sanitizeUrl()` masks digit runs,
+uuids, hex and anything with `@`; `hideNamesInPath()` then hides a segment that holds a name the
+task already knows (`/users/asha-rao/orders` becomes `/users/{name}/orders`, and
+`/wiki/Alan_Turing` when the goal named him). The model does not read URLs, so a private name
+that appears only in a URL is still sent.
 
 **Re-run `pnpm models:fetch` after pulling.** The file set changes: WS3's PR saves GLiNER's config as
 `config.json`, and Tesseract now ships only the two core files it actually loads. The script

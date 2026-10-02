@@ -56,17 +56,17 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 214 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 225 tests:
 
 | Tests | Covers |
 |---|---|
 | 35 in `@skrim/schema` | The wire contract: PII tokens, URL sanitising, action validation, the "beyond the view" counts, token usage, the outbound PII tripwire (ISBNs are not cards), and the dashboard's message format |
 | 20 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks), the prompt format, how long a rate limit asks to wait, and the provider settings (the default, the fallback, which key each needs) |
 | 11 in `@skrim/eval` | Scoring: lining redacted text up with the original, recall, precision, IoU, over-redaction, and values read from pixels despite OCR's slips |
-| 72 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection (birth dates, labels from the element before, Aadhaar numbers on an ID card, emails OCR split), form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), whole addresses, the token vault |
-| 19 in `lib/vision` | DOM + vision fusion, the escalation policy, and which regions to read with OCR |
+| 76 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection (birth dates, labels from the element before, Aadhaar numbers on an ID card, emails OCR split), form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), whole addresses, the token vault |
+| 22 in `lib/vision` | DOM + vision fusion, the escalation policy, which regions to read with OCR, face size, and the icon detector on the real model (skipped when it is not exported) |
 | 17 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons, only what is near the view) and click verification, in a simulated DOM |
-| 40 in `lib/agent` | Redacting text read from pixels (an ID card image, an email in a frame), the dashboard feed (its format, what it holds back, the heartbeat), and the whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order, text read from pixels, a step repeated for nothing, a click whose change shows late, the end of the page, stopping when name detection cannot start), which names are private, and which clicks commit the user |
+| 44 in `lib/agent` | Redacting text read from pixels (an ID card image, an email in a frame), names in a URL's path, the dashboard feed (its format, what it holds back, the heartbeat), and the whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order, text read from pixels, a step repeated for nothing, a click whose change shows late, the end of the page, stopping when name detection cannot start), which names are private, and which clicks commit the user |
 
 The same command runs in CI on every PR.
 
@@ -259,8 +259,8 @@ pnpm eval -- --show-text iframe-form.html                     # what a page was 
 
 It prints a report and writes it to `packages/eval/results/browser-latest.md`
 (gitignored). Chromium, not Chrome: branded Chrome no longer loads unpacked extensions
-from the command line. On the 22 fixtures it gave 100% recall on all PII (65 of 65: OCR reads
-the canvas, image and iframe), 80.5% precision, and 8 of 137 near-misses hidden.
+from the command line. On the 37 fixtures it gave 92.9% recall on all PII (91 of 98; OCR reads the canvas,
+image and iframe), 86.8% precision, 8 of 183 near-misses hidden, and 4 of 5 faces counted.
 
 When something that exists only as pixels is missed, `--show-text` shows what OCR made of
 the page: Tesseract read the iframe's "karan.mehta@example.com" as "karan mehta@example.com".
