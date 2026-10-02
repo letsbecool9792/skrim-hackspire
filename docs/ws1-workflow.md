@@ -228,7 +228,7 @@ pnpm --filter @skrim/extension build:firefox
 
 Without a browser, `pnpm test:agent` (with `pnpm dev:server` running) runs the fixture
 pages through the whole loop in happy-dom. Then in a browser, follow
-[`docs/testing.md`](testing.md) sections 5 and 6: load the build, open a fixture page, give
+[`docs/testing.md`](testing.md) section 5: load the build, open a fixture page, give
 the side panel a goal, and confirm the page changes, the chat shows verified steps, and the
 server log shows counts only.
 

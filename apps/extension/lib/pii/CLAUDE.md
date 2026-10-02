@@ -8,7 +8,7 @@ detection, and precision of redaction.
 | Detector | Catches | Cost |
 |---|---|---|
 | Regex bank (`regex.ts`) | email, phone, card, PAN, Aadhaar, account numbers | free, exact |
-| GLiNER NER (`gliner*.ts`, `ner-*.ts`) | names and addresses in free text — what regex cannot | 45 MB model + 14 MB ONNX Runtime; ~5 ms a text |
+| GLiNER NER (`gliner*.ts`, `ner-*.ts`) | names and addresses in free text — what regex cannot | 45 MB model + 14 MB ONNX Runtime; ~12 ms a text in the browser |
 | BlazeFace (`public/models/face/`) | faces in images and video | 224 KB; not wired |
 
 Plus `type="password"` and form-field `type`/`autocomplete` hints from the DOM, which are free
@@ -24,7 +24,12 @@ and scripts (`ner-node.ts`), with `@huggingface/tokenizers`.
 
 Measured, and fixed in `gliner.ts`:
 - Labels `person` and `address`, threshold **0.6**. At 0.5 it called "Friday" an address.
-- One text per batch row. Packing many texts into one sequence lost most names.
+- One text per model call. Packing many texts into one sequence lost most names; padded
+  batch rows made each text's scores depend on its neighbours ("Signed in as
+  Priya" scored 0.64 alone, 0.44 in a batch) and were no faster on WASM.
+- About 12 ms a text on WASM, one thread: a page as big as Wikipedia's main page (~600
+  texts) takes ~8 s on its first view. See CLAUDE.md "Open findings".
+- It cannot tell the user's name from a public figure's: it hides both.
 - Misses: a name inside a long mixed sentence ("Hi, I'm Suparno. Email ..."), and a UK
   postcode after the street. Organisations are not asked for on purpose: shop and brand
   names are what the planner navigates by.
