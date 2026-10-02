@@ -123,18 +123,21 @@ describe("runAgentTask", () => {
     assert.ok(requests[0]?.graph.elements.some((e) => e.label === "Signed in as <PII:NAME:1>"));
   });
 
-  test("leaves public names readable, in the goal and on the page", async () => {
-    await page(`<p>Alan Turing was a mathematician</p><input type="search" aria-label="Search">`);
-    const findNames: NameFinder = async (texts) => texts.map((text) => {
-      const start = text.toLowerCase().indexOf("alan turing");
-      return start === -1 ? [] : [{ category: "NAME", source: "ner", confidence: 0.9, text: text.slice(start, start + 11), start, end: start + 11 }];
-    });
+  test("hides the goal's names everywhere, and leaves other public names readable", async () => {
+    await page(`<p>Alan Turing was a mathematician</p><p>Winston Churchill praised the codebreakers</p><input type="search" aria-label="Search">`);
+    const people = ["alan turing", "winston churchill"];
+    const findNames: NameFinder = async (texts) => texts.map((text) => people.flatMap((person) => {
+      const start = text.toLowerCase().indexOf(person);
+      return start === -1 ? [] : [{ category: "NAME" as const, source: "ner" as const, confidence: 0.9, text: text.slice(start, start + person.length), start, end: start + person.length }];
+    }));
     const { planner, requests } = scripted(() => ({ type: "done", success: true, summary: "ok" }));
 
     await runAgentTask({ goal: "search for alan turing", planner, link, signal: new AbortController().signal, onEvent: () => {}, findNames });
 
-    assert.equal(requests[0]?.goal, "search for alan turing");
-    assert.ok(requests[0]?.graph.elements.some((e) => e.label === "Alan Turing was a mathematician"));
+    assert.equal(requests[0]?.goal, "search for <PII:NAME:1>");
+    const labels = requests[0]?.graph.elements.map((e) => e.label);
+    assert.ok(labels?.includes("<PII:NAME:1> was a mathematician"));
+    assert.ok(labels?.includes("Winston Churchill praised the codebreakers"));
   });
 
   test("warns and carries on when the name finder cannot start", async () => {

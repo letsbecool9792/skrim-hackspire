@@ -40,10 +40,11 @@ Measured, and fixed in `gliner.ts`:
 ## Which names are hidden
 
 `lib/agent/private-names.ts`, not this folder, decides which of the model's names are the
-user's: all of them on a page that shows the user's data (found by the regex bank and field
-hints, no model), a name right after words addressing the user ("Welcome back", "Deliver
-to"), and any name already hidden in the task. Public names stay readable, which the eval
-scores as not over-redacting. The model runs only where its answer can matter, so a public
+user's: every name in the goal, all of them on a page that shows the user's data (found by
+the regex bank and field hints, no model), a name right after words addressing the user
+("Welcome back", "Deliver to"), and any name already hidden in the task. Other public names
+stay readable, which the eval scores as not over-redacting. Where privacy and
+over-redaction trade, privacy wins (the owner's call). The model runs only where its answer can matter, so a public
 page costs no model time. If the model cannot load, the task continues on the regex layer
 with a visible warning (fails open; see CLAUDE.md "Open findings").
 

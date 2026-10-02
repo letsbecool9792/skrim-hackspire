@@ -102,23 +102,21 @@ describe("PrivateNames", () => {
     assert.deepEqual(hidden(view.lookup, "Your profile: Meera Iyer"), ["Meera Iyer"]);
   });
 
-  test("in the goal, keeps a public name and hides someone the user deals with", async () => {
-    const { finder } = finderFor({ "alan turing": "NAME", "Rahul": "NAME" });
-    const names = new PrivateNames(finder, () => {});
-    const { observation, texts } = page("Search Wikipedia");
-    await names.preparePage(observation, texts);
-
-    assert.deepEqual(hidden(await names.prepareGoal("search for alan turing", false), "search for alan turing"), []);
-    assert.deepEqual(hidden(await names.prepareGoal("email Rahul the notes", false), "email Rahul the notes"), ["Rahul"]);
-  });
-
-  test("hides every name in the goal when the task starts on a personal page", async () => {
-    const { finder } = finderFor({ "Priya": "NAME" });
+  test("hides every name in the goal, public or not, and then on the pages too", async () => {
+    const { finder } = finderFor({ "Rahul Sharma": "NAME", "Alan Turing": "NAME", "Winston Churchill": "NAME" });
     const names = new PrivateNames(finder, () => {});
 
-    const lookup = await names.prepareGoal("open the file from Priya", true);
+    // No rule tells a contact from a public figure here, so both are hidden.
+    assert.deepEqual(hidden(await names.prepareGoal("find Rahul Sharma's profile"), "find Rahul Sharma's profile"), ["Rahul Sharma"]);
+    assert.deepEqual(hidden(await names.prepareGoal("search for alan turing"), "search for alan turing"), ["alan turing"]);
 
-    assert.deepEqual(hidden(lookup, "open the file from Priya"), ["Priya"]);
+    // A public page: the goal's names stay hidden on it, other names do not.
+    const { observation, texts } = page("Rahul Sharma - Profile", "Alan Turing and Winston Churchill");
+    const view = await names.preparePage(observation, texts);
+
+    assert.equal(view.personal, false);
+    assert.deepEqual(hidden(view.lookup, texts[0]!), ["Rahul Sharma"]);
+    assert.deepEqual(hidden(view.lookup, texts[1]!), ["Alan Turing"]);
   });
 
   test("reports a model that cannot run once, and still hides known names", async () => {
