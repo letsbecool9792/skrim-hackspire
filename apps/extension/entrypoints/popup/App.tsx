@@ -40,6 +40,7 @@ export default function App() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [snapshotBusy, setSnapshotBusy] = useState(false);
+  const [ocrBusy, setOcrBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [listening, setListening] = useState(false);
   const [currentPage, setCurrentPage] = useState(true);
@@ -144,6 +145,26 @@ export default function App() {
     } finally { setSnapshotBusy(false); }
   };
 
+  // TEST HOOK: runs lib/vision/ocr.ts on the captured snapshot, right here in
+  // the popup. The real pipeline runs OCR in the offscreen document, which
+  // nothing creates yet. Loaded on demand so tesseract stays out of the popup's
+  // main bundle. The preview is shown locally only; it is never logged or sent.
+  const readSnapshotText = async () => {
+    if (!snapshot) return;
+    setOcrBusy(true);
+    setNotice("Reading text from the snapshot on this device...");
+    try {
+      const { recognizeText } = await import("@/lib/vision/ocr");
+      const words = await recognizeText(snapshot);
+      const confident = words.filter((word) => word.confidence >= 0.6).length;
+      const preview = words.slice(0, 8).map((word) => word.text).join(" ");
+      setNotice(`OCR found ${words.length} words (${confident} confident). Starts: "${preview}"`);
+    } catch (error) {
+      log.warn("popup.ocrFailed", { error: String(error) });
+      setNotice("OCR failed. Run pnpm models:fetch, rebuild, and reload the extension.");
+    } finally { setOcrBusy(false); }
+  };
+
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -198,6 +219,7 @@ export default function App() {
           <button className="attach-link" type="button" onClick={() => fileInputRef.current?.click()}>+ Attach</button>
           {attachments.map((file) => <div className="file-chip" key={file.id}><span className="file-name">{file.name}</span><small>{formatBytes(file.size)}</small><button type="button" aria-label={`Remove ${file.name}`} onClick={() => setAttachments((current) => current.filter((item) => item.id !== file.id))}>×</button></div>)}
           <button className="snapshot-link" type="button" onClick={takeSnapshot} disabled={snapshotBusy}>{snapshotBusy ? "Capturing..." : snapshot ? "✓ Page captured" : "Capture page"}</button>
+          {snapshot && <button className="snapshot-link" type="button" onClick={readSnapshotText} disabled={ocrBusy}>{ocrBusy ? "Reading..." : "Read text (OCR)"}</button>}
         </div>
 
         <section className="status-panel" aria-label="Task status"><div className="status-line"><span className={`status-pill ${status}`}>{isActive ? "●" : status === "completed" ? "✓" : status === "failed" ? "!" : "●"} {statusLabel}</span><span className="step-copy">{isActive ? `${stepCount} / ${maxSteps || "--"} steps` : status === "idle" ? "Ready to act" : ""}</span>{isActive && <button className="stop-button" type="button" onClick={handleCancel}>Stop</button>}</div>{errorCode && <p className="error-copy">{errorCode}</p>}</section>
