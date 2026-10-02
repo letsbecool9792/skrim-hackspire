@@ -3,10 +3,14 @@ node_modules/
 .pnpm-store/
 
 # builds
+# NOTE: .gitignore has no trailing-comment syntax. A "# comment" after a
+# pattern becomes part of the pattern. Keep comments on their own lines.
 dist/
 build/
-.output/          # wxt
-.wxt/             # wxt generated types
+# wxt build output
+.output/
+# wxt generated types
+.wxt/
 *.zip
 
 # turbo

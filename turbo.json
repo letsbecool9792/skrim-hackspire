@@ -1,0 +1,35 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "stream",
+  "globalDependencies": ["tsconfig.base.json", ".env"],
+  "globalEnv": [
+    "MODEL_PROVIDER",
+    "NVIDIA_API_KEY",
+    "NVIDIA_BASE_URL",
+    "NVIDIA_MODEL",
+    "OLLAMA_BASE_URL",
+    "OLLAMA_MODEL",
+    "PORT"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".output/**"]
+    },
+    "compile": {
+      "dependsOn": ["^compile"],
+      "outputs": []
+    },
+    "lint": {
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^compile"],
+      "outputs": []
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

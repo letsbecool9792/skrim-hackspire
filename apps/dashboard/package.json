@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "compile": "tsc -b",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@skrim/schema": "workspace:*",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

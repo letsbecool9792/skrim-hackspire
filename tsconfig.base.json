@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "_comment": [
+    "Shared STRICTNESS only. Module resolution deliberately lives in each app,",
+    "because they genuinely differ: the server is NodeNext, the Vite apps are",
+    "bundler, and WXT generates its own. Do not add module/target/lib here.",
+    "",
+    "Every app must extend this. If you are adding a new package, extend it too."
+  ],
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true
+  }
+}

@@ -10,7 +10,10 @@
     "dev:dashboard": "pnpm --filter @skrim/dashboard dev",
     "dev:web": "pnpm --filter @skrim/web dev",
     "build": "turbo run build",
-    "typecheck": "turbo run compile"
+    "typecheck": "turbo run compile",
+    "test": "turbo run test",
+    "check": "node scripts/check-invariants.mjs",
+    "verify": "pnpm check && pnpm typecheck && pnpm test"
   },
   "license": "ISC",
   "devEngines": {

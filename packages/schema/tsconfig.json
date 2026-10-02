@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2023",
+    // DOM is here only for the universal WHATWG globals this package uses
+    // (URL). It does NOT mean browser-only code belongs in @skrim/schema -
+    // this package is imported by the Node server and the eval harness too.
+    "lib": ["ES2023", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    // Empty on purpose: runtime schema code must not depend on Node APIs,
+    // because the extension imports it into a browser. Tests get Node types
+    // through tsconfig.test.json instead.
+    "types": []
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

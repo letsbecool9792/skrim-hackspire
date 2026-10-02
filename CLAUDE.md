@@ -55,6 +55,20 @@ one key will rate-limit each other into confusion during crunch.
 > **Do not use GPT / Gemini / Claude as the server brain.** Brief §4.4 requires an
 > offline-deployable open-weight model. Getting this wrong breaks the privacy claim.
 
+### Naming
+
+The product is **Skrim**; the team is **tropical crush**.
+
+| Where | Spelling |
+|---|---|
+| Anything a person reads: extension name, popup, landing page, docs | `Skrim` |
+| GitHub repo, npm scope `@skrim/*` | `skrim` |
+| Firefox add-on id (`wxt.config.ts`) | `skrim@tropical-crush` |
+
+WXT derives the extension's manifest `name` from
+`package.json`, so Chrome currently lists it as **"@skrim/extension"**. Set an explicit
+`name` in `wxt.config.ts` — a judge sees that string on `chrome://extensions`.
+
 ---
 
 ## Directory map
@@ -144,10 +158,17 @@ skrim/
 - [x] Ollama 0.33.2 + `qwen3-vl:4b` pulled locally
 - [x] NVIDIA Build account + API key
 
+- [x] `turbo.json` + root `tsconfig.base.json` (shared strictness; module resolution
+      stays per-app because they genuinely differ)
+- [x] **`packages/schema` — the contract.** ScreenGraph, ScreenElement, the 8 actions,
+      PiiToken, RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse. 18 tests.
+- [x] `packages/shared` — ID-only logger that throws on PII in dev, timing instrumentation
+- [x] Guardrails: `pnpm verify`, `scripts/check-invariants.mjs`, CI, PR template
+- [x] Nested `CLAUDE.md` in every work area (agents read these automatically)
+- [x] WXT config: MV3 on both browsers, explicit manifest name, permissions documented
+
 ### Not done
 
-- [ ] `turbo.json` and root `tsconfig.base.json`
-- [ ] `packages/schema` — actual ScreenGraph / Action / PiiToken definitions
 - [ ] **Vertical slice: DOM-only graph → regex PII → server → one action → verify.**
       *Everything below is blocked on this.*
 - [ ] Server provider adapter + prompt + JSON repair
@@ -192,18 +213,78 @@ python -m venv .venv
 
 ---
 
+## Guardrails — read before delegating
+
+The team works through agents and will not read most of this code. So the rules are enforced
+mechanically rather than documented and hoped for.
+
+**`pnpm verify`** — invariants, then typecheck across all 7 packages, then tests. Runs in CI
+on every PR. This is the gate.
+
+**`pnpm check`** (`scripts/check-invariants.mjs`) — five rules that cost us the *project*
+rather than a bug, each failing with an explanation of why rather than a rule number:
+
+| Rule | Catches |
+|---|---|
+| `no-persistence` | `localStorage` / `chrome.storage` / `IndexedDB` in the extension |
+| `no-raw-console` | `console.*` instead of the PII-scanning logger |
+| `no-closed-models` | An Anthropic / Google / Mistral SDK import — it breaks the open-weight requirement |
+| `schema-imports-nothing` | The contract taking a dependency on an implementation |
+| `no-telemetry` | Anything analytics-shaped in the extension |
+
+It is a text scan, not an ESLint plugin, on purpose: it cannot be silenced with an inline
+comment and it survives someone restructuring the lint setup.
+
+**Runtime tripwires.** `assertOutboundSafe()` throws if raw PII reaches a request body. The
+shared `log` throws in dev if a log line contains raw PII. Both are narrow enough to never
+false-positive — they only match emails, Luhn-valid cards, PAN, and international phone
+numbers.
+
+**Nested `CLAUDE.md` files.** Every work area has one. A teammate's agent reads it
+automatically when working in that directory, so the rules live where the work happens
+instead of in a document nobody opens. They are also just good reading — see the links below.
+
+---
+
 ## Delegation
 
-Six workstreams from brief §10. Assign as the vertical slice lands.
+A **workstream** is one person's slice of the project: a set of directories they own and a
+scored outcome they are responsible for. Six of them, from brief §10. They are deliberately
+carved so two people rarely edit the same file.
 
-| # | Scope | Needs |
-|---|---|---|
-| 1 | Extension shell, permissions, capture, action execution | base setup |
-| 2 | Screen graph — DOM extraction, vision fusion | base setup |
-| 3 | PII detection, redaction, token vault | + Python venv |
-| 4 | Server agent, action schema, providers | + own NVIDIA key |
-| 5 | Eval harness and metrics | + Playwright |
-| 6 | Dashboard split-screen + resource panel | base setup |
+Everyone should read [`BRIEF.md`](BRIEF.md), this file, and
+[`packages/schema/CLAUDE.md`](packages/schema/CLAUDE.md) — the contract is shared by all six.
+
+### 1 · Extension shell, permissions, capture, action execution
+Needs: base setup.
+- [`apps/extension/CLAUDE.md`](apps/extension/CLAUDE.md) — overall extension rules
+- [`apps/extension/lib/capture/CLAUDE.md`](apps/extension/lib/capture/CLAUDE.md) — screenshots, change detection
+- [`apps/extension/lib/actions/CLAUDE.md`](apps/extension/lib/actions/CLAUDE.md) — executing the 8 verbs
+- `apps/extension/wxt.config.ts` — manifest and permissions
+
+### 2 · Screen graph — DOM extraction and vision fusion
+Needs: base setup.
+- [`apps/extension/lib/dom/CLAUDE.md`](apps/extension/lib/dom/CLAUDE.md) — the element graph
+- [`apps/extension/lib/vision/CLAUDE.md`](apps/extension/lib/vision/CLAUDE.md) — local model inference
+
+### 3 · PII detection, redaction, token vault
+Needs: + Python venv (only for the ONNX export).
+- [`apps/extension/lib/pii/CLAUDE.md`](apps/extension/lib/pii/CLAUDE.md) — detection and redaction
+- [`apps/extension/lib/vault/CLAUDE.md`](apps/extension/lib/vault/CLAUDE.md) — the token vault
+- `scripts/` — model export and fetch
+
+### 4 · Server agent, action schema, providers
+Needs: + own NVIDIA key.
+- [`apps/server/CLAUDE.md`](apps/server/CLAUDE.md) — the planning brain
+
+### 5 · Eval harness and metrics
+Needs: + Playwright.
+- [`packages/eval/CLAUDE.md`](packages/eval/CLAUDE.md) — what we measure and why
+- `fixtures/` — the synthetic pages and ground truth
+
+### 6 · Dashboard split-screen and resource panel
+Needs: base setup.
+- [`apps/dashboard/CLAUDE.md`](apps/dashboard/CLAUDE.md) — the demo instrument
 
 Workstream 6 is **not decoration** — it is how 40% of the rubric becomes visible to a judge.
 Workstream 5 is a deliverable, not tooling: two criteria worth 40% are precision

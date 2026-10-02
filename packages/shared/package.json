@@ -7,5 +7,14 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "scripts": {
+    "compile": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@skrim/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
   }
 }

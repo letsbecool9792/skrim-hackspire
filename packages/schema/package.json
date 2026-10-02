@@ -8,7 +8,16 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "compile": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --import tsx --test src/**/*.test.ts"
+  },
   "dependencies": {
     "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.0",
+    "typescript": "~6.0.3"
   }
 }
