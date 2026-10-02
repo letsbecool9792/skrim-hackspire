@@ -10,7 +10,7 @@
  *
  * WHAT IT DOES NOT DO
  * - It never touches the vault, raw page text, or any value that is not already
- *   redacted. The PlanRequest passed to it has already cleared assertOutboundSafe.
+ *   redacted, and every message is scanned for raw PII before it leaves.
  * - It does not route anything through the server. The server is stateless.
  * - It does not duplicate the planner: it wraps it.
  *
@@ -23,9 +23,8 @@
 
 import {
   DashboardMessageSchema,
+  scanForRawPii,
   type DashboardMessage,
-  type DashboardAgentEvent,
-  assertOutboundSafe,
   type Resources,
 } from "@skrim/schema";
 import type { PlanRequest, PlanResponse } from "@skrim/schema";
@@ -33,9 +32,9 @@ import { log } from "@skrim/shared";
 import type { ActionPlanner } from "../integration.ts";
 import type { AgentEvent } from "./loop.ts";
 
-/** The URL the dashboard runs on. Default: local Vite dev server. */
+/** The URL the dashboard runs on. Default: local Vite dev server. (No env in Node tests.) */
 export const DASHBOARD_URL: string =
-  (import.meta.env.WXT_DASHBOARD_URL as string | undefined) ?? "http://localhost:5173";
+  (import.meta.env?.WXT_DASHBOARD_URL as string | undefined) ?? "http://localhost:5173";
 
 /** Marker so the content script only forwards messages from this module. */
 export const DASHBOARD_MSG_TYPE = "__skrimToDashboard" as const;
@@ -54,6 +53,10 @@ function heapSnapshot(): Pick<Resources, "jsHeapBytes" | "jsHeapLimitBytes"> {
 export interface DashboardFeedOptions {
   /** The tab id the dashboard is open on, or null when it is not open. */
   getDashboardTabId: () => number | null;
+  /** What the side panel knows about the models on the device and the planner. */
+  getContext?: () => Pick<Resources, "modelFiles" | "planner">;
+  /** Sends a message to a tab; browser.tabs.sendMessage unless a test says otherwise. */
+  sendToTab?: (tabId: number, message: unknown) => Promise<unknown>;
 }
 
 interface StepStats {
@@ -65,50 +68,45 @@ interface StepStats {
 }
 
 /**
- * The live feed state. One instance per task run; re-created on each new task.
- * Everything is in memory and dies with the side panel.
+ * The live feed state, for the lifetime of the side panel. Everything is in
+ * memory and dies with the panel.
  */
 export class DashboardFeed {
-  private readonly getDashboardTabId: () => number | null;
+  private readonly options: DashboardFeedOptions;
   private stats: StepStats = { steps: 0, promptTokens: 0, completionTokens: 0 };
   private lastRequest: PlanRequest | undefined;
   private lastResponse: PlanResponse | undefined;
 
   constructor(options: DashboardFeedOptions) {
-    this.getDashboardTabId = options.getDashboardTabId;
+    this.options = options;
   }
 
-  /** Called by main.tsx for every AgentEvent the loop emits. */
+  /** Called for every AgentEvent the loop emits. */
   onEvent(event: AgentEvent): void {
-    // Translate the loop's AgentEvent into a DashboardAgentEvent.
     // The loop's events are already redacted (that is the point of AgentEvent).
     const dashboardEvent = toDashboardEvent(event);
     if (!dashboardEvent) return;
 
+    if (event.type === "started") this.stats = { steps: 0, promptTokens: 0, completionTokens: 0 };
     if (event.type === "planned") {
       this.stats.steps += 1;
       this.stats.modelLatencyMs = event.latencyMs;
     }
 
-    const msg: DashboardMessage = {
+    this.send({
       __skrimDashboard: true,
       sentAt: new Date().toISOString(),
       event: dashboardEvent,
       ...(this.lastRequest && event.type === "planned"
         ? { request: this.lastRequest, response: this.lastResponse }
         : {}),
-      resources: {
-        modelFiles: [], // populated by the model-file scan in App.tsx via setResources
-        ...heapSnapshot(),
-        steps: this.stats.steps,
-        promptTokens: this.stats.promptTokens,
-        completionTokens: this.stats.completionTokens,
-        ...(this.stats.roundTripMs !== undefined ? { roundTripMs: this.stats.roundTripMs } : {}),
-        ...(this.stats.modelLatencyMs !== undefined ? { modelLatencyMs: this.stats.modelLatencyMs } : {}),
-      },
-    };
+      resources: this.resources(),
+    });
+  }
 
-    this.send(msg);
+  /** Tells the dashboard the side panel is still open, while nothing else happens. */
+  heartbeat(): void {
+    this.send({ __skrimDashboard: true, sentAt: new Date().toISOString(), event: { type: "heartbeat" }, resources: this.resources() });
   }
 
   /** Called by the planner wrapper to register the request/response pair. */
@@ -120,8 +118,22 @@ export class DashboardFeed {
     this.stats.completionTokens += response.usage?.completionTokens ?? 0;
   }
 
+  private resources(): Resources {
+    const context = this.options.getContext?.();
+    return {
+      modelFiles: context?.modelFiles ?? [],
+      ...(context?.planner ? { planner: context.planner } : {}),
+      ...heapSnapshot(),
+      steps: this.stats.steps,
+      promptTokens: this.stats.promptTokens,
+      completionTokens: this.stats.completionTokens,
+      ...(this.stats.roundTripMs !== undefined ? { roundTripMs: this.stats.roundTripMs } : {}),
+      ...(this.stats.modelLatencyMs !== undefined ? { modelLatencyMs: this.stats.modelLatencyMs } : {}),
+    };
+  }
+
   private send(msg: DashboardMessage): void {
-    const tabId = this.getDashboardTabId();
+    const tabId = this.options.getDashboardTabId();
     if (tabId === null) return;
 
     // Validate before sending — the schema is the contract.
@@ -131,22 +143,19 @@ export class DashboardFeed {
       return;
     }
 
-    // Additional tripwire: verify no raw PII snuck into the request/response.
-    if (parsed.data.request) {
-      try {
-        assertOutboundSafe(parsed.data.request);
-      } catch {
-        log.warn("dashboard.piiTripwire", {});
-        return;
-      }
+    // The same tripwire as requests to the server, over the whole message:
+    // the goal, the step notes and the summary travel too.
+    const findings = scanForRawPii(JSON.stringify(parsed.data));
+    if (findings.length > 0) {
+      log.warn("dashboard.piiTripwire", { findings: findings.length });
+      return;
     }
 
     // Send to content script on the dashboard tab; it relays via postMessage.
-    browser.tabs
-      .sendMessage(tabId, { type: DASHBOARD_MSG_TYPE, payload: parsed.data })
-      .catch(() => {
-        // Dashboard tab closed or content script not yet ready — silently skip.
-      });
+    const sendToTab = this.options.sendToTab ?? ((id: number, message: unknown) => browser.tabs.sendMessage(id, message));
+    sendToTab(tabId, { type: DASHBOARD_MSG_TYPE, payload: parsed.data }).catch(() => {
+      // Dashboard tab closed or content script not yet ready — silently skip.
+    });
   }
 }
 
@@ -155,7 +164,6 @@ export class DashboardFeed {
 /**
  * Wraps an ActionPlanner so the feed sees the exact request and response.
  * Does NOT change the planner's behaviour — it is a read-only observer.
- * The instruction says: do not change server-planner.ts or the loop.
  */
 export function withDashboardFeed(planner: ActionPlanner, feed: DashboardFeed): ActionPlanner {
   return async (request, signal) => {
@@ -169,7 +177,7 @@ export function withDashboardFeed(planner: ActionPlanner, feed: DashboardFeed): 
 
 // ─── AgentEvent → DashboardAgentEvent translation ───────────────────────────
 
-function toDashboardEvent(event: AgentEvent): DashboardMessage["event"] | null {
+export function toDashboardEvent(event: AgentEvent): DashboardMessage["event"] | null {
   switch (event.type) {
     case "started":
       return { type: "started", taskId: event.taskId, redactedGoal: event.redactedGoal };
@@ -180,6 +188,12 @@ function toDashboardEvent(event: AgentEvent): DashboardMessage["event"] | null {
         elements: event.elements,
         redactions: event.redactions as Record<string, number>,
         page: event.page,
+        stageTimingsMs: {
+          observe: Math.round(event.timings.observeMs),
+          pixels: Math.round(event.timings.visionMs),
+          names: Math.round(event.timings.namesMs),
+          redact: Math.round(event.timings.redactMs),
+        },
       };
     case "planned":
       return {
@@ -191,7 +205,13 @@ function toDashboardEvent(event: AgentEvent): DashboardMessage["event"] | null {
         latencyMs: event.latencyMs,
       };
     case "acted":
-      return { type: "acted", step: event.step, verified: event.verified, note: event.note };
+      return {
+        type: "acted",
+        step: event.step,
+        verified: event.verified,
+        ...(event.note ? { note: event.note } : {}),
+        ...(event.message ? { message: event.message } : {}),
+      };
     case "warning":
       return { type: "warning", message: event.message };
     case "finished":

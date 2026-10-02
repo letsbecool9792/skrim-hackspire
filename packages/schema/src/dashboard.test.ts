@@ -136,6 +136,17 @@ describe("ResourcesSchema", () => {
     assert.equal(ResourcesSchema.safeParse(r).success, true);
   });
 
+  test("accepts the planner's provider and model, and its fallback", () => {
+    const r = {
+      modelFiles: [],
+      steps: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      planner: { provider: "groq", model: "qwen/qwen3.8-27b", fallback: { provider: "ollama", model: "qwen3-vl:4b-instruct" } },
+    };
+    assert.equal(ResourcesSchema.safeParse(r).success, true);
+  });
+
   test("accepts resources without optional heap and timing fields", () => {
     const r = { modelFiles: [], steps: 0, promptTokens: 0, completionTokens: 0 };
     assert.equal(ResourcesSchema.safeParse(r).success, true);
@@ -166,8 +177,13 @@ describe("DashboardAgentEvent variants", () => {
         step: 1,
         verified: false,
         note: "the page did not change",
+        message: "Nothing changed on the page.",
       }).success,
       true,
     );
+  });
+
+  test("heartbeat event, which says the side panel is still open", () => {
+    assert.equal(DashboardAgentEventSchema.safeParse({ type: "heartbeat" }).success, true);
   });
 });

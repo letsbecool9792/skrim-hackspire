@@ -49,6 +49,8 @@ export function createServerPlanner(serverUrl: string): ActionPlanner {
 export interface ServerInfo {
   provider: string;
   model: string;
+  /** Plans a step when the main provider says to come back later (FALLBACK_PROVIDER). */
+  fallback?: { provider: string; model: string };
 }
 
 /** The server's health endpoint: which model is planning, or null when unreachable. */
@@ -56,7 +58,11 @@ export async function fetchServerInfo(serverUrl: string): Promise<ServerInfo | n
   try {
     const response = await fetch(`${serverUrl}/`, { signal: AbortSignal.timeout(3_000) });
     const body = (await response.json()) as Partial<ServerInfo>;
-    return typeof body.provider === "string" && typeof body.model === "string" ? { provider: body.provider, model: body.model } : null;
+    if (typeof body.provider !== "string" || typeof body.model !== "string") return null;
+    const fallback = body.fallback && typeof body.fallback.provider === "string" && typeof body.fallback.model === "string"
+      ? { provider: body.fallback.provider, model: body.fallback.model }
+      : undefined;
+    return { provider: body.provider, model: body.model, ...(fallback ? { fallback } : {}) };
   } catch {
     return null;
   }

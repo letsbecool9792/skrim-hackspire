@@ -152,7 +152,7 @@ function StepBadge({ event }: { event: DashboardAgentEvent }) {
       return (
         <div className={`step-card ${event.verified ? "step-ok" : "step-warn"}`}>
           <span className="step-type">{event.verified ? "✓" : "!"} step {event.step} · acted</span>
-          {event.note && <span className="step-detail">{event.note}</span>}
+          {(event.message ?? event.note) && <span className="step-detail"><TokenText text={event.message ?? event.note ?? ""} /></span>}
         </div>
       );
     case "warning":
@@ -170,10 +170,12 @@ function StepBadge({ event }: { event: DashboardAgentEvent }) {
           </span>
           <span className="step-detail">
             {event.steps} steps
-            {event.summary && ` · ${event.summary}`}
+            {event.summary && <> · <TokenText text={event.summary} /></>}
           </span>
         </div>
       );
+    case "heartbeat":
+      return null;
   }
 }
 
@@ -184,17 +186,23 @@ function fmt(n: number | undefined, unit: string, decimals = 0): string {
   return `${n.toFixed(decimals)}${unit}`;
 }
 
+type StageTimings = Extract<DashboardAgentEvent, { type: "observed" }>["stageTimingsMs"];
+
 function ResourcePanel({
   resources,
   model,
   provider,
   connected,
+  stages,
 }: {
   resources?: Resources;
   model: string;
   provider: string;
   connected: boolean;
+  /** The latest page view's timings. */
+  stages?: StageTimings;
 }) {
+  const footprint = resources?.modelFiles.reduce((sum, file) => sum + file.sizeBytes, 0) ?? 0;
   return (
     <aside className="resource-panel">
       <div className="res-header">
@@ -224,18 +232,18 @@ function ResourcePanel({
           <span className="res-key">Model only</span>
           <span className="res-val">{fmt(resources?.modelLatencyMs, "ms")}</span>
         </div>
-        <div className="res-label res-label-sub">Per-stage (Suparno's loop fix)</div>
-        <div className="res-row res-dim">
-          <span className="res-key">observe</span><span className="res-val">—</span>
+        <div className="res-label res-label-sub">On this device, last page view</div>
+        <div className="res-row">
+          <span className="res-key">read page</span><span className="res-val">{fmt(stages?.observe, "ms")}</span>
         </div>
-        <div className="res-row res-dim">
-          <span className="res-key">pixels</span><span className="res-val">—</span>
+        <div className="res-row">
+          <span className="res-key">read pixels (OCR)</span><span className="res-val">{fmt(stages?.pixels, "ms")}</span>
         </div>
-        <div className="res-row res-dim">
-          <span className="res-key">names</span><span className="res-val">—</span>
+        <div className="res-row">
+          <span className="res-key">find names</span><span className="res-val">{fmt(stages?.names, "ms")}</span>
         </div>
-        <div className="res-row res-dim">
-          <span className="res-key">redact</span><span className="res-val">—</span>
+        <div className="res-row">
+          <span className="res-key">redact</span><span className="res-val">{fmt(stages?.redact, "ms")}</span>
         </div>
       </div>
 
@@ -268,19 +276,19 @@ function ResourcePanel({
       </div>
 
       <div className="res-section">
-        <div className="res-label">Models on device</div>
+        <div className="res-label">Models on device{footprint > 0 && ` · ${(footprint / 1024 / 1024).toFixed(1)} MB`}</div>
         {resources?.modelFiles.length ? (
           resources.modelFiles.map((f) => (
             <div className="res-row" key={f.name}>
-              <span className="res-key res-key-sm">{f.name.split("/").pop()}</span>
+              <span className="res-key res-key-sm">{f.name}</span>
               <span className="res-val">
-                {(f.sizeBytes / 1e6).toFixed(0)}MB · {f.backend}
+                {(f.sizeBytes / 1024 / 1024).toFixed(1)} MB · {f.backend === "unknown" ? "not loaded" : f.backend}
               </span>
             </div>
           ))
         ) : (
           <div className="res-row res-dim">
-            <span className="res-key">no model data yet</span>
+            <span className="res-key">no model list: run pnpm models:fetch</span>
           </div>
         )}
       </div>
@@ -290,17 +298,28 @@ function ResourcePanel({
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 
+/**
+ * The side panel sends a heartbeat every 2 s while it is open. Three missed
+ * means it closed; a slow planner step (15 s on a rate-limited Groq) is not.
+ */
+const DISCONNECTED_AFTER_MS = 6_000;
+
 export default function App() {
   const [task, setTask] = useState<TaskState | null>(null);
   const [lastGood, setLastGood] = useState<TaskState | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [connected, setConnected] = useState(true);
-  const [model, setModel] = useState("");
-  const [provider, setProvider] = useState("");
+  const [connected, setConnected] = useState(false);
+  /** The latest resources, from heartbeats too: shown before any task starts. */
+  const [resources, setResources] = useState<Resources | undefined>(undefined);
+  /** The model that planned the latest step: the fallback's when the main one was busy. */
+  const [lastModel, setLastModel] = useState("");
   const feedEndRef = useRef<HTMLDivElement>(null);
+  const silence = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const handleMessage = useCallback((event: MessageEvent) => {
-    // Only handle messages from the extension relay (window.postMessage, any origin).
+    // Only this page's own messages: the extension's content script relays
+    // them here with window.postMessage.
+    if (event.source !== window || event.origin !== window.location.origin) return;
     const raw = event.data;
     if (!raw || typeof raw !== "object" || raw.__skrimDashboard !== true) return;
 
@@ -313,21 +332,11 @@ export default function App() {
 
     const msg: DashboardMessage = parsed.data;
     setConnected(true);
-
-    // Extract model/provider from planned events
-    if (msg.event.type === "planned") {
-      const m = msg.event.model;
-      if (m.includes("/")) {
-        setProvider(m.split("/")[0] ?? "");
-        setModel(m.split("/").slice(1).join("/") ?? m);
-      } else {
-        setModel(m);
-      }
-    }
-    if (msg.response?.model) {
-      const m = msg.response.model;
-      setModel(m.split("/").pop() ?? m);
-    }
+    clearTimeout(silence.current);
+    silence.current = setTimeout(() => setConnected(false), DISCONNECTED_AFTER_MS);
+    if (msg.resources) setResources(msg.resources);
+    if (msg.response?.model) setLastModel(msg.response.model);
+    if (msg.event.type === "heartbeat") return;
 
     setTask((prev) => {
       const isNewTask =
@@ -358,19 +367,9 @@ export default function App() {
 
   useEffect(() => {
     window.addEventListener("message", handleMessage);
-    // When the side panel closes the tab, no more messages arrive.
-    // Show "disconnected" after 10 s of silence.
-    let timer: ReturnType<typeof setTimeout>;
-    const resetTimer = () => {
-      clearTimeout(timer);
-      setConnected(true);
-      timer = setTimeout(() => setConnected(false), 10_000);
-    };
-    window.addEventListener("message", resetTimer);
     return () => {
       window.removeEventListener("message", handleMessage);
-      window.removeEventListener("message", resetTimer);
-      clearTimeout(timer);
+      clearTimeout(silence.current);
     };
   }, [handleMessage]);
 
@@ -379,6 +378,13 @@ export default function App() {
   }, [task?.events.length]);
 
   const display = task ?? lastGood;
+  const planner = resources?.planner;
+  // A step planned by the fallback says so: its model is the fallback's.
+  const byFallback = planner?.fallback !== undefined && lastModel === planner.fallback.model;
+  const model = lastModel || planner?.model || "";
+  const provider = byFallback ? `${planner!.fallback!.provider} (fallback)` : planner?.provider ?? "";
+  const lastObserved = [...(display?.events ?? [])].reverse().find((event) => event.type === "observed");
+  const stages = lastObserved?.type === "observed" ? lastObserved.stageTimingsMs : undefined;
 
   return (
     <div className="dashboard">
@@ -440,10 +446,11 @@ export default function App() {
 
         {/* ── Right: resource panel ── */}
         <ResourcePanel
-          resources={display?.resources}
+          resources={resources ?? display?.resources}
           model={model}
           provider={provider}
           connected={connected}
+          stages={stages}
         />
       </div>
     </div>
