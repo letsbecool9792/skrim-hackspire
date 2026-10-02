@@ -4,11 +4,15 @@ import { taskManager } from "./task-manager.ts";
 import { broadcastStatus, getActiveTabId, sendToContent } from "./message-router.ts";
 import { newActionId } from "@/lib/id.ts";
 import { getActionPlanner, registerActionPlanner } from "@/lib/integration.ts";
+import { devPlanner } from "./dev-planner.ts";
 
 export const setActionPlanner = registerActionPlanner;
 
 export default defineBackground(() => {
   log.info("background.started");
+  // TEMPORARY: a local "click <text>" planner for testing, until the planner
+  // that calls the server is wired in. See dev-planner.ts.
+  registerActionPlanner(devPlanner);
   browser.runtime.onMessage.addListener((rawMessage: unknown) => {
     route(rawMessage);
     return false;
