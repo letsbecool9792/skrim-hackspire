@@ -31,6 +31,8 @@ const args = process.argv.slice(2);
 const spec = args.find((arg) => !arg.startsWith("--") && /^(groq|nvidia|ollama):/.test(arg));
 const option = (name: string) => args[args.indexOf(`--${name}`) + 1];
 const repeats = args.includes("--repeats") ? Number(option("repeats")) : 3;
+/** Names a variant, like a prompt change, so its results sit beside the others instead of replacing them. */
+const label = args.includes("--label") ? option("label") : undefined;
 // Commas or spaces: PowerShell turns "a,b" into "a b".
 const onlyTasks = args.includes("--tasks") ? option("tasks")!.split(/[\s,]+/) : undefined;
 if (!spec) {
@@ -47,9 +49,15 @@ if (scenarios.length === 0) {
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const RESULTS = `${ROOT}packages/eval/results/study/`;
-/** How long to wait after a "rate limit" before asking again, and how often. */
-const RATE_LIMIT_WAIT_MS = 10_000;
-const RATE_LIMIT_TRIES = 12;
+/**
+ * How long to wait after a "rate limit" before asking again, and how often.
+ * The server already waits out short limits itself (Groq's "try again in
+ * 2 s"), so one that reaches here is long. Every retry is a request, and
+ * Groq's free tier allows 1,000 a day: retrying every 10 s used it up
+ * once and spoiled a run.
+ */
+const RATE_LIMIT_WAIT_MS = 30_000;
+const RATE_LIMIT_TRIES = 4;
 
 /** Model settings the server takes from the environment. */
 function modelEnvironment(): Record<string, string> {
@@ -77,7 +85,12 @@ const server = spawn(process.execPath, ["--import", "tsx", "--env-file-if-exists
   stdio: ["ignore", "ignore", "pipe"],
 });
 let serverErrors = "";
-server.stderr.on("data", (chunk) => { serverErrors = (serverErrors + chunk).slice(-2000); });
+/** The server's one-line error reports ("-> provider_error after 40012 ms: No reply..."), for the result file. */
+const errorLines: string[] = [];
+server.stderr.on("data", (chunk) => {
+  serverErrors = (serverErrors + chunk).slice(-2000);
+  for (const line of String(chunk).split("\n")) if (line.startsWith("[plan]") && line.includes("->")) errorLines.push(line.slice(line.indexOf("->") + 3).replace(/ after \d+ ms/, ""));
+});
 const stopServer = () => { if (server.exitCode === null) server.kill(); };
 process.on("exit", stopServer);
 
@@ -142,6 +155,7 @@ for (let repeat = 1; repeat <= repeats; repeat++) {
       pageOk: result.pageOk,
       endedRight: result.endedRight,
       overreach: result.overreach.length > 0,
+      refused: result.refused,
       leaked: result.leaked.length,
       outcome: result.finished.outcome,
       errorCode: result.finished.errorCode ?? null,
@@ -160,8 +174,10 @@ for (let repeat = 1; repeat <= repeats; repeat++) {
 }
 
 mkdirSync(RESULTS, { recursive: true });
-const file = `${RESULTS}${spec.replace(/[^a-z0-9.-]+/gi, "_")}.json`;
-writeFileSync(file, JSON.stringify({ provider, model, repeats, date: new Date().toISOString(), runs }, null, 2));
+const file = `${RESULTS}${spec.replace(/[^a-z0-9.-]+/gi, "_")}${label ? `__${label}` : ""}.json`;
+// Why the provider failed, counted: "provider_rate_limited: The groq rate limit was reached..." x7.
+const serverErrorCounts = Object.fromEntries([...new Set(errorLines)].map((line) => [line, errorLines.filter((other) => other === line).length]));
+writeFileSync(file, JSON.stringify({ provider, model, label, repeats, date: new Date().toISOString(), runs, serverErrors: serverErrorCounts }, null, 2));
 const passed = runs.filter((run) => run.passed).length;
 console.log(`\n${spec}: ${passed} of ${runs.length} passed. Written to ${file.slice(ROOT.length)}`);
 stopServer();
