@@ -41,7 +41,8 @@ const DOB_CONTEXT = /date of birth|birth ?date|\bd\.?o\.?b\b|\bborn\b/i;
 const PASSPORT_PATTERN = /\b[A-Z]\d{7}\b/gi;
 const PASSPORT_CONTEXT = /passport/i;
 
-const OTHER_ID_PATTERN = /\b[A-Z0-9-]{4,20}\b/gi;
+// Must hold a digit: a label like "Patient ID" must not take the next word ("Next appointment").
+const OTHER_ID_PATTERN = /\b(?=[A-Z0-9-]*\d)[A-Z0-9-]{4,20}\b/gi;
 const OTHER_ID_CONTEXT = /(?:patient|member|customer|employee)\s+id|policy\s+(?:number|no\.?|#)|\bmrn\b/i;
 
 /** How far back a label may sit before the number it describes. */
