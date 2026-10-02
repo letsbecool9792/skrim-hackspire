@@ -13,6 +13,7 @@
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
+    "demo:pii": "tsx scripts/pii-demo.ts",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
