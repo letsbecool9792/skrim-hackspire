@@ -8,6 +8,10 @@ steps. Its free tier is the catch: 4–5 steps a minute, and a daily cap that tw
 in a row ran into. Today's default, NVIDIA's Llama 3.2 11B, did none. The study also found
 the offline model placing an order nobody asked for, which the loop now refuses.
 
+**Outcome.** Groq's Qwen 3.8 27B became the default planner on 2026-10-02, with local Ollama
+as the fallback when Groq's day runs out. "Today's default" below means Llama 3.2 11B, the
+default when the study ran.
+
 ---
 
 ## How it was measured

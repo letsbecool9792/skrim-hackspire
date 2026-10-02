@@ -19,7 +19,9 @@ function requireKey(name: string, provider: ProviderName): string {
 
 export function getConfig(): { port: number, providerConfig: ProviderConfig } {
   const port = parseInt(process.env.PORT || '3000', 10);
-  const provider = (process.env.MODEL_PROVIDER || 'nvidia') as ProviderName;
+  // Must match .env.example. Groq's Qwen did all 42 runs of the provider study
+  // (docs/provider-study.md); NVIDIA's Llama 3.2 11B did none.
+  const provider = (process.env.MODEL_PROVIDER || 'groq') as ProviderName;
 
   let providerConfig: ProviderConfig;
 
