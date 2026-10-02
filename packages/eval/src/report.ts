@@ -24,6 +24,7 @@ export function renderReport(title: string, totals: Totals, scores: FixtureScore
   lines.push(`| Over-redaction | ${percent(totals.overRedaction)} of non-PII characters hidden |`);
   lines.push(`| Median time per page view | observe ${ms(totals.medianMs.observe)}, pixels ${ms(totals.medianMs.vision)}, names ${ms(totals.medianMs.names)}, redact ${ms(totals.medianMs.redact)} |`);
   if (totals.unaligned > 0) lines.push(`| Texts that could not be aligned | ${totals.unaligned} (counted as wholly hidden; a harness bug) |`);
+  if (totals.facesExpected > 0) lines.push(`| Faces | ${totals.facesFound} of ${totals.facesExpected} |`);
   lines.push("");
 
   lines.push("## By category", "", "| Category | Caught |", "|---|---|");
