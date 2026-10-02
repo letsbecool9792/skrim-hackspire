@@ -1,0 +1,16 @@
+{
+  "page": "contacts-table.html",
+  "about": "An address book as a table: names, emails and phones in their own cells, with company names that are not personal.",
+  "pii": [
+    { "category": "NAME", "value": "Priya Sharma", "where": "text" },
+    { "category": "EMAIL", "value": "priya.sharma@example.org", "where": "text" },
+    { "category": "PHONE", "value": "+91 90000 12345", "where": "text" },
+    { "category": "NAME", "value": "Karan Mehta", "where": "text" },
+    { "category": "EMAIL", "value": "karan.mehta@example.com", "where": "text" },
+    { "category": "PHONE", "value": "+91 91234 56789", "where": "text" },
+    { "category": "NAME", "value": "Meera Iyer", "where": "text" },
+    { "category": "EMAIL", "value": "meera.iyer@example.net", "where": "text" },
+    { "category": "PHONE", "value": "+91 98111 22334", "where": "text" }
+  ],
+  "notPii": ["Acme Corp", "Infosys", "Freelance", "Add contact", "Company"]
+}

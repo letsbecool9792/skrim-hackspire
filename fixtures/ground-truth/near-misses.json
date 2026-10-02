@@ -1,0 +1,6 @@
+{
+  "page": "near-misses.html",
+  "about": "Only things that look like PII and are not: booking codes, flight and seat numbers, dates, a 12-digit transaction ID, tracking numbers, a toll-free line.",
+  "pii": [],
+  "notPii": ["X7K2PQ", "AI 302", "30/09/2026", "14:35", "14C", "INV-2025-0042", "402918374650", "88213904", "1Z999AA10123456784", "GC-5521-8890-1123", "1800-123-4567"]
+}

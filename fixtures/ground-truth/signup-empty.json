@@ -1,0 +1,6 @@
+{
+  "page": "signup-empty.html",
+  "about": "An empty sign-up form: labels and placeholders that name personal fields but hold no personal data. Nothing should be hidden.",
+  "pii": [],
+  "notPii": ["Full name", "Email address", "Mobile number", "Create account", "Sign in"]
+}

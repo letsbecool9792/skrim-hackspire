@@ -1,0 +1,6 @@
+{
+  "page": "search-results.html",
+  "about": "Search results about restaurants: a business phone number, a celebrity chef and street names. None of it is the user's; a business phone looks exactly like a personal one.",
+  "pii": [],
+  "notPii": ["+91 80 4567 8900", "Ranveer Brar", "Meghana Foods", "Residency Road", "Church Street", "best biryani in bengaluru", "12,000"]
+}

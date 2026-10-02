@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Checkout - ShopKart</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 20px; }
+    label { display: block; margin-top: 10px; font-weight: 600; }
+    input { width: 100%; padding: 6px; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <h1>Checkout</h1>
+  <p>1 item: SKU-88213-B, total ₹4,999</p>
+  <form>
+    <h2>Shipping</h2>
+    <label for="ship-name">Name</label>
+    <input id="ship-name" autocomplete="shipping name" value="Priya Sharma">
+    <label for="ship-street">Street address</label>
+    <input id="ship-street" autocomplete="shipping street-address" value="221B, 3rd Cross, Indiranagar">
+    <label for="ship-pin">PIN code</label>
+    <input id="ship-pin" autocomplete="shipping postal-code" value="560038">
+    <label for="ship-phone">Phone</label>
+    <input id="ship-phone" type="tel" autocomplete="tel" value="+91 90000 12345">
+    <h2>Payment</h2>
+    <label for="card">Card number</label>
+    <input id="card" autocomplete="cc-number" value="4539 5787 6362 1486">
+    <label for="expiry">Expiry</label>
+    <input id="expiry" autocomplete="cc-exp" value="08/29">
+    <label for="cvv">CVV</label>
+    <input id="cvv" autocomplete="cc-csc" value="">
+    <label for="coupon">Coupon</label>
+    <input id="coupon" value="SAVE10">
+    <button type="submit">Place order</button>
+  </form>
+</body>
+</html>

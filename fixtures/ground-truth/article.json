@@ -1,0 +1,6 @@
+{
+  "page": "article.html",
+  "about": "An encyclopedia article about a public figure: names, places, dates and ISBNs, none of them the user's. Nothing should be hidden.",
+  "pii": [],
+  "notPii": ["Alan Turing", "Alan Mathison Turing", "23 June 1912", "Maida Vale, London", "King's College, Cambridge", "Bletchley Park", "Winston Churchill", "Hodges, Andrew", "978-0-307-33598-2", "9781402067082"]
+}

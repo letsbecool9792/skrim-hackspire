@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Create your account</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px; }
+    label { display: block; margin-top: 10px; font-weight: 600; }
+    input { width: 100%; padding: 6px; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <h1>Create your account</h1>
+  <form>
+    <label for="name">Full name</label>
+    <input id="name" autocomplete="name" placeholder="e.g. Jane Doe">
+    <label for="email">Email address</label>
+    <input id="email" type="email" autocomplete="email" placeholder="you@example.com">
+    <label for="phone">Mobile number</label>
+    <input id="phone" type="tel" autocomplete="tel" placeholder="+91 00000 00000">
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="new-password">
+    <button type="submit">Create account</button>
+  </form>
+  <p>Already have an account? <a href="#">Sign in</a></p>
+</body>
+</html>

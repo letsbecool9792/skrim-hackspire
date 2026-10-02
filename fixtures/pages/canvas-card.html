@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Your digital ID</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 20px; }
+    canvas { border: 1px solid #ccc; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Your digital ID</h1>
+  <canvas id="card" width="420" height="200" aria-label="ID card"></canvas>
+  <button>Download PDF</button>
+  <script>
+    // The card is drawn, not written: none of this text is in the DOM.
+    const context = document.getElementById("card").getContext?.("2d");
+    if (context) {
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, 420, 200);
+      context.fillStyle = "#111";
+      context.font = "20px sans-serif";
+      context.fillText("Asha Rao", 24, 60);
+      context.fillText("DOB 12/03/1994", 24, 100);
+      context.fillText("PAN ABCDE1234F", 24, 140);
+    }
+  </script>
+</body>
+</html>

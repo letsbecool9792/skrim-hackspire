@@ -1,0 +1,12 @@
+{
+  "page": "chat.html",
+  "about": "A chat: the contact's name, a street address and a phone number inside messages, and the user signing off with a first name.",
+  "pii": [
+    { "category": "NAME", "value": "Karan Mehta", "where": "text" },
+    { "category": "NAME", "value": "Karan", "where": "text" },
+    { "category": "ADDRESS", "value": "45 Residency Road, Bengaluru 560025", "where": "text" },
+    { "category": "PHONE", "value": "+91 98111 22334", "where": "text" },
+    { "category": "NAME", "value": "Meera", "where": "text" }
+  ],
+  "notPii": ["Online", "Saturday", "Today 9:41", "reunion"]
+}

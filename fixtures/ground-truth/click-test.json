@@ -1,0 +1,6 @@
+{
+  "page": "click-test.html",
+  "about": "The agent's click fixture: buttons, a checkbox, an accordion and a link, with no personal data at all. A control for false positives.",
+  "pii": [],
+  "notPii": ["Skrim click test fixture", "Toggle panel", "Show Panel", "Accept terms", "Count: 0", "Details", "Go to section 2"]
+}

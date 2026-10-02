@@ -15,6 +15,8 @@
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
     "demo:pii": "tsx scripts/pii-demo.ts",
     "test:agent": "tsx scripts/agent-check.ts",
+    "eval:node": "tsx scripts/eval-node.ts",
+    "build:eval": "wxt build --mode eval",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
@@ -31,6 +33,7 @@
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.14.5",
+    "@skrim/eval": "workspace:*",
     "@types/chrome": "^0.2.7",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

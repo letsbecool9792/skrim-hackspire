@@ -1,0 +1,10 @@
+{
+  "page": "id-card-image.html",
+  "about": "A scanned ID card shown as an image: name, birth date and ID number exist only as pixels. Expected misses until vision is in the loop.",
+  "pii": [
+    { "category": "NAME", "value": "Rahul Sharma", "where": "image" },
+    { "category": "DOB", "value": "05/11/1988", "where": "image" },
+    { "category": "GOV_ID", "value": "1234 5678 9012", "where": "image" }
+  ],
+  "notPii": ["Uploaded ID card", "Verify your identity", "Upload again"]
+}

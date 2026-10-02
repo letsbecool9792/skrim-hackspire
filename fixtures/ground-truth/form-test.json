@@ -1,0 +1,11 @@
+{
+  "page": "form-test.html",
+  "about": "The agent's form fixture: an account box with the user's name, email, phone and address above an empty contact form.",
+  "pii": [
+    { "category": "NAME", "value": "Asha Rao", "where": "text" },
+    { "category": "EMAIL", "value": "asha.rao@example.com", "where": "text" },
+    { "category": "PHONE", "value": "+91 98765 43210", "where": "text" },
+    { "category": "ADDRESS", "value": "12 MG Road, Bengaluru 560001", "where": "text" }
+  ],
+  "notPii": ["Contact support", "Your account", "Billing", "Delivery", "Phone (optional)", "Send message"]
+}

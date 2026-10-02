@@ -1,0 +1,6 @@
+{
+  "page": "news.html",
+  "about": "A news page: politicians, a sports star and a reporter's byline, a toll-free helpline and market figures. Nothing is the user's.",
+  "pii": [],
+  "notPii": ["Priya Nair", "Narendra Modi", "Joe Biden", "Sachin Tendulkar", "1800-11-4000", "81,234.56", "30 Sep 2026, 10:42 IST", "Mumbai"]
+}
