@@ -7,9 +7,9 @@ import type { ActionPlanner } from "../integration.ts";
 import { parseMessage, type ActionResultMessage, type Message, type PageObservationMessage } from "../messages.ts";
 import type { NameFinder } from "../pii/gliner.js";
 import { redactDomData, type NameLookup } from "../pii/redact.js";
-import type { PiiCandidate } from "../pii/regex.js";
 import { DEFAULT_MAX_STEPS, DEFAULT_TIMEOUT_MS, MAX_CONSECUTIVE_UNVERIFIED } from "../task-state.ts";
 import { TokenVault } from "../vault/vault.js";
+import { PrivateNames } from "./private-names.ts";
 import { pageTexts, redactPage, redactText, resolveTokens, type RedactionCounts } from "./redact.ts";
 
 /**
@@ -120,33 +120,20 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     onEvent({ type: "finished", steps: step, tokens: vault.stats(), ...result });
   };
 
-  // Name detection is async; redaction is not. So before each redaction, the
-  // texts about to be redacted are scanned (once per task per text), and
-  // redaction looks the results up.
-  const nameCache = new Map<string, PiiCandidate[]>();
-  let findNames = options.findNames;
-  const names: NameLookup = (text) => nameCache.get(text) ?? [];
-  const scanNames = async (texts: readonly (string | undefined)[]): Promise<void> => {
-    if (!findNames) return;
-    const fresh = [...new Set(texts)].filter((text): text is string => Boolean(text?.trim()) && !nameCache.has(text!));
-    if (fresh.length === 0) return;
-    try {
-      const found = await findNames(fresh);
-      fresh.forEach((text, index) => nameCache.set(text, found[index] ?? []));
-    } catch (error) {
-      // Fails open, loudly: the task continues with the regex detectors only.
-      // Revisit once name detection is proven in the browser (CLAUDE.md).
-      findNames = undefined;
-      log.warn("agent.nameFinderFailed", { taskId, error: error instanceof Error ? error.name : "unknown" });
-      onEvent({ type: "warning", message: "Name and address detection could not start, so names and addresses are NOT being hidden in this task. Emails, phone numbers, cards and ID numbers still are." });
-    }
-  };
+  // Name detection is async; redaction is not. So before each redaction the
+  // model reads what it needs to, and redaction looks the results up.
+  const names = new PrivateNames(options.findNames, (error) => {
+    // Fails open, loudly: the task continues with the regex detectors only.
+    // Revisit now that name detection works in Chrome (CLAUDE.md).
+    log.warn("agent.nameFinderFailed", { taskId, error: error instanceof Error ? error.name : "unknown" });
+    onEvent({ type: "warning", message: "Name and address detection could not start, so names and addresses are NOT being hidden in this task. Emails, phone numbers, cards and ID numbers still are." });
+  });
+  // Redacted after the first page view: whether a name in it is private
+  // depends on that page (lib/agent/private-names.ts).
+  let goal: string | undefined;
 
   log.info("agent.started", { taskId });
   try {
-    await scanNames([options.goal]);
-    const goal = redactText(options.goal, vault, names);
-    onEvent({ type: "started", taskId, redactedGoal: goal });
     let unverifiedInARow = 0;
     const stateVisits = new Map<string, number>();
     let lastState: string | undefined;
@@ -162,9 +149,13 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
         return finish({ outcome: "failed", errorCode: "OBSERVATION_FAILED", message: "The page did not produce a screen graph." });
       }
 
-      await scanNames(pageTexts(observation));
+      const view = await names.preparePage(observation, pageTexts(observation));
       signal.throwIfAborted();
-      const page = redactPage(observation, step, vault, names);
+      const page = redactPage(observation, step, vault, view.lookup);
+      if (goal === undefined) {
+        goal = redactText(options.goal, vault, await names.prepareGoal(options.goal, view.personal));
+        onEvent({ type: "started", taskId, redactedGoal: goal });
+      }
       onEvent({ type: "observed", step, elements: page.graph.elements.length, redactions: page.redactions, page: `${page.graph.url.origin}${page.graph.url.pathTemplate}` });
 
       // What the last action changed on screen goes into its history entry.
@@ -216,12 +207,12 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
           : { outcome: "failed", errorCode: "GOAL_NOT_ACHIEVED", summary: action.summary });
       }
 
-      const outcome = await act(link, taskId, step, action, { vault, names, scanNames }, signal);
+      const outcome = await act(link, taskId, step, action, { vault, names }, signal);
       history.push({ cycle: step, action, verified: outcome.verified, ...(outcome.note ? { note: outcome.note } : {}) });
       onEvent({ type: "acted", step, verified: outcome.verified, note: outcome.note });
       if (action.type === "extract" && outcome.extractedValue) {
-        await scanNames([outcome.extractedValue]);
-        extracted[action.as] = redactText(outcome.extractedValue, vault, names);
+        await names.prepareTexts([outcome.extractedValue]);
+        extracted[action.as] = redactText(outcome.extractedValue, vault, names.lookup);
       }
 
       unverifiedInARow = outcome.verified ? 0 : unverifiedInARow + 1;
@@ -355,7 +346,7 @@ const REPORTED_STATES = new Set(["checked", "unchecked", "expanded", "collapsed"
  * this far more reliably than from "verified" alone. Redacted like the rest.
  */
 function describeTarget(target: NonNullable<ActionResultMessage["targetAfter"]>, privacy: Privacy): string | undefined {
-  const { value } = redactDomData({ label: target.label, value: target.value }, privacy.vault, privacy.names);
+  const { value } = redactDomData({ label: target.label, value: target.value }, privacy.vault, privacy.names.lookup);
   const parts: string[] = [];
   if (value) parts.push(`shows ${JSON.stringify(value.length > 80 ? `${value.slice(0, 77)}...` : value)}`);
   const states = (target.state ?? []).filter((state) => REPORTED_STATES.has(state));
@@ -363,11 +354,10 @@ function describeTarget(target: NonNullable<ActionResultMessage["targetAfter"]>,
   return parts.length > 0 ? `now it ${parts.join(" and ")}`.slice(0, 150) : undefined;
 }
 
-/** The task's vault, and its name lookup with the scan that fills it. */
+/** The task's vault, and which names in it are private. */
 interface Privacy {
   vault: TokenVault;
-  names: NameLookup;
-  scanNames: (texts: readonly (string | undefined)[]) => Promise<void>;
+  names: PrivateNames;
 }
 
 async function act(link: PageLink, taskId: string, step: number, action: Action, privacy: Privacy, signal: AbortSignal): Promise<ActOutcome> {
@@ -402,7 +392,7 @@ async function act(link: PageLink, taskId: string, step: number, action: Action,
     if (!result.ok) {
       return { verified: false, note: ERROR_NOTES[result.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? "the action failed" };
     }
-    if (result.targetAfter) await privacy.scanNames([result.targetAfter.label, result.targetAfter.value]);
+    if (result.targetAfter) await privacy.names.prepareTexts([result.targetAfter.label, result.targetAfter.value]);
     const after = result.targetAfter ? describeTarget(result.targetAfter, privacy) : undefined;
     const note = result.changed ? after : ["the page did not change", after].filter(Boolean).join("; ");
     return { verified: result.changed, ...(note ? { note } : {}), ...(result.extractedValue === undefined ? {} : { extractedValue: result.extractedValue }) };

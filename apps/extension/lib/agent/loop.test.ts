@@ -123,6 +123,20 @@ describe("runAgentTask", () => {
     assert.ok(requests[0]?.graph.elements.some((e) => e.label === "Signed in as <PII:NAME:1>"));
   });
 
+  test("leaves public names readable, in the goal and on the page", async () => {
+    await page(`<p>Alan Turing was a mathematician</p><input type="search" aria-label="Search">`);
+    const findNames: NameFinder = async (texts) => texts.map((text) => {
+      const start = text.toLowerCase().indexOf("alan turing");
+      return start === -1 ? [] : [{ category: "NAME", source: "ner", confidence: 0.9, text: text.slice(start, start + 11), start, end: start + 11 }];
+    });
+    const { planner, requests } = scripted(() => ({ type: "done", success: true, summary: "ok" }));
+
+    await runAgentTask({ goal: "search for alan turing", planner, link, signal: new AbortController().signal, onEvent: () => {}, findNames });
+
+    assert.equal(requests[0]?.goal, "search for alan turing");
+    assert.ok(requests[0]?.graph.elements.some((e) => e.label === "Alan Turing was a mathematician"));
+  });
+
   test("warns and carries on when the name finder cannot start", async () => {
     await page(`<button>Go</button>`);
     const { planner } = scripted(() => ({ type: "done", success: true, summary: "ok" }));
