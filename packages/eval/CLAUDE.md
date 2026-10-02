@@ -40,7 +40,10 @@ contain it.
 Scoring recovers what was hidden by lining each redacted text up with the original
 (`src/align.ts`). An item counts as caught only if every place it appears is hidden
 completely. Items that appear in no text at all (a canvas, an image, a cross-origin frame)
-are "not seen" and reported apart: those are vision's.
+are "not seen" and reported apart: those are vision's. An item whose `where` is a canvas,
+an image or an iframe is found allowing OCR's slips around dots, commas and spaces
+("karan mehta@example.com" for "karan.mehta@example.com"): what is scored is whether it was
+hidden. `pnpm eval -- --show-text <page>` prints a page as it was read and as it was sent.
 
 ## Fixtures
 
