@@ -356,7 +356,8 @@ model-loading limitation still under investigation.
 
 ```powershell
 npm install -g pnpm      # NOT corepack: it writes to Program Files and needs admin
-git clone <repo> && cd skrim
+git clone https://github.com/letsbecool9792/skrim-hackspire.git
+cd skrim-hackspire
 pnpm install
 pnpm models:fetch        # weights are gitignored; extension has nothing to load without this
 cp .env.example .env     # then add your own Groq key
