@@ -65,6 +65,7 @@ const SCENARIOS: Scenario[] = [
   { page: "click-test.html", goal: "Click show panel", check: () => byId("toggle-panel").classList.contains("visible"), expected: "the panel is open" },
   { page: "click-test.html", goal: "Accept the terms", check: () => byId<HTMLInputElement>("check1").checked, expected: "the checkbox is ticked" },
   { page: "click-test.html", goal: "Open the details section", check: () => byId("accordion-panel").classList.contains("visible"), expected: "the accordion is open" },
+  { page: "click-test.html", goal: "Go to section 2", check: () => location.hash === "#section2", expected: "the page is at #section2" },
   {
     page: "form-test.html",
     goal: "Send support a message saying my parcel is late. Use my email from the account box.",
@@ -113,12 +114,15 @@ for (const [index, scenario] of SCENARIOS.entries()) {
     goal: scenario.goal,
     planner: async (request, signal) => {
       requests.push(request);
+      // What the planner was told about the step before: the note it decides by.
+      const note = request.history.at(-1)?.note;
+      if (note) console.log(`     told: ${note}`);
       return serverPlanner(request, signal);
     },
     link: {
       // Like browser messaging: only JSON-safe data crosses.
       send: async (message) => JSON.parse(JSON.stringify((await handle(JSON.parse(JSON.stringify(message)))) ?? null)) ?? undefined,
-      watchNavigation: () => ({ started: false, loaded: async () => true, stop: () => {} }),
+      watchNavigation: () => ({ started: false, whenStarted: async () => false, loaded: async () => true, stop: () => {} }),
     },
     signal: new AbortController().signal,
     findNames,

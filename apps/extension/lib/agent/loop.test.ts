@@ -31,7 +31,7 @@ const handle = createContentHandler(getObservationVersion);
 const link: PageLink = {
   // Like browser messaging: only JSON-safe data crosses.
   send: async (message) => JSON.parse(JSON.stringify((await handle(JSON.parse(JSON.stringify(message)))) ?? null)) ?? undefined,
-  watchNavigation: () => ({ started: false, loaded: async () => true, stop: () => {} }),
+  watchNavigation: () => ({ started: false, whenStarted: async () => false, loaded: async () => true, stop: () => {} }),
 };
 
 async function page(html: string): Promise<void> {
@@ -173,6 +173,51 @@ describe("runAgentTask", () => {
     assert.match(finished.message ?? "", /going in circles/);
     // Closed, open, closed, open, closed: the third arrival at "closed" stops it.
     assert.equal(requests.length, 4);
+  });
+
+  test("tells the planner what appeared after an action, and what went away", async () => {
+    await page(`<button aria-label="Toggle panel" aria-expanded="false">Show Panel</button><div id="panel" style="display: none">The panel's content</div>`);
+    const toggle = document.querySelector("button")!;
+    const panel = document.querySelector<HTMLElement>("#panel")!;
+    toggle.addEventListener("click", () => {
+      const open = panel.style.display === "none";
+      panel.style.display = open ? "block" : "none";
+      toggle.setAttribute("aria-expanded", String(open));
+      toggle.textContent = open ? "Hide Panel" : "Show Panel";
+    });
+    const { planner, requests } = scripted((request, step) =>
+      step < 2 ? { type: "click", target: idOf(request, "Toggle panel") } : { type: "done", success: true, summary: "ok" });
+
+    await run("Click show panel twice", planner);
+
+    assert.equal(requests[1]?.history[0]?.note, `now it shows "Hide Panel" and is expanded; appeared: text "The panel's content"`);
+    assert.match(requests[2]?.history[1]?.note ?? "", /went away: text "The panel's content"$/);
+  });
+
+  test("an action with no reply is a step the planner hears about, not the end of the task", async () => {
+    await page(`<button>Go</button>`);
+    let dropped = false;
+    const flaky: PageLink = {
+      ...link,
+      // The page unloads mid-click, so the click's reply never comes.
+      send: async (message) => {
+        if (message.type === "action.execute" && !dropped) {
+          dropped = true;
+          return undefined;
+        }
+        return link.send(message);
+      },
+    };
+    const { planner, requests } = scripted((request, step) =>
+      step === 0 ? { type: "click", target: idOf(request, "Go") } : { type: "done", success: true, summary: "ok" });
+    const events: AgentEvent[] = [];
+
+    await runAgentTask({ goal: "Go", planner, link: flaky, signal: new AbortController().signal, onEvent: (e) => events.push(e) });
+
+    const finished = events.at(-1) as Extract<AgentEvent, { type: "finished" }>;
+    assert.equal(finished.outcome, "completed");
+    assert.equal(finished.steps, 1);
+    assert.equal(requests[1]?.history[0]?.note, "the page did not answer");
   });
 
   test("reports a planner failure with its message", async () => {

@@ -9,18 +9,17 @@ const CONTENT_SCRIPT_FILE = "/content-scripts/content.js";
  * page it was asked about instead of following them.
  */
 export function tabLink(tabId: number): PageLink {
-  let injected = false;
-
   return {
     async send(message) {
       try {
         return await browser.tabs.sendMessage(tabId, message);
       } catch (error) {
-        // Nothing listening: usually a tab that was open before Skrim was
-        // installed or reloaded, so the manifest never put the content script
-        // in it. Start it now, once, rather than asking for a page reload.
-        if (injected || !isNoListener(error)) return undefined;
-        injected = true;
+        // Nothing listening: a tab that was open before Skrim was installed or
+        // reloaded, so the manifest never put the content script in it, or a
+        // new page whose copy has not started yet. Start it now rather than
+        // ask for a page reload; a second copy stands down by itself. Only to
+        // read the page: re-sending an action to a fresh page could repeat it.
+        if (message.type !== "page.observe" || !isNoListener(error)) return undefined;
         try {
           await browser.scripting.executeScript({ target: { tabId }, files: [CONTENT_SCRIPT_FILE] });
           return await browser.tabs.sendMessage(tabId, message);
@@ -37,6 +36,7 @@ export function tabLink(tabId: number): PageLink {
     watchNavigation(): NavigationWatch {
       let started = false;
       let complete = false;
+      let onStart: (() => void) | null = null;
       let onComplete: (() => void) | null = null;
       // `status` is available without the "tabs" permission; url and title are not needed.
       const listener = (updatedTabId: number, change: { status?: string }) => {
@@ -44,26 +44,29 @@ export function tabLink(tabId: number): PageLink {
         if (change.status === "loading") {
           started = true;
           complete = false;
+          onStart?.();
         } else if (change.status === "complete" && started) {
           complete = true;
           onComplete?.();
         }
       };
       browser.tabs.onUpdated.addListener(listener);
+      const waitFor = (done: () => boolean, set: (callback: (() => void) | null) => void, ms: number) => {
+        if (done()) return Promise.resolve(true);
+        return new Promise<boolean>((resolve) => {
+          const timer = setTimeout(() => resolve(false), ms);
+          set(() => {
+            clearTimeout(timer);
+            resolve(true);
+          });
+        });
+      };
       return {
         get started() {
           return started;
         },
-        loaded(ms) {
-          if (complete) return Promise.resolve(true);
-          return new Promise((resolve) => {
-            const timer = setTimeout(() => resolve(false), ms);
-            onComplete = () => {
-              clearTimeout(timer);
-              resolve(true);
-            };
-          });
-        },
+        whenStarted: (ms) => waitFor(() => started, (callback) => { onStart = callback; }, ms),
+        loaded: (ms) => waitFor(() => complete, (callback) => { onComplete = callback; }, ms),
         stop() {
           browser.tabs.onUpdated.removeListener(listener);
         },
