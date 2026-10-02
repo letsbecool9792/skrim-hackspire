@@ -28,6 +28,8 @@ export const ERROR_CODES = [
   "NO_PROGRESS",
   // assertOutboundSafe() found raw PII in a request: a redaction bug. Nothing was sent.
   "PII_TRIPWIRE",
+  // The name and address model could not run, so the task stopped before sending.
+  "NAME_DETECTION_FAILED",
 ] as const;
 
 export const ErrorCodeSchema = z.enum(ERROR_CODES);

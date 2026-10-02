@@ -136,18 +136,26 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
 
   // Name detection is async; redaction is not. So before each redaction the
   // model reads what it needs to, and redaction looks the results up.
+  // It fails closed: without the model, names and addresses would go out as
+  // they are, so the task stops before the next request is sent.
+  let namesFailed = false;
   const names = new PrivateNames(options.findNames, (error) => {
-    // Fails open, loudly: the task continues with the regex detectors only.
-    // Revisit now that name detection works in Chrome (CLAUDE.md).
+    namesFailed = true;
     log.warn("agent.nameFinderFailed", { taskId, error: error instanceof Error ? error.name : "unknown" });
-    onEvent({ type: "warning", message: "Name and address detection could not start, so names and addresses are NOT being hidden in this task. Emails, phone numbers, cards and ID numbers still are." });
+  });
+  const stopForNames = (): void => finish({
+    outcome: "failed",
+    errorCode: "NAME_DETECTION_FAILED",
+    message: "Name and address detection could not start, so Skrim stopped before sending anything. Close and reopen this panel, then try again.",
   });
 
   log.info("agent.started", { taskId });
   try {
     // Before the first page view: every name in the goal is hidden, on the
     // pages too (lib/agent/private-names.ts).
-    const goal = redactText(options.goal, vault, await names.prepareGoal(options.goal));
+    const goalNames = await names.prepareGoal(options.goal);
+    if (namesFailed) return stopForNames();
+    const goal = redactText(options.goal, vault, goalNames);
     onEvent({ type: "started", taskId, redactedGoal: goal });
     let unverifiedInARow = 0;
     const stateVisits = new Map<string, number>();
@@ -165,6 +173,7 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
       if (!reading.observation.graphAvailable) {
         return finish({ outcome: "failed", errorCode: "OBSERVATION_FAILED", message: "The page did not produce a screen graph." });
       }
+      if (namesFailed) return stopForNames();
       const { page } = reading;
       onEvent({ type: "observed", step, elements: page.graph.elements.length, redactions: page.redactions, page: `${page.graph.url.origin}${page.graph.url.pathTemplate}` });
 

@@ -80,6 +80,7 @@ const ERROR_TITLES: Partial<Record<ErrorCode, string>> = {
   MAX_STEPS_REACHED: "Step limit reached",
   TASK_TIMEOUT: "Took too long",
   PII_TRIPWIRE: "Stopped to protect your data",
+  NAME_DETECTION_FAILED: "Stopped to protect your data",
 };
 
 const PHASE_WORDS: Record<TaskItem["phase"], string> = {
