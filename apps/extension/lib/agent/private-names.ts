@@ -44,6 +44,18 @@ const PAGE_CUE_BEFORE = new RegExp(String.raw`(?:^|[^\p{L}\p{N}])(?:${PAGE_CUES}
 /** A text worth running the model on, on a public page. */
 const MENTIONS_PAGE_CUE = new RegExp(String.raw`(?:^|[^\p{L}\p{N}])(?:${PAGE_CUES})(?![\p{L}\p{N}])`, "iu");
 
+/**
+ * The name an email address spells out: "ananya.shah@example.com" is Ananya
+ * Shah, wherever else the page writes her name. Only a local part of two or
+ * more plain words qualifies: "orders@", "no-reply@" and "team@" name a
+ * service, and hiding those words everywhere would cost the planner the page.
+ */
+const NAME_LOCAL_PART = /^[a-z]{2,}(?:[._-][a-z]{2,})+$/i;
+function nameInAddress(address: string): string | undefined {
+  const local = address.split("@")[0] ?? "";
+  return NAME_LOCAL_PART.test(local) ? local.replace(/[._-]+/g, " ") : undefined;
+}
+
 /** Shorter known values would match inside ordinary words. */
 const MIN_KNOWN_LENGTH = 3;
 
@@ -51,8 +63,15 @@ type Mode = "all" | "page";
 
 const normalise = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
-/** Whether a page shows the user's own data. Regex and field hints only: no model. */
+/**
+ * Whether a page shows the user's own data. Regex and field hints only: no
+ * model. A face in view counts too: a photo is someone's, and the names beside
+ * it ("Meera, Rohan and Tara") are who. A public portrait (an encyclopedia
+ * article) makes its page count as personal as well; that costs the planner
+ * the names on such a page, and privacy wins that trade.
+ */
 export function isPersonalPage(observation: PageObservationMessage, texts: readonly string[], faces: number = 0): boolean {
+  if (faces > 0) return true;
   if (texts.some((text) => findRegexCandidates(text).length > 0)) return true;
   const elements = observation.elements ?? [];
   return elements.some((element, index) => {
@@ -107,10 +126,8 @@ export class PrivateNames {
     }
     for (const text of texts) {
       for (const candidate of findRegexCandidates(text)) {
-        if (candidate.category === "EMAIL") {
-          const local = candidate.text.split("@")[0].replace(/[._+-]/g, " ");
-          if (local.length >= MIN_KNOWN_LENGTH) this.remember(local, "NAME");
-        }
+        const name = candidate.category === "EMAIL" ? nameInAddress(candidate.text) : undefined;
+        if (name) this.remember(name, "NAME");
       }
     }
     await this.scan(personal ? texts : texts.filter((text) => MENTIONS_PAGE_CUE.test(text)));

@@ -159,4 +159,39 @@ describe("PrivateNames", () => {
     assert.equal(failures, 1);
     assert.deepEqual(hidden(view.lookup, "Hi Meera Iyer"), ["Meera Iyer"]);
   });
+
+  test("hides the name an email address spells out, wherever the page writes it", async () => {
+    const { finder } = finderFor({});
+    const names = new PrivateNames(finder, () => {});
+    const { observation, texts } = page("Ananya Shah", "<ananya.shah@example.com> - Dinner plans", "Thanks, Ananya Shah");
+
+    const view = await names.preparePage(observation, texts);
+
+    assert.deepEqual(hidden(view.lookup, texts[0]!), ["Ananya Shah"]);
+    assert.deepEqual(hidden(view.lookup, texts[2]!), ["Ananya Shah"]);
+  });
+
+  test("counts a page with a face in view as personal: the names beside a photo are who is in it", async () => {
+    const { finder } = finderFor({ "Meera Iyer": "NAME" });
+    const names = new PrivateNames(finder, () => {});
+    const { observation, texts } = page("Family picnic", "Meera Iyer");
+
+    const without = await names.preparePage(observation, texts, 0);
+    assert.equal(without.personal, false);
+    assert.deepEqual(hidden(without.lookup, texts[1]!), []);
+
+    const withFace = await names.preparePage(observation, texts, 1);
+    assert.equal(withFace.personal, true);
+    assert.deepEqual(hidden(withFace.lookup, texts[1]!), ["Meera Iyer"]);
+  });
+
+  test("does not take a service's address for a name: orders@, no-reply@, team@", async () => {
+    const { finder } = finderFor({});
+    const names = new PrivateNames(finder, () => {});
+    const { observation, texts } = page("orders@shop.example", "no-reply@bank.example", "team@storage.example", "Your orders and team news");
+
+    const view = await names.preparePage(observation, texts);
+
+    assert.deepEqual(hidden(view.lookup, texts[3]!), []);
+  });
 });
