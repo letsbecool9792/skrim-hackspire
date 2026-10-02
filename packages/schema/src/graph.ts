@@ -59,7 +59,13 @@ export const ScreenGraphSchema = z.object({
   /** Page title. Redacted - titles routinely contain names and order numbers. */
   title: z.string(),
   viewport: z.object({ width: z.number(), height: z.number() }),
+  /** Only elements in or near the view are listed. */
   elements: z.array(ScreenElementSchema),
+  /**
+   * How many elements were left out for being further above or below the
+   * view. Counts only, so no PII. The planner scrolls to reach them.
+   */
+  beyondView: z.object({ above: z.number().int().nonnegative(), below: z.number().int().nonnegative() }).optional(),
   manifest: RedactionManifestSchema,
   /**
    * Optional redacted screenshot as a data URI. Only sent when the DOM alone is

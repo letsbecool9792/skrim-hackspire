@@ -37,6 +37,24 @@ describe("PII tokens", () => {
   });
 });
 
+describe("screen graph", () => {
+  const base: ScreenGraph = {
+    cycle: 0,
+    url: sanitizeUrl("https://example.org/"),
+    title: "Home",
+    viewport: { width: 1280, height: 720 },
+    elements: [],
+    manifest: { regions: [], tokensInPlay: [] },
+  };
+
+  test("may say how many elements lie beyond the view, as whole counts", () => {
+    assert.equal(ScreenGraphSchema.safeParse({ ...base, beyondView: { above: 3, below: 950 } }).success, true);
+    assert.equal(ScreenGraphSchema.safeParse(base).success, true);
+    assert.equal(ScreenGraphSchema.safeParse({ ...base, beyondView: { above: -1, below: 0 } }).success, false);
+    assert.equal(ScreenGraphSchema.safeParse({ ...base, beyondView: { above: 1.5, below: 0 } }).success, false);
+  });
+});
+
 describe("URL sanitisation", () => {
   test("masks numeric ids, uuids and emails in the path", () => {
     const u = sanitizeUrl("https://bank.example/account/8842910/statements");
