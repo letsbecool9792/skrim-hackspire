@@ -14,11 +14,11 @@ architectural decision, add it to "Locked decisions" with a one-line reason.
 
 The agent loop is closed end to end (DOM graph → PII redaction → server → one action →
 verify), in a chat side panel, and works in Chrome on the fixture pages. Both
-Qwen planners finish all six fixture goals. The eval harness scores detection on 21
-annotated fixtures, in Chromium too. The default planner is Groq's Qwen 3.8 27B. Next: **fix
-what the Chrome retest found** (Wikipedia search, the canvas question, the step text, Groq's
-per-minute limit), then perception beyond the DOM, starting with what the eval misses. See
-"Status" and "Open findings".
+Qwen planners finish all six fixture goals. The eval harness scores detection on 22
+annotated fixtures, in Chromium too. The default planner is Groq's Qwen 3.8 27B. The Chrome
+retest's bugs are fixed on `fix/retest-bugs`, all but Wikipedia's search, whose cause is not
+found yet. Next: **retest that branch in Chrome**, then the side panel's look. See "Status"
+and "Open findings".
 
 ---
 
@@ -33,7 +33,7 @@ Settled in the setup session. Do not reopen without a reason.
 | **Transformers.js v3** for local inference | Pipelines + tokenisers included. Drop to raw `onnxruntime-web` where there is no pipeline: the YOLO icon detector, and GLiNER (runs on `onnxruntime-web/wasm` with `@huggingface/tokenizers`, the tokenizer Transformers.js itself uses) |
 | **Hono on Node 22** for the server | Thin: prompt build, schema validation, retry. No ML in the server |
 | **Qwen** as the server brain | Apache 2.0, strong GUI grounding, available both hosted and via Ollama, so demo beat 8 is a base-URL swap. NVIDIA hosts no Qwen; the free hosted Qwen is `qwen/qwen3.8-27b` on Groq, and local is Qwen3-VL 4B. NVIDIA's Llama 3.2 11B never finishes a task ([`docs/provider-study.md`](docs/provider-study.md)) |
-| **Groq** (`qwen/qwen3.8-27b`) as the default provider | Free, no credit card, OpenAI-compatible. Did all 42 runs of the provider study, fastest and in the fewest steps. Its cost is the free tier: 4–5 steps a minute (the server waits these out) and a daily cap; when the day runs out, switch to Ollama. NVIDIA stays wired: no daily cap |
+| **Groq** (`qwen/qwen3.8-27b`) as the default provider | Free, no credit card, OpenAI-compatible. Did all 42 runs of the provider study, fastest and in the fewest steps. Its cost is the free tier: 4–5 steps a minute (the server waits these out) and a daily cap; when the day runs out, `FALLBACK_PROVIDER` (Ollama, or NVIDIA) plans the steps. NVIDIA stays wired: no daily cap |
 | **MV3 on both browsers** | Firefox MV3 event pages keep DOM access, so we get the offscreen-free path *and* "MV3 everywhere" on the slide. WXT defaults Firefox to MV2 — override it |
 | **Eval runs in a real browser** via Playwright | The rubric scores precision/recall on the shipped path. Node-side numbers would measure different code than we demo |
 | Ollama `qwen3-vl:4b-instruct` for air-gap | 6 GB VRAM ceiling. See "Hardware reality". The instruct build, not the plain tag, which is the much slower thinking build |
@@ -52,8 +52,8 @@ documented so we know where to go if those stop being sufficient — do not add 
 | Profile | Status | Use | Cost |
 |---|---|---|---|
 | `groq` | **wired, default** | hosted Qwen (`qwen/qwen3.8-27b`), 42 of 42 in the provider study | free, no card, per model: 1,000 requests/day, 8,000 tokens/min (7,000 input; about 4–5 steps); the server waits out short 429s |
-| `ollama` | **wired** | air-gap demo, offline dev, and the fallback when Groq's day runs out | free, local |
-| `nvidia` | **wired** | no daily cap. Its default model, Llama 3.2 11B, did 0 of 42 in the provider study; set `NVIDIA_MODEL=nvidia/nemotron-3-super-120b-a12b` (37 of 42) to use it | free, no card, ~40 RPM, no daily cap |
+| `ollama` | **wired** | air-gap demo, offline dev, and the fallback when Groq's day runs out (`FALLBACK_PROVIDER=ollama`) | free, local |
+| `nvidia` | **wired** | no daily cap. Its default model is now `nvidia/nemotron-3-super-120b-a12b` (37 of 42 in the provider study); Llama 3.2 11B, the old default, did 0 of 42 | free, no card, ~40 RPM, no daily cap |
 | `cloudflare` | not wired | also hosts `qwen3.8-27b` | free, no card, 10k neurons/day |
 | `openrouter` | not wired | last resort | **50 req/day** without credits — unusable as a daily driver |
 
@@ -168,7 +168,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (166 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (176 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       before the OmniParser detector. The built extension is 86.6 MB, including ONNX
@@ -187,7 +187,10 @@ Built, by workstream:
 - [x] **WS1 shell:** side panel chat, the agent loop (`lib/agent/`), all 8 actions, click
       verification that ignores focus, page loads followed (including a click whose page
       unloads before it can answer), 25-step and 5-minute limits, stops for no progress
-      and for going in circles, the tab fixed per task
+      and for going in circles, the tab fixed per task. Each step tells the user what
+      happened in plain words; a line read from pixels can be read, not clicked; a step whose
+      change shows only in the next view counts as verified; the same step on an unchanged
+      page is not repeated; a task stops before sending if name detection cannot start
 - [x] **WS2 perception:** DOM extraction with visible text, field values, dropdown options,
       and names from images and icons (alt text, svg titles); only what is in and near the
       view, at most 120 elements, with a count of the rest. **Text in pixels** (a canvas, a
@@ -201,25 +204,27 @@ Built, by workstream:
       token per value however it is written), every page view and the goal redacted, tokens
       resolved only at typing time, tripwire on the whole request
 - [x] **WS5 eval:** `packages/eval` scores recall, precision, span IoU, near-misses and
-      over-redaction on 21 annotated fixtures, through the same `readPage()` the agent uses.
-      `pnpm eval` drives the real extension in Chromium (**not run yet**: needs Playwright's
-      Chromium, [`docs/testing.md`](docs/testing.md) section 6); `pnpm eval:node` is a quick
-      check in Node
+      over-redaction on 22 annotated fixtures, through the same `readPage()` the agent uses.
+      `pnpm eval` drives the real extension in Chromium (first run 2026-10-02: 96.9% recall,
+      79.0% precision; [`docs/testing.md`](docs/testing.md) section 6); `pnpm eval:node` is a
+      quick check in Node
 - [x] **WS4 server:** `/plan` with one adapter and three profiles (NVIDIA, Groq, Ollama),
       compact prompt that reads the history, JSON repair, timeouts with one retry, errors
       that do not leak provider detail. The history tells the planner what each action
-      changed on screen ("appeared: ...")
-- [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, `pnpm test:agent`,
-      `pnpm eval:node`. All in [`docs/testing.md`](docs/testing.md)
+      changed on screen ("appeared: ..."). `FALLBACK_PROVIDER` plans a step when the main
+      provider says to come back later (Groq's daily cap)
+- [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, `pnpm test:agent` (8 quick
+      tasks; `--all` for 16, `--tasks` for chosen ones), `pnpm eval:node`. All in
+      [`docs/testing.md`](docs/testing.md)
 
 ### Who is on what (from 2026-10-02)
 
 | Who | Working on | Tests on |
 |---|---|---|
-| Suparno | The four bugs from the Chrome retest (see "Open findings"); also adds per-stage timings to the loop's `observed` event for the dashboard | Ollama |
+| Suparno | The four bugs from the Chrome retest (see "Open findings"): fixed on `fix/retest-bugs`, retest pending. Per-stage timings are in the loop's `observed` event there, for the dashboard. Then the side panel's look | Ollama |
 | Aritra (WS1) | The dashboard: its message format in `packages/schema`, the feed from the side panel, `apps/dashboard`; then the offline rehearsal (demo beat 8) | Ollama |
 | Ayushi (WS3) | Detection: the email leak and the Aadhaar miss read by OCR, false positives, names in URL paths; then face detection and face scoring in the eval | `pnpm eval`; Groq when needed |
-| Dhruba (WS2) | Fixtures from 21 to 40 (faces, Hindi, long pages, real-site layouts) and reading long pages in the eval; then the OmniParser export and icon detector | `pnpm eval`; Groq when needed |
+| Dhruba (WS2) | 19 more fixtures, to about 40 (faces, Hindi, long pages, real-site layouts) and reading long pages in the eval; then the OmniParser export and icon detector | `pnpm eval`; Groq when needed |
 
 **Hands off until Suparno's fixes land.** He is editing `apps/extension/lib/dom/extract.ts`,
 `lib/agent/loop.ts`, `lib/agent/read-page.ts`, `lib/vision/read-pixels.ts`,
@@ -232,8 +237,26 @@ canvas fix. If a change is needed in one of these, ask him first.
 Things only a person at the browser, or the project owner, can do. Keep this list current:
 add to it whenever a change needs a manual check, and tick items off when reported.
 
+- [ ] **Retest the fixes on `fix/retest-bugs`** before merging it. Rebuild
+      (`pnpm --filter @skrim/extension build`), reload Skrim on `chrome://extensions`, and
+      restart `pnpm dev:server`:
+  - [ ] `fixtures/pages/canvas-card.html`, `what is my pan number`: one step reading
+    "Read “PAN ID number 1”", then ✓ Done with an "ID number 1" pill in the answer.
+    "Download PDF" is not clicked
+  - [ ] `fixtures/pages/checkout.html`, `Change the coupon code to SAVE20`: the refused step
+    says "Skipped: it would place an order or pay, which you didn't ask for."; no step says
+    "Not confirmed:"; the result's footer says "3 steps" with no error code
+  - [ ] a step that did nothing says "Nothing changed on the page."; scrolling past the end
+    says "Already at the bottom of the page."
+  - [ ] Wikipedia, `Search for Alan Turing`: if it fails again, copy the chat's steps (only
+    placeholders in them) and the server's `[plan]` lines into "Open findings"
+  - [ ] the form fixture still hides the name, email, phone and address (ⓘ)
+  - [ ] put `FALLBACK_PROVIDER=ollama` in `.env`: `pnpm dev:server` prints "When it says to
+    come back later: ollama"; when Groq's day runs out, the log says "this step goes to
+    ollama" and the task carries on
 - [ ] **Retest in Chrome** what changed since the first Chrome test, reloading Skrim on
-      `chrome://extensions` first. Reported 2026-10-02, mostly on Ollama:
+      `chrome://extensions` first. Reported 2026-10-02, mostly on Ollama (the two that
+      failed are retested above):
   - [x] `Click show panel`, `Open the details section` and `Go to section 2` on the click
     fixture take one click each, then ✓ Done
   - [x] the ⓘ button under a result shows what stayed on the device; the input box has no
@@ -271,6 +294,8 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [x] A proper provider study: task success against free-tier limits, per model
       ([`docs/provider-study.md`](docs/provider-study.md), `pnpm study`)
 - [x] Make its winner, Groq's Qwen 3.8 27B, the default planner
+- [ ] Fix the Chrome retest's bugs: done on `fix/retest-bugs` but Wikipedia's search, retest
+      pending
 
 **2. Perception beyond the DOM** (WS2, WS3)
 - [x] GLiNER inference for names and addresses in free text
@@ -282,7 +307,7 @@ add to it whenever a change needs a manual check, and tick items off when report
       inference, then vision fusion for icon-only buttons
 
 **3. Measure and show it** (WS5, WS6)
-- [x] Eval harness, and 21 fixtures with ground truth
+- [x] Eval harness, and 22 fixtures with ground truth
 - [ ] More fixtures, to 30–50: a face in a photo, pages in Hindi, long pages, real-site
       captures (see "Open findings": ours were written by the same hand as the fixes)
 - [ ] Dashboard: split-screen wire view + resource panel
@@ -301,35 +326,55 @@ Collected while merging the team's first PRs, while testing and closing the loop
 the first Chrome test. Each needs a decision or a follow-up. Delete an entry once it is
 dealt with.
 
-**Bugs from the Chrome retest (2026-10-02), being fixed by Suparno.** Not investigated yet:
-- *Wikipedia, `Search for Alan Turing`*: the planner never found the search box or button.
-  It scrolled down until it reached the bottom of the page and ran out of scrolls.
-- *`canvas-card.html`, `what is my pan number`*: the planner clicked "Download PDF", which
-  the goal did not ask for (the commit guard only stops paying, ordering and the like). It
-  then tried to `extract` the line OCR had read ("PAN ID number 1") and got "no such element
-  on the page any more", and gave up (`GOAL_NOT_ACHIEVED`). First guess: elements read from
-  pixels exist only in the side panel's reading, not in the content script's registry, so
-  an action on one can never resolve.
-- *Step text*: a step's note is written for the planner and shown to the user as is, e.g.
-  "Not confirmed: not clicked: it would place an order or pay, which the goal does not ask
-  for. If the goal is met, answer done".
-- *Groq's per-minute limit* bites quickly in hand testing (about 1,650 tokens a step against
-  8,000 a minute), so testing moved to Ollama.
+**The Chrome retest's bugs (2026-10-02): fixed on `fix/retest-bugs`, retest pending, but
+Wikipedia's search.**
+- *`canvas-card.html`, `what is my pan number`*: lines read from pixels had ids the content
+  script never saw, so `extract` on one could only fail. The side panel now answers it from
+  what OCR read; any other action on such a line is refused with a note. The planner had also
+  clicked "Download PDF": the prompt now names downloading as something the goal must ask
+  for. Agent task `pan`, in the retest's own words, on local Qwen3-VL 4B: old code 1 of 3
+  (twice clicking "Download PDF"), new 3 of 3.
+- *Step text*: each step carries a note for the planner and a message for the user.
+- *Wikipedia, `Search for Alan Turing`*: **not reproduced.** A page whose search box folds
+  into an icon (`encyclopedia-home.html`, task `wiki-search`) passes on the old code too. Two
+  things found while looking are fixed: a click whose effect showed only in the next view (a
+  revealed search box) was reported "the page did not change", and a scroll at the bottom of
+  the page now says so, so the planner stops scrolling. To find the cause, the retest's chat
+  steps and the server's `[plan]` lines are needed.
+- *Groq's per-minute limit*: not eased by sending less. Leaner element lines and a shorter
+  prompt cost the local 4B model tasks (next entry), so the request is as before. What
+  changed: `FALLBACK_PROVIDER` takes over when Groq says to come back later (its daily cap),
+  and NVIDIA's default model is now Nemotron 3 Super.
 
-**Groq is the default; moving off it when its day runs out is by hand.** Groq's
+Measured with `pnpm study`, 16 tasks: local Qwen3-VL 4B (3 runs each) 37 of 48 before, 45
+of 48 after, every task passed before still passing 3 of 3 (only "reply" fails, as before);
+Groq's Qwen 3.8 27B (1 run) 16 of 16 after.
+
+**The local 4B planner is sensitive to how the request is worded.** While fixing the above,
+five changes each cost Qwen3-VL 4B tasks it had passed every time: a tightened system
+prompt (it clicked a toggle open and shut, and a link 20 times), a rule on answering
+questions, a rule on finding search boxes, dropping element positions (it typed into a
+form's labels: 1 run of 4 passed) and cutting them to the top-left corner (it clicked a
+search box instead of typing: 0 of 3). The prompt and element format are as they were, plus
+three small additions. Change either only with `pnpm study -- ollama:qwen3-vl:4b-instruct`
+numbers in hand. And the Node harness has no layout, so a task that hangs on scrolling
+(`section-2`) is decided by wording alone there.
+
+**A line read from pixels can be read, not clicked.** The content script carries out
+actions by element id, and lines from OCR (and icons from the detector, once it exists) have
+no element behind them. Clicking one needs a click at a position (`elementFromPoint`) in the
+content script; the icon detector will need that.
+
+**Groq is the default, with a fallback for when its day runs out.** Groq's
 `qwen/qwen3.8-27b` did all 42 runs of the provider study
 ([`docs/provider-study.md`](docs/provider-study.md)), twice as fast as the runner-up. Its
 free tier is the cost: 4–5 steps a minute, which the server waits out (back-to-back steps
-take ~14 s), and a daily cap that two study runs in a row used up. The server does not
-switch by itself: when the day runs out, restart it with `MODEL_PROVIDER=ollama` (local
-Qwen3-VL 4B, 37 of 42 with the commit guard, which stops it placing orders nobody asked
-for). Still open:
-- Moving to the next model automatically when one says "come back in minutes". Each step
-  is planned from scratch, so a task could carry on with another model; not tried.
+take ~14 s), and a daily cap that two study runs in a row used up. When Groq says to come
+back later, `FALLBACK_PROVIDER` (`ollama`, or `nvidia` with Nemotron 3 Super) plans that
+step and the task carries on; unset, the step fails. Still open:
+- The fallback is tried again from Groq on every step: a long cap costs one quick 429 a step.
 - Groq's `openai/gpt-oss-120b` also did 42 of 42, on its own quota, which would double the
   day. Whether OpenAI's open-weight model is acceptable on the slides is a team call.
-- NVIDIA's default model is still Llama 3.2 11B, which did 0 of 42 (it never says done).
-  Anyone using NVIDIA should set Nemotron 3 Super (37 of 42).
 - Cloudflare Workers AI hosts Qwen 3.8 too, if Groq's limits ever bite.
 
 **Which names are private is a rule; where it must trade, privacy wins.** GLiNER cannot tell
@@ -346,9 +391,9 @@ task. Known gaps:
   hidden: the eval's search results page loses a celebrity chef and "biryani".
 - The cue words are English.
 
-**What the eval finds** (`pnpm eval` in Chromium, 21 fixtures, 2026-10-02): **96.9% recall
-on all PII**, 98.4% on PII in the page's text (63 of 64), **79.0% precision**, 8 of 127
-near-misses hidden, 3.9% of non-PII characters hidden. OCR now reads the canvas (3 of 3), the
+**What the eval finds** (`pnpm eval` in Chromium, 22 fixtures, 2026-10-02): **96.9% recall
+on all PII**, 98.4% on PII in the page's text (63 of 64), **79.0% precision**, 8 of 137
+near-misses hidden, 2.7% of non-PII characters hidden. OCR now reads the canvas (3 of 3), the
 ID card image (2 of 3) and the cross-origin iframe (1 of 2); the Node check (`pnpm eval:node`)
 cannot capture those and gives 87.7% recall. Name detection takes a median 250 ms a page view
 in the browser, against 38 ms in Node. Two misses:
@@ -372,12 +417,6 @@ or a Worker so the chat does not freeze meanwhile.
 are listed, at most 120, and the prompt says how many more lie above and below. The planner
 must scroll to reach the rest, and a long paragraph is cut at 200 characters. Untried in
 Chrome: whether Qwen scrolls when what it needs is not listed.
-
-**Name detection fails open.** If GLiNER cannot load in the side panel, the task continues
-with the regex layer and the chat shows a red warning that names and addresses are not being
-hidden. That kept the agent usable while the model path was unproven. It loaded in Chrome
-(the form fixture's name and address were tokenised), so consider stopping the
-task instead.
 
 **URL paths can carry names.** `sanitizeUrl()` masks long digit runs, uuids, hex and anything
 with `@`, but keeps word segments, so `/users/asha-rao/orders` reaches the server as is.

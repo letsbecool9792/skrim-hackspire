@@ -152,6 +152,33 @@ limits itself ("try again in 2 s"); the study never saw one. The cost is time: r
 back, a Groq step took about 14 s, the 4–5 steps a minute the cap allows. A task of a few
 steps at a time stays at 0.5 s a step.
 
+### After the Chrome retest fixes (2026-10-02)
+
+Two tasks join the 14, both from the Chrome retest: `pan` asks "what is my pan number" of an
+ID card drawn on a canvas (a stand-in plays OCR, since happy-dom draws nothing), and
+`wiki-search` searches an encyclopedia page whose search box folds into an icon link. The
+fixes (`fix/retest-bugs`): text read from pixels can be extracted, a step whose change shows
+only in the next view counts as verified, the same step is not repeated on an unchanged
+page, and the prompt names downloading as something to ask for.
+
+| Model | Before | After |
+|---|---|---|
+| Ollama `qwen3-vl:4b-instruct` (3 runs each) | 37 of 48 | **45 of 48** |
+| Groq `qwen/qwen3.8-27b` (1 run each) | – | **16 of 16** |
+
+On the local model every task that passed before still passed 3 of 3. `pan` went from 1 of
+3 (twice clicking "Download PDF") to 3 of 3; `signup` from 1 to 3 of 3; `reply` still fails
+(it presses Send again after the message has gone). `wiki-search` passes on the old code too,
+on its final page, so it does not reproduce the Wikipedia failure.
+
+**The local model is sensitive to wording.** Tried and dropped, each for costing Qwen3-VL 4B
+tasks it had passed 3 of 3: a tightened system prompt (17% fewer tokens a step, but it
+clicked a toggle open and shut and a link 20 times), a rule on answering questions, a rule
+on finding search boxes, element positions dropped (1 of 4 on the support form: it typed into
+labels) and cut to the top-left corner (0 of 3 on the search: it clicked the search box
+instead of typing). So the request costs what it did, about 1,650 tokens a step on the
+fixtures, and Groq's per-minute limit stays as it was.
+
 ---
 
 ## Recommendation
@@ -169,9 +196,9 @@ steps at a time stays at 0.5 s a step.
    37 of 42, fast, no limits; the guard keeps it from buying things.
 5. **Retire NVIDIA Llama 3.2 11B as the default.** 0 of 42.
 
-A next step, not built: let the server move to the next model in that list when one says
-"come back in minutes". Each step is planned from scratch, so a task can carry on with
-another model; that has not been tried.
+Moving to another model when one says "come back in minutes" is built for one step down:
+`FALLBACK_PROVIDER` (ollama, or nvidia) plans a step the main provider turns away. Each step
+is planned from scratch, so the task carries on.
 
 ---
 
