@@ -35,6 +35,25 @@ greys. A judge four metres away has to read the token strings.
 malformed, render the last good state and a small warning — a white screen mid-demo costs
 more than any missing feature.
 
+## How the data gets here
+
+The side panel sends it; nothing goes through the server.
+
+1. `lib/agent/dashboard-feed.ts` (extension) wraps the planner, so it sees each request
+   exactly as sent and the reply, and gets the loop's events through one hook in the side
+   panel's `App.tsx`. It checks every message against `DashboardMessageSchema`
+   (`packages/schema/src/dashboard.ts`) and scans it for raw personal data before sending.
+2. `entrypoints/sidepanel/feed-instance.ts` finds the tab whose address starts with the
+   dashboard's (`WXT_DASHBOARD_URL`, default `http://localhost:5173`), sends a heartbeat every
+   2 s, and supplies the model sizes (`public/models/manifest.json`, written by
+   `pnpm models:fetch`) and the planner's name (the server's `/`).
+3. The extension's content script, on the dashboard's page only, passes each message to the
+   page with `window.postMessage`; `src/App.tsx` validates it again and renders it.
+
+Run it with `pnpm --filter @skrim/dashboard dev`, then open http://localhost:5173 in the same
+Chrome window as the extension. Testing steps: [`docs/testing.md`](../../docs/testing.md)
+section 7.
+
 ## Why this is separate from apps/web
 
 `apps/web` is the public landing page and deploys to Vercel. This is a live instrument with

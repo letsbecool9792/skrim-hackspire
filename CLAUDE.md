@@ -16,9 +16,9 @@ The agent loop is closed end to end (DOM graph → PII redaction → server → 
 verify), in a chat side panel, and works in Chrome on the fixture pages. Both
 Qwen planners finish all six fixture goals. The eval harness scores detection on 22
 annotated fixtures, in Chromium too. The default planner is Groq's Qwen 3.8 27B. The Chrome
-retest's bugs are fixed on `fix/retest-bugs`, all but Wikipedia's search, whose cause is not
-found yet. Next: **retest that branch in Chrome**, then the side panel's look. See "Status"
-and "Open findings".
+retest's bugs are fixed, all but Wikipedia's search, whose cause is not found yet. The
+dashboard shows what the server receives, live, beside a resource panel. Next: **try the
+dashboard in Chrome**, then the side panel's look. See "Status" and "Open findings".
 
 ---
 
@@ -168,7 +168,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (176 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (195 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       before the OmniParser detector. The built extension is 86.6 MB, including ONNX
@@ -213,6 +213,12 @@ Built, by workstream:
       that do not leak provider detail. The history tells the planner what each action
       changed on screen ("appeared: ..."). `FALLBACK_PROVIDER` plans a step when the main
       provider says to come back later (Groq's daily cap)
+- [x] **WS6 dashboard** (Aritra, finished by Suparno): `apps/dashboard` shows, live, each
+      step, the request exactly as the server got it (tokens highlighted) and the elements it
+      lists, beside a resource panel: planner and fallback, round trip, per-stage milliseconds
+      on the device, JS heap, tokens, and the models on the device by size. Fed by the side
+      panel through the content script, never through the server
+      (`lib/agent/dashboard-feed.ts`; message format in `packages/schema/src/dashboard.ts`)
 - [x] **Test harnesses:** `pnpm demo:pii`, `pnpm smoke:server`, `pnpm test:agent` (8 quick
       tasks; `--all` for 16, `--tasks` for chosen ones), `pnpm eval:node`. All in
       [`docs/testing.md`](docs/testing.md)
@@ -221,16 +227,15 @@ Built, by workstream:
 
 | Who | Working on | Tests on |
 |---|---|---|
-| Suparno | The four bugs from the Chrome retest (see "Open findings"): fixed on `fix/retest-bugs`, retest pending. Per-stage timings are in the loop's `observed` event there, for the dashboard. Then the side panel's look | Ollama |
-| Aritra (WS1) | The dashboard: its message format in `packages/schema`, the feed from the side panel, `apps/dashboard`; then the offline rehearsal (demo beat 8) | Ollama |
+| Suparno | The Chrome retest's fixes (merged); finishing the dashboard (PR #15); next, the side panel's look | Ollama |
+| Aritra (WS1) | The dashboard (PR #15): built, then finished by Suparno; Aritra has stopped. The offline rehearsal (demo beat 8) is under "Waiting on Suparno" | Ollama |
 | Ayushi (WS3) | Detection: the email leak and the Aadhaar miss read by OCR, false positives, names in URL paths; then face detection and face scoring in the eval | `pnpm eval`; Groq when needed |
 | Dhruba (WS2) | 19 more fixtures, to about 40 (faces, Hindi, long pages, real-site layouts) and reading long pages in the eval; then the OmniParser export and icon detector | `pnpm eval`; Groq when needed |
 
-**Hands off until Suparno's fixes land.** He is editing `apps/extension/lib/dom/extract.ts`,
-`lib/agent/loop.ts`, `lib/agent/read-page.ts`, `lib/vision/read-pixels.ts`,
-`entrypoints/sidepanel/App.tsx` and `style.css` (a one-line hook for the dashboard is fine),
-and `apps/server/`. Face detection and the icon detector plug into `read-page.ts` after his
-canvas fix. If a change is needed in one of these, ask him first.
+**Hands off: the side panel's look.** Suparno redesigns
+`apps/extension/entrypoints/sidepanel/App.tsx` and `style.css` next; ask him before changing
+them. His bug fixes have landed, so the other files held back for them are open again, and
+face detection and the icon detector can plug into `lib/agent/read-page.ts` now.
 
 ### Waiting on Suparno (manual)
 
@@ -285,6 +290,12 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
 - [x] **Pick the default provider**: Groq's Qwen 3.8 27B, as the study
       ([`docs/provider-study.md`](docs/provider-study.md)) recommends (decided 2026-10-02)
+- [ ] **The dashboard in Chrome** ([`docs/testing.md`](docs/testing.md) section 7): run
+      `pnpm models:fetch` once (it now writes the model sizes), start the dashboard, reload
+      Skrim and the dashboard tab. With the side panel open the resource panel goes live and
+      lists the planner and "Models on device · 68.3 MB"; a support-form task shows each step
+      and the request with tokens only, the same as the `plan` payload in the side panel's
+      DevTools; closing the panel shows "disconnected" within about 6 s
 - [ ] **Rehearse demo beat 8 on Ollama (offline):** Turn Wi-Fi off, run a whole task on Ollama, and verify the dashboard updates without reaching the network. Note any network attempts.
 
 ### What's left, in order
@@ -311,7 +322,7 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [x] Eval harness, and 22 fixtures with ground truth
 - [ ] More fixtures, to 30–50: a face in a photo, pages in Hindi, long pages, real-site
       captures (see "Open findings": ours were written by the same hand as the fixes)
-- [ ] Dashboard: split-screen wire view + resource panel
+- [x] Dashboard: split-screen wire view + resource panel (Chrome check pending)
 - [ ] Landing page
 - [ ] Tradeoff curve: GLiNER quint8 vs fp16; hosted vs local model accuracy and latency
 
