@@ -56,17 +56,17 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 166 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 176 tests:
 
 | Tests | Covers |
 |---|---|
 | 21 in `@skrim/schema` | The wire contract: PII tokens, URL sanitising, action validation, the "beyond the view" counts, token usage, the outbound PII tripwire (ISBNs are not cards) |
-| 15 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks), the prompt format, and how long a rate limit asks to wait |
+| 20 in `@skrim/server` | Parsing model output (JSON repair, `<think>` blocks), the prompt format, how long a rate limit asks to wait, and the provider settings (the default, the fallback, which key each needs) |
 | 9 in `@skrim/eval` | Scoring: lining redacted text up with the original, recall, precision, IoU, over-redaction |
 | 59 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection (birth dates, labels from the element before), form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), whole addresses, the token vault |
 | 19 in `lib/vision` | DOM + vision fusion, the escalation policy, and which regions to read with OCR |
 | 17 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons, only what is near the view) and click verification, in a simulated DOM |
-| 26 in `lib/agent` | The whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order), which names are private, and which clicks commit the user |
+| 31 in `lib/agent` | The whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order, text read from pixels, a step repeated for nothing, a click whose change shows late, the end of the page, stopping when name detection cannot start), which names are private, and which clicks commit the user |
 
 The same command runs in CI on every PR.
 
@@ -127,13 +127,18 @@ From the provider study ([`provider-study.md`](provider-study.md), 14 tasks x 3 
 |---|---|---|
 | **Groq, Qwen 3.8 27B (hosted), the default** | `GROQ_API_KEY` in `.env`, then `pnpm dev:server` | **Best: 42 of 42**, 0.5 s a step. The free tier allows about 4–5 steps a minute (8,000 tokens); the server waits out Groq's short "try again in 2 s" instead of failing. It also has a daily cap |
 | **Ollama, Qwen3-VL 4B instruct (local)**: offline, and when Groq's day runs out | `ollama pull qwen3-vl:4b-instruct`, then `$env:MODEL_PROVIDER = "ollama"; pnpm dev:server` | 31 of 42, 0.6 s a step after an ~8 s first load. Overreaches: it placed an order when asked to change a coupon, which the loop now refuses (37 of 42 with that guard) |
-| NVIDIA, Nemotron 3 Super 120B | `NVIDIA_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "nvidia"; $env:NVIDIA_MODEL = "nvidia/nemotron-3-super-120b-a12b"` | 31 of 42, 2.6 s a step; 40 requests a minute and no daily cap |
-| NVIDIA, Llama 3.2 11B Vision (NVIDIA's default model) | `NVIDIA_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "nvidia"` | **0 of 42**: it never says done |
+| NVIDIA, Nemotron 3 Super 120B (NVIDIA's default model) | `NVIDIA_API_KEY` in `.env`, then `$env:MODEL_PROVIDER = "nvidia"` | 31 of 42 (37 with the prompt rule), 2.6 s a step; 40 requests a minute and no daily cap. Llama 3.2 11B, the old default, did 0 of 42: it never says done |
 
 `$env:...` settings last until you close that terminal. To make one permanent, set
 `MODEL_PROVIDER` (and `OLLAMA_MODEL=qwen3-vl:4b-instruct`, if your `.env` names a model) in
 the root `.env`; a `MODEL_PROVIDER` line there overrides the Groq default. The plain
 `qwen3-vl:4b` tag is the "thinking" build: 5–40 s a step.
+
+**When Groq's day runs out.** Set `FALLBACK_PROVIDER=ollama` in `.env` (or `nvidia`, with
+its key). When Groq says to come back later, longer than the server waits by itself, that
+step goes to the fallback and the task carries on; the server's log says
+`groq says to come back later; this step goes to ollama`. Without it, the step fails with
+the rate-limit message.
 
 ---
 
@@ -146,16 +151,21 @@ pnpm test:agent          # terminal 2
 
 Runs the real loop on the fixture pages in a simulated DOM (happy-dom), against the real
 server and model: extraction, redaction, the vault, planning, actions and verification. For
-each of the six goals it prints every step, whether it was verified, what the planner was
+each of the eight goals it prints every step, whether it was verified, what the planner was
 told about it afterwards (`told: now it is expanded; appeared: ...`), the outcome, whether
-the page ended up right, and, for the form, whether any raw personal data reached the
-server (it should say "none").
+the page ended up right, and whether any raw personal data reached the server (it should
+say "none"). Two of the eight are the Chrome retest's bugs: a question about an ID card
+drawn on a canvas (the OCR is played by a stand-in, since happy-dom draws nothing), and a
+search on an encyclopedia page whose search box is folded into an icon link, as Wikipedia's
+is beside the side panel.
 
-`pnpm test:agent -- --all` runs all 14 tasks: the six above, plus a goal the page cannot do,
-filling a sign-up form, changing a coupon, saving a profile field, a search, opening a
+`pnpm test:agent -- --all` runs all 16 tasks: the eight above, plus a goal the page cannot
+do, filling a sign-up form, changing a coupon, saving a profile field, a search, opening a
 result, replying in a chat, and following a nav link. A task passes only when the page ends
-right, the task ends as it should, nothing unasked was touched (no "Place order" when asked
-to change a coupon), and no raw personal data reached the server.
+right (or, for a question, the answer says the right token), the task ends as it should,
+nothing unasked was touched (no "Place order" when asked to change a coupon), and no raw
+personal data reached the server. `pnpm test:agent -- --tasks pan,wiki-search` runs only the
+tasks named, step by step.
 
 ### Comparing models: the provider study
 
@@ -208,13 +218,22 @@ the server as: Search for name 1": every name in a goal is hidden, public or not
 rule can tell a public figure from a contact. "Alan Turing" is then hidden on the pages too;
 other names stay readable. The first step should come quickly: only the part of the page in
 and near the view is read, and name detection does not run on a page that shows none of your
-data. Clicking a link that opens a new page continues the task on that page.
+data. The planner should type the name into the search box (on a narrow window Wikipedia
+folds it into a magnifier icon, which it clicks first) and press Enter. Clicking a link that
+opens a new page continues the task on that page. This failed in the Chrome retest, for a
+reason not found yet: if it fails again, copy the chat's steps (they hold only placeholders)
+and the server's `[plan]` lines into a note for whoever fixes it.
 
 Text that exists only as pixels: open `fixtures/pages/canvas-card.html` (an ID card drawn on a
-canvas) and ask `What is the PAN on my ID?`. Skrim captures the tab, reads the canvas with
-on-device OCR, and hides what it read like any other text, so the answer should show an
-"ID number 1" pill rather than the number. This only works while the task's tab is the one
-on screen.
+canvas) and ask `What is the PAN on my ID?` or `what is my pan number`. Skrim captures the
+tab, reads the canvas with on-device OCR, and hides what it read like any other text, so the
+answer should show an "ID number 1" pill rather than the number. The planner reads the line
+it needs ("Read “PAN ID number 1”") and answers; it should not click "Download PDF". This
+only works while the task's tab is the one on screen.
+
+A step that did not go as planned says why in plain words under it: "Nothing changed on the
+page.", "Already at the bottom of the page.", or, when Skrim refuses a click, "Skipped: it
+would place an order or pay, which you didn't ask for."
 
 The chat stays for as long as the panel is open. Closing the panel stops a running task and
 clears everything.
@@ -223,7 +242,7 @@ clears everything.
 
 ## 6. Detection on the fixtures (the eval)
 
-`fixtures/pages/` holds 21 synthetic pages with PII in known places, and
+`fixtures/pages/` holds 22 synthetic pages with PII in known places, and
 `fixtures/ground-truth/` says what on each is PII and what only looks like it. The eval
 scores what Skrim hid: recall, precision, span IoU, near-misses hidden, over-redaction and
 time per stage, then lists every miss and false positive by name.
@@ -239,8 +258,8 @@ pnpm eval -- --save                                           # also writes pack
 
 It prints a report and writes it to `packages/eval/results/browser-latest.md`
 (gitignored). Chromium, not Chrome: branded Chrome no longer loads unpacked extensions
-from the command line. On the 21 fixtures it gave 96.9% recall on all PII (OCR reads the
-canvas, image and iframe), 98.4% on PII in the page's text, 79.0% precision, and 8 of 127
+from the command line. On the 22 fixtures it gave 96.9% recall on all PII (OCR reads the
+canvas, image and iframe), 98.4% on PII in the page's text, 79.0% precision, and 8 of 137
 near-misses hidden.
 
 **A quick check while changing detection**, in Node, no browser:
@@ -250,9 +269,9 @@ pnpm eval:node
 ```
 
 Same detection code and scoring, but happy-dom instead of a browser and onnxruntime-node
-instead of the WASM build, so its numbers are not the ones to report. On the 21 fixtures it gave
+instead of the WASM build, so its numbers are not the ones to report. On the 22 fixtures it gave
 100% recall on PII in the page's text (57 of 57), 87.7% on all PII (the rest is inside a
-canvas, an image or an iframe), 77.3% precision, and 8 of 127 near-misses hidden.
+canvas, an image or an iframe), 77.3% precision, and 8 of 137 near-misses hidden.
 
 ---
 

@@ -44,7 +44,7 @@ are "not seen" and reported apart: those are vision's.
 
 ## Fixtures
 
-`fixtures/pages/` — synthetic pages with PII in known places (21 so far).
+`fixtures/pages/` — synthetic pages with PII in known places (22 so far).
 `fixtures/ground-truth/` — one JSON per page: `pii` (category, exact value, where it sits)
 and `notPii` (near-misses that must stay readable).
 
