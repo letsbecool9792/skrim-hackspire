@@ -30,6 +30,27 @@ app.get('/', (c) => {
  * Each step is planned from scratch, so the task carries on.
  */
 async function plan(request: PlanRequest) {
+  // modelOverride format: "provider:model:apiKey" (apiKey optional for ollama)
+  if (request.modelOverride) {
+    const parts = request.modelOverride.split(':');
+    const provider = parts[0] as 'groq' | 'nvidia' | 'ollama';
+    const model = parts[1];
+    const apiKey = parts.slice(2).join(':') || undefined; // re-join in case key has colons
+    if (provider && model && ['groq', 'nvidia', 'ollama'].includes(provider)) {
+      const overrideConfig = {
+        provider,
+        baseURL: provider === 'ollama'
+          ? (process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1')
+          : provider === 'groq'
+          ? (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1')
+          : (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1'),
+        model,
+        apiKey,
+        ...(provider === 'groq' ? { extraBody: { reasoning_effort: 'none' } } : {}),
+      };
+      return planAction(overrideConfig, request);
+    }
+  }
   try {
     return await planAction(config.providerConfig, request);
   } catch (error) {

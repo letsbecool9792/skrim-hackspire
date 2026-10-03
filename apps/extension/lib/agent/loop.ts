@@ -74,6 +74,13 @@ export type AgentEvent =
       message?: string;
     };
 
+export interface TaskPermissions {
+  allowedActions: Action["type"][];
+  customInstructions?: string;
+  /** Format: "provider:model:apiKey" — overrides the server's default model. */
+  modelOverride?: string;
+}
+
 export interface AgentOptions {
   goal: string;
   planner: ActionPlanner;
@@ -93,6 +100,7 @@ export interface AgentOptions {
   readPixels?: PixelReader;
   maxSteps?: number;
   timeoutMs?: number;
+  permissions?: TaskPermissions;
 }
 
 /** The schema caps history at 20 steps; older steps matter least. */
@@ -212,6 +220,8 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
         graph: page.graph,
         history: history.slice(-MAX_HISTORY),
         ...(Object.keys(extracted).length > 0 ? { extracted: { ...extracted } } : {}),
+        ...(options.permissions?.customInstructions ? { customInstructions: options.permissions.customInstructions } : {}),
+        ...(options.permissions?.modelOverride ? { modelOverride: options.permissions.modelOverride } : {}),
       };
       let plan: PlanResponse;
       try {
@@ -245,8 +255,13 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
       // loading looks the same between waits.
       const key = actionKey(action);
       const repeated = action.type !== "wait" && lastTaken?.state === state && lastTaken.key === key;
+      const notAllowed = options.permissions && !options.permissions.allowedActions.includes(action.type);
+      
       let outcome: ActOutcome;
-      if (refused) {
+      if (notAllowed) {
+        outcome = { verified: false, note: `not allowed: the action type '${action.type}' is not permitted for this task. Try a different action or answer done`, message: `Skipped: not allowed to ${action.type}.` };
+        log.info("agent.refusedPermission", { taskId, step, action: action.type });
+      } else if (refused) {
         outcome = { verified: false, note: `not clicked: it would ${refused}, which the goal does not ask for. If the goal is met, answer done`, message: `Skipped: it would ${refused}, which you didn't ask for.` };
         log.info("agent.refusedCommitment", { taskId, step });
       } else if (repeated) {

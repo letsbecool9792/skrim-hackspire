@@ -37,6 +37,13 @@ export const PlanRequestSchema = z.object({
    * Tokenised if sensitive, same as everything else.
    */
   extracted: z.record(z.string(), z.string()).optional(),
+  /** User-defined rules from the settings panel (e.g. "Never click sponsored links"). */
+  customInstructions: z.string().max(1000).optional(),
+  /**
+   * Override the server's default model for this request. Format: "provider:model:apiKey".
+   * The server ignores this if it does not recognise the provider.
+   */
+  modelOverride: z.string().max(500).optional(),
 });
 export type PlanRequest = z.infer<typeof PlanRequestSchema>;
 

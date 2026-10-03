@@ -95,3 +95,37 @@ button.chip:hover { border-color: var(--border-strong); }
 .send { display: grid; place-items: center; flex: none; width: 2.25rem; height: 2.25rem; border: 0; border-radius: var(--radius-md); background: var(--accent); color: var(--on-accent); transition: background var(--duration) var(--ease); }
 .send:hover:not(:disabled) { background: var(--accent-hover); }
 .send.stop { background: var(--bad); color: #fff; }
+
+/* ── Settings panel (TASK_02 + TASK_03) ─────────────────── */
+.settings-panel { padding: var(--space-4); border-bottom: var(--border-width) solid var(--border); background: var(--surface-2); display: flex; flex-direction: column; gap: var(--space-4); }
+.settings-section { display: flex; flex-direction: column; gap: var(--space-2); }
+.settings-label { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--text-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.settings-toggles { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.action-toggle { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-3); border: var(--border-width) solid var(--border); border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: var(--weight-medium); cursor: pointer; user-select: none; transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease), color var(--duration) var(--ease); }
+.action-toggle input[type="checkbox"] { display: none; }
+.action-toggle-on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+.action-toggle-off { background: var(--bad-soft); border-color: transparent; color: var(--bad); text-decoration: line-through; }
+.action-toggle:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
+.settings-url-row { display: flex; gap: var(--space-2); }
+.settings-url-input { flex: 1; padding: var(--space-2) var(--space-3); border: var(--border-width) solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: var(--text-sm); font-family: var(--font-mono); outline: none; }
+.settings-url-input:focus { border-color: var(--accent); }
+.settings-url-input:disabled { opacity: 0.5; }
+.settings-url-check { padding: var(--space-2) var(--space-3); border: var(--border-width) solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-2); font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.settings-url-check:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.settings-model-select { width: 100%; padding: var(--space-2) var(--space-3); border: var(--border-width) solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: var(--text-sm); font-family: var(--font-sans); outline: none; cursor: pointer; appearance: auto; }
+.settings-model-select:focus { border-color: var(--accent); }
+.settings-model-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.settings-instructions-input { flex: 1; min-height: 80px; padding: var(--space-2) var(--space-3); border: var(--border-width) solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: var(--text-sm); font-family: var(--font-sans); outline: none; resize: vertical; }
+.settings-instructions-input:focus { border-color: var(--accent); }
+.settings-instructions-input:disabled { opacity: 0.5; }
+.settings-hint { margin: 0; color: var(--text-3); font-size: var(--text-xs); }
+
+/* ── Per-step redaction count (TASK_06) ─────────────────── */
+.step-redactions { display: inline-flex; align-items: center; gap: var(--space-1); margin-top: var(--space-1); color: var(--private); font-size: var(--text-xs); }
+
+/* ── Task wrapper + audit download (TASK_07) ────────────── */
+.task-wrapper { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-6); }
+.task-wrapper .turn { margin-bottom: 0; }
+.audit-download { align-self: flex-end; display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-3); font-size: var(--text-xs); }
+.audit-download:hover { color: var(--text-2); background: var(--surface-2); }
+

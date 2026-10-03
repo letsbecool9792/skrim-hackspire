@@ -18,8 +18,11 @@ import { SYSTEM_PROMPT } from './system.js';
  * of typing into it (0 of 3). Measure before trimming this format again.
  */
 export function buildPrompt(request: PlanRequest): ChatMessage[] {
+  const systemContent = request.customInstructions 
+    ? `${SYSTEM_PROMPT}\n\nUSER-SPECIFIC INSTRUCTIONS:\n${request.customInstructions}`
+    : SYSTEM_PROMPT;
   return [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: systemContent },
     { role: 'user', content: renderRequest(request) }
   ];
 }
