@@ -63,6 +63,19 @@ detector (nothing calls it yet). To build a release against other hosts, set the
 variables `SKRIM_SERVER_URL` and `WXT_DASHBOARD_URL` (Settings → Secrets and variables →
 Actions → Variables, no trailing slash); they override the defaults.
 
+### 3. Signing for Firefox (optional)
+
+Every release also carries `skrim-firefox.zip`, unsigned: it loads only as a temporary add-on
+on a computer, and not at all on Firefox for Android, which installs signed add-ons only. For a
+signed `skrim-firefox.xpi` in each release, which installs for good on both:
+
+1. addons.mozilla.org → log in (free) → Developer Hub → **Manage API Keys** → generate.
+2. GitHub → Settings → Secrets and variables → Actions → **Secrets**: `AMO_API_KEY` (the JWT
+   issuer) and `AMO_API_SECRET` (the JWT secret).
+3. The next tag's release signs the Firefox build as **unlisted**: Mozilla signs it, it is not
+   listed in their store. Mozilla checks it automatically first, usually within minutes. Each
+   version can be signed once, so a failed signing needs a new tag.
+
 ## Local builds stay local
 
 `pnpm --filter @skrim/extension build` with nothing set still talks to `localhost:3000` and looks

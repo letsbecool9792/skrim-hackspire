@@ -177,7 +177,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (232 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (234 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       without the OmniParser detector (+77 MB once exported: the built extension is
@@ -329,7 +329,14 @@ add to it whenever a change needs a manual check, and tick items off when report
   - [ ] delete the hand-made release `v0.2.0` (it talks to localhost) and its tag, the stray
     tag `v0.1.0`, and the tag `v0.3.0` (its run stopped for want of the variables, which are now
     defaults; the release went out as `v0.3.1`)
-- [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
+- [ ] **Firefox** ([`docs/testing.md`](docs/testing.md) section 10; branch `feat/firefox`):
+  - [ ] on a computer: Load Temporary Add-on from `.output/firefox-mv3`; the sidebar opens from the
+    toolbar button, and the section 5 goals behave as in Chrome
+  - [ ] on Android over USB (`web-ext run -t firefox-android`, hosted server): menu → Extensions →
+    Skrim opens a tab; "search for alan turing" on Wikipedia runs on the tab it came from
+  - [ ] the yellow "Allow on all sites" notice, if Firefox shows it, fixes access in one press
+  - [ ] optional: AMO API keys as repository secrets ([`docs/deploy.md`](docs/deploy.md)), so
+    releases carry a signed `skrim-firefox.xpi` that installs for good, phone included
 - [x] **Pick the default provider**: Groq's Qwen 3.8 27B, as the study
       ([`docs/provider-study.md`](docs/provider-study.md)) recommends (decided 2026-10-02)
 - [x] **The dashboard in Chrome** (reported working 2026-10-03; [`docs/testing.md`](docs/testing.md) section 7): run
@@ -376,7 +383,8 @@ add to it whenever a change needs a manual check, and tick items off when report
       local 4B at 4k vs 16k context
 
 **4. Platform**
-- [ ] Firefox: run the tests in [`docs/testing.md`](docs/testing.md) (parked for now)
+- [ ] Firefox, on a computer and on Android: built (`feat/firefox`), waiting on Suparno's test
+      ([`docs/testing.md`](docs/testing.md) section 10)
 - [ ] Cloudflare fallback provider (deferred; only if Groq's and NVIDIA's limits bite)
 
 ---

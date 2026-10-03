@@ -8,7 +8,9 @@ model that does the thinking only ever sees a scrubbed description of the page, 
 private value swapped for a placeholder like `<PII:EMAIL:1>`. The extension swaps the real value
 back in only at the moment it types it.
 
-Built by team **Chipotle**. Chrome and Firefox (MV3); Firefox is untried so far.
+Built by team **Chipotle**. Chrome, and Firefox on a computer and on Android (MV3); on a phone,
+where Firefox has no sidebar, Skrim opens as a tab that works on the tab you came from. Firefox is
+built and in testing ([`docs/testing.md`](docs/testing.md) section 10).
 
 | | |
 |---|---|
@@ -246,8 +248,8 @@ Said plainly, because a judge will find them:
 
 ## Tests
 
-`pnpm verify` runs the invariants, typechecks all 7 packages, and 232 tests: the wire contract
-(35), the server's parsing, prompt and limits (20), the scorer (11), and the extension (166:
+`pnpm verify` runs the invariants, typechecks all 7 packages, and 234 tests: the wire contract
+(35), the server's parsing, prompt and limits (20), the scorer (11), and the extension (168:
 detectors, the loop with a scripted planner, redaction of text read from pixels, which names are
 private, URL handling, vision, DOM extraction). CI runs it on every PR. `pnpm test:agent` runs
 the whole loop against a real planner on fixture pages; `pnpm study` measures a model on 16

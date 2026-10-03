@@ -1,6 +1,6 @@
 # Testing what exists
 
-How to see each part of Skrim working. Sections 1 to 8 run on your machine; section 9 checks
+How to see each part of Skrim working. Sections 1 to 8 and 10 run on your machine; section 9 checks
 the hosted copies.
 What still can't be tested, and why, is at the bottom. What is left to build is in
 [`CLAUDE.md`](../CLAUDE.md) under "Status" and "Open findings".
@@ -57,7 +57,7 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 232 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 234 tests:
 
 | Tests | Covers |
 |---|---|
@@ -67,7 +67,7 @@ Runs the five invariant rules, typechecks all 7 packages, and runs 232 tests:
 | 80 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection (birth dates, labels from the element before, Aadhaar numbers on an ID card, emails OCR split, passport numbers and patient or member ids after their labels), form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), whole addresses, the token vault |
 | 22 in `lib/vision` | DOM + vision fusion, the escalation policy, which regions to read with OCR, face size, and the icon detector on the real model (skipped when it is not exported) |
 | 17 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons, only what is near the view) and click verification, in a simulated DOM |
-| 47 in `lib/agent` | Redacting text read from pixels (an ID card image, an email in a frame), names in a URL's path, the dashboard feed (its format, what it holds back, the heartbeat), and the whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order, text read from pixels, a step repeated for nothing, a click whose change shows late, the end of the page, stopping when name detection cannot start), which names are private (including a name spelled out by an email address, and a page with a face in view), and which clicks commit the user |
+| 49 in `lib/agent` | Redacting text read from pixels (an ID card image, an email in a frame), names in a URL's path, the dashboard feed (its format, what it holds back, the heartbeat), and the whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order, text read from pixels, a step repeated for nothing, a click whose change shows late, the end of the page, stopping when name detection cannot start), which names are private (including a name spelled out by an email address, and a page with a face in view), which clicks commit the user, and which tab a panel opened as a tab (Firefox for Android) works on |
 
 The same command runs in CI on every PR.
 
@@ -383,10 +383,80 @@ Afterwards, remove the released copy and turn your local build back on.
 
 ---
 
+## 10. Firefox, on a computer and on Android
+
+Skrim is the same add-on in both: MV3, Firefox 140 or later on a computer, Firefox for Android
+142 or later. On a computer it opens in Firefox's sidebar. Android has no sidebar, so the
+toolbar button opens Skrim as a tab of its own, which works on the tab you opened it from.
+
+If the panel shows a yellow notice, "Skrim needs access to the pages you ask it to work on",
+press **Allow on all sites**: Firefox lets a user hold back an add-on's site access, and without
+it Skrim cannot read or act on any page.
+
+### On a computer
+
+```powershell
+pnpm dev:server                                   # terminal 1, as for Chrome
+pnpm --filter @skrim/extension build:firefox      # writes apps/extension/.output/firefox-mv3
+```
+
+1. In Firefox open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** → pick
+   `apps/extension/.output/firefox-mv3/manifest.json`. It stays until Firefox closes.
+2. Pin Skrim from the toolbar's extensions menu (the puzzle piece), then click it: the sidebar
+   opens, and its header names the planner, as in Chrome.
+3. Run the Chrome checks of section 5 on the same fixture pages (`file:///D:/Programming/skrim-hackspire/fixtures/pages/form-test.html`
+   and the others): the same steps, the same placeholders, the same Privacy detail.
+4. The dashboard (section 7) works the same: open http://localhost:5173 in a tab of that window.
+
+### On Android, over USB (no signing needed)
+
+The phone cannot reach `localhost` on the laptop, so this build talks to the hosted server
+(section 9).
+
+Once, on the phone: Settings → About phone → tap **Build number** seven times; then Developer
+options → **USB debugging** on. Install Firefox from the Play Store, and in Firefox: Settings →
+**Remote debugging via USB** on. On the laptop: `winget install Google.PlatformTools` (adb).
+
+```powershell
+adb devices                                       # the phone's id; accept the prompt on the phone
+$env:SKRIM_SERVER_URL = "https://skrim-server.vercel.app"
+$env:WXT_DASHBOARD_URL = "https://skrim-dashboard.vercel.app"
+$env:SKRIM_SKIP_ICON = "1"
+pnpm --filter @skrim/extension build:firefox
+cd apps/extension
+pnpm dlx web-ext@10 run -t firefox-android --source-dir .output/firefox-mv3 --android-device <id> --firefox-apk org.mozilla.firefox
+```
+
+(`--firefox-apk org.mozilla.fenix` for Firefox Nightly.) Firefox opens on the phone with Skrim
+loaded, until web-ext is stopped with Ctrl+C.
+
+1. On the phone, open a real page, for example `https://en.m.wikipedia.org`.
+2. Firefox menu (⋮) → **Extensions** → **Skrim**. Skrim opens as a new tab: "It works on the tab
+   you opened it from."
+3. Ask `search for alan turing`. Steps appear in the Skrim tab; switch to the Wikipedia tab to
+   see the search done, and back to see the result. "Sent to the server as" shows "name 1".
+4. Optional: open `https://skrim-dashboard.vercel.app` in a third tab. It turns live while the
+   Skrim tab is open, and shows each request with placeholders only.
+
+Known on Android: text that exists only as pixels (a canvas, an image) is not read while the
+Skrim tab is in front, since Firefox only photographs the tab on screen. It is then not sent
+either, so nothing leaks; the planner just knows less.
+
+Afterwards, on the laptop: `Remove-Item Env:SKRIM_SERVER_URL, Env:WXT_DASHBOARD_URL, Env:SKRIM_SKIP_ICON`
+and build again, or the next local build talks to the hosted server.
+
+### On Android, from a release (signed)
+
+When a release has `skrim-firefox.xpi` (signed by Mozilla; needs the AMO keys, [`deploy.md`](deploy.md)):
+download it on the phone. Firefox → Settings → About Firefox → tap the Firefox logo five times
+(this turns on the debug menu); back in Settings → **Install add-on from file** → pick the .xpi.
+It stays installed. If your Firefox has no such entry, Firefox Beta and Nightly do. Then steps 1 to 4 above.
+
+---
+
 ## What cannot be tested yet
 
 | Part | Why |
 |---|---|
 | Icon detection, vision fusion | The OmniParser model is exported and its test passes, but nothing calls it yet |
 | Faces in a request | Faces are counted (section 6), but no screenshot goes to the server today, so nothing is blurred or sent |
-| Firefox | Builds, but nothing has been tried in it yet |
