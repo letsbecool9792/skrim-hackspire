@@ -406,9 +406,9 @@ html { font-size: 16px; scroll-behavior: smooth; }
 .code-block .token {
   font-family: var(--font-mono);
   font-size: inherit;
-  border-color: rgb(139 120 255 / 0.45);
-  background: rgb(139 120 255 / 0.18);
-  color: #d4ccff;
+  border-color: var(--code-private-border);
+  background: var(--code-private-soft);
+  color: var(--code-private);
 }
 
 .inline-code {

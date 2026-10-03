@@ -93,6 +93,10 @@
   --code-bg: #0f151b;
   --code-text: #d7dee5;
   --code-muted: #7d8a96;
+  /* A placeholder on a code block, which is dark in both themes. */
+  --code-private: #d4ccff;
+  --code-private-soft: rgb(139 120 255 / 0.18);
+  --code-private-border: rgb(139 120 255 / 0.45);
 
   --shadow-sm: 0 1px 2px rgb(17 22 28 / 0.06);
   --shadow-md: 0 4px 16px rgb(17 22 28 / 0.08);
