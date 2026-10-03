@@ -73,13 +73,19 @@ export default defineConfig({
     browser_specific_settings: {
       gecko: {
         id: "skrim@chipotle",
-        strict_min_version: "128.0",
+        // 140: the first Firefox that reads data_collection_permissions below.
+        strict_min_version: "140.0",
         // Required of new Firefox add-ons since 3 Nov 2025. The planning
         // server receives the page's structure and text, with personal data
         // replaced by tokens. That is still website content leaving the
         // device, so "none" would overclaim.
         data_collection_permissions: { required: ["websiteContent"] },
       },
+      // Marks the add-on as working on Firefox for Android too. There is no
+      // sidebar there: the toolbar button opens the panel as a tab instead
+      // (entrypoints/background).
+      // 142 on Android, for the same reason.
+      gecko_android: { strict_min_version: "142.0" },
     },
   },
 });

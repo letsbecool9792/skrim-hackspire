@@ -8,11 +8,25 @@ import type { RedactionCounts } from "@/lib/agent/redact.ts";
 import type { NameFinder } from "@/lib/pii/gliner.ts";
 import { fetchServerInfo, type ServerInfo } from "@/lib/agent/server-planner.ts";
 import { tabLink } from "@/lib/agent/tab-link.ts";
+import { panelTargetFromUrl } from "@/lib/agent/panel-target.ts";
 import { tabPixelReader } from "@/lib/vision/read-pixels.ts";
 import { SERVER_URL } from "./config.ts";
 import { feed } from "./feed-instance.ts";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
+
+/** Set when the panel is a tab of its own (Firefox for Android): the tab it works on. */
+const PANEL_TARGET = panelTargetFromUrl(location.href);
+
+/**
+ * Firefox lets a user withhold an MV3 add-on's site access, and then the
+ * content script never runs and every task fails to reach the page. Chrome
+ * grants it at install.
+ */
+async function hasSiteAccess(): Promise<boolean> {
+  if (!import.meta.env.FIREFOX) return true;
+  return browser.permissions.contains({ origins: ["<all_urls>"] }).catch(() => true);
+}
 
 // ─── Chat model ────────────────────────────────────────────────────────────
 
@@ -252,6 +266,7 @@ export default function App() {
   const [draft, setDraft] = useState("");
   const [running, setRunning] = useState(false);
   const [server, setServer] = useState<ServerInfo | null | "checking">("checking");
+  const [siteAccess, setSiteAccess] = useState<boolean | undefined>(undefined);
   const controllerRef = useRef<AbortController | null>(null);
   const nextId = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
@@ -261,6 +276,15 @@ export default function App() {
     setServer("checking");
     setServer(await fetchServerInfo(SERVER_URL));
   }, []);
+
+  useEffect(() => {
+    void hasSiteAccess().then(setSiteAccess);
+  }, []);
+
+  const allowSites = () => {
+    // Must run straight from the click: Firefox asks only during a user action.
+    void browser.permissions.request({ origins: ["<all_urls>"] }).then(setSiteAccess, () => setSiteAccess(false));
+  };
 
   useEffect(() => {
     void checkServer();
@@ -294,9 +318,16 @@ export default function App() {
     const update = (event: AgentEvent) =>
       setItems((current) => current.map((item) => (item.id === id ? applyEvent(item, event) : item)));
 
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    // A side panel works on the tab in front; a panel opened as its own tab
+    // (Firefox for Android) on the tab it was opened from.
+    const tab = PANEL_TARGET === undefined
+      ? (await browser.tabs.query({ active: true, currentWindow: true }))[0]
+      : await browser.tabs.get(PANEL_TARGET).catch(() => undefined);
     if (tab?.id === undefined) {
-      update({ type: "finished", outcome: "failed", steps: 0, tokens: {}, errorCode: "CONTENT_SCRIPT_ERROR", message: "There is no tab to work on." });
+      const message = PANEL_TARGET === undefined
+        ? "There is no tab to work on."
+        : "The page Skrim was opened from is closed. Open Skrim again from the page you want it to work on.";
+      update({ type: "finished", outcome: "failed", steps: 0, tokens: {}, errorCode: "CONTENT_SCRIPT_ERROR", message });
       return;
     }
 
@@ -333,11 +364,18 @@ export default function App() {
       </header>
 
       <main className="chat">
+        {siteAccess === false && (
+          <div className="notice" role="alert">
+            <p>Skrim needs access to the pages you ask it to work on. Firefox has not given it yet.</p>
+            <button type="button" className="notice-button" onClick={allowSites}>Allow on all sites</button>
+          </div>
+        )}
         {items.length === 0 && (
           <div className="empty">
             <div className="empty-mark" aria-hidden="true"><ShieldCheck className="icon" size={24} /></div>
             <h1>What should I do on this page?</h1>
             <p>Skrim reads the page on your device, swaps personal details for placeholders, and asks the planning server for one step at a time.</p>
+            {PANEL_TARGET !== undefined && <p>It works on the tab you opened it from. Switch back to that tab to watch, and here to see each step.</p>}
             <div className="examples">
               {EXAMPLES.map((example) => (
                 <button key={example} type="button" onClick={() => { setDraft(example); inputRef.current?.focus(); }}>{example}<ArrowRight className="icon" size={14} aria-hidden="true" /></button>

@@ -2,6 +2,8 @@
 
 /* The side panel reads at 14px; everything else is in rem from the tokens. */
 html { font-size: 14px; }
+/* On a phone (Firefox for Android) the panel is a whole tab, read at arm's length. */
+@media (pointer: coarse) { html { font-size: 16px; } }
 html, body, #root { height: 100%; }
 
 .app { display: flex; flex-direction: column; height: 100%; }
@@ -24,6 +26,12 @@ button.chip:hover { border-color: var(--border-strong); }
 
 /* ── Chat ────────────────────────────────────────────────── */
 .chat { flex: 1; overflow-y: auto; padding: var(--space-5) var(--space-4) var(--space-2); }
+
+/* Something the user must do before a task can run (Firefox site access). */
+.notice { display: flex; flex-direction: column; gap: var(--space-3); margin: 0 0 var(--space-4); padding: var(--space-4); border: var(--border-width) solid var(--warn); border-radius: var(--radius-md); background: var(--warn-soft); }
+.notice p { margin: 0; color: var(--text); }
+.notice-button { align-self: flex-start; padding: var(--space-2) var(--space-4); border: 0; border-radius: var(--radius-sm); background: var(--accent); color: var(--on-accent); font-weight: var(--weight-semibold); }
+.notice-button:hover { background: var(--accent-hover); }
 
 .empty { display: flex; flex-direction: column; align-items: center; margin: var(--space-8) auto 0; max-width: 20rem; text-align: center; }
 .empty-mark { display: grid; place-items: center; width: 3rem; height: 3rem; margin-bottom: var(--space-4); border: var(--border-width) solid var(--accent-border); border-radius: var(--radius-lg); background: var(--accent-soft); color: var(--accent); }
