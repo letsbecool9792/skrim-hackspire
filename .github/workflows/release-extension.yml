@@ -6,8 +6,12 @@ name: release-extension
 #   git tag v0.3.0
 #   git push origin v0.3.0
 #
-# The asset is always named skrim-chrome.zip, so the landing page's link
-# (releases/latest/download/skrim-chrome.zip) always gets the newest one.
+# The assets always have the same names, so "releases/latest/download/<name>"
+# always gets the newest: skrim-chrome.zip, skrim-firefox.zip (unsigned: loads
+# as a temporary add-on), and skrim-firefox.xpi (signed by Mozilla, installs
+# for good on Firefox and Firefox for Android) when the repository secrets
+# AMO_API_KEY and AMO_API_SECRET are set: addons.mozilla.org → Developer Hub →
+# Manage API Keys.
 #
 # The build talks to the hosted planner and the hosted dashboard on Vercel,
 # not to localhost. To point a release elsewhere, set the repository variables
@@ -61,10 +65,39 @@ jobs:
       - name: Name the zip
         run: cp "$(ls apps/extension/.output/*-chrome.zip | head -1)" skrim-chrome.zip
 
+      # wxt zip -b firefox also writes a -sources.zip for Mozilla's reviewers;
+      # the add-on is the other one.
+      - name: Build the Firefox zip
+        working-directory: apps/extension
+        run: pnpm zip:firefox
+
+      - name: Name the Firefox zip
+        run: cp "$(ls apps/extension/.output/*-firefox.zip | grep -v sources | head -1)" skrim-firefox.zip
+
+      # Unlisted: signed for anyone to install from the file, not listed on
+      # addons.mozilla.org. Skipped, and the release still goes out, without keys.
+      - name: Sign for Firefox
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: |
+          if [ -z "$AMO_API_KEY" ] || [ -z "$AMO_API_SECRET" ]; then
+            echo "No AMO_API_KEY / AMO_API_SECRET: the Firefox build stays unsigned."
+            exit 0
+          fi
+          # pnpm dlx, not npx: npm refuses to run in this repo (package.json pins pnpm).
+          pnpm dlx web-ext@10 sign --channel unlisted \
+            --source-dir apps/extension/.output/firefox-mv3 --artifacts-dir signed \
+            --api-key "$AMO_API_KEY" --api-secret "$AMO_API_SECRET"
+          cp "$(ls signed/*.xpi | head -1)" skrim-firefox.xpi
+
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
-          files: skrim-chrome.zip
+          files: |
+            skrim-chrome.zip
+            skrim-firefox.zip
+            skrim-firefox.xpi
           name: "Skrim ${{ github.ref_name }}"
           make_latest: true
           generate_release_notes: true
@@ -83,5 +116,14 @@ jobs:
             trying it: a few steps a minute. To watch what the server receives, open the
             dashboard: ${{ env.WXT_DASHBOARD_URL }}
 
-            Firefox is not supported yet. To build from source, see the
-            [README](https://github.com/letsbecool9792/skrim-hackspire#readme).
+            ## Firefox, on a computer or on Android
+
+            - **skrim-firefox.xpi** (when this release has it) is signed by Mozilla.
+              Computer: open it in Firefox and confirm. Android: Settings → About
+              Firefox → tap the logo five times; then Settings → Install add-on from
+              file, and pick the .xpi. On Android, the toolbar button (in the menu,
+              under Extensions) opens Skrim as a tab that works on the tab you came from.
+            - **skrim-firefox.zip** is unsigned: `about:debugging` → This Firefox →
+              Load Temporary Add-on, and pick the zip. It lasts until Firefox closes.
+
+            To build from source, see the [README](https://github.com/letsbecool9792/skrim-hackspire#readme).
