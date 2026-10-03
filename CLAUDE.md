@@ -127,7 +127,7 @@ skrim/
 │   │                      split-screen wire view + live resource panel. Carries 40%
 │   │                      of the rubric by making the invisible visible (brief §9).
 │   │
-│   └── web/               Vite + React. Public landing page. Static, deploys to Vercel.
+│   └── web/               Vite + React. Public landing page. Static, on GitHub Pages.
 │                          SEPARATE from dashboard on purpose: a broken landing-page
 │                          build must have zero ability to take the demo down.
 │
@@ -155,6 +155,10 @@ skrim/
 │   ├── artifacts/         ONNX we export ourselves. Gitignored: made by fetch-models.
 │   ├── requirements.txt   Python pins for the ONNX export venv.
 │   └── .venv/             Python venv, made by fetch-models. Gitignored.
+│
+├── deploy/
+│   └── huggingface/       The planning server's Space: a Dockerfile that clones
+│                          this repo, and the Space's README. docs/deploy.md.
 │
 └── docs/
     └── decisions/         ADRs. Feed these straight into the PPT — the tradeoff
@@ -234,8 +238,8 @@ Built, by workstream:
 | Who | Working on | Tests on |
 |---|---|---|
 | Suparno | The Chrome retest's fixes, the dashboard, the design language (all merged); next, the real-site tests, then the demo | Ollama |
-| Aritra (WS1) | The dashboard (PR #15): built, then finished by Suparno; Aritra has stopped. The offline rehearsal (demo beat 8) is under "Waiting on Suparno" | Ollama |
-| Ayushi (WS3) | Her six detection PRs are merged (OCR leaks, false positives, names in URLs, faces counted, and PR 24: labelled ids, names in email addresses, a face makes a page personal), which took recall to 99.0%. Next: not assigned yet (a landing-page prompt is ready for whoever takes it) | `pnpm eval`; Groq when needed |
+| Aritra (WS1) | The dashboard (PR #15), finished by Suparno; the landing page and the release workflow (PR #25), finished with the deploy setup. The offline rehearsal (demo beat 8) is under "Waiting on Suparno" | Ollama |
+| Ayushi (WS3) | Her six detection PRs are merged (OCR leaks, false positives, names in URLs, faces counted, and PR 24: labelled ids, names in email addresses, a face makes a page personal), which took recall to 99.0%. Next: not assigned yet | `pnpm eval`; Groq when needed |
 | Dhruba (WS2) | Fixtures and the icon detector are merged. Next: run the icon detector in the pixel reader and fuse it with the DOM, and a click at a position for what it finds | `pnpm eval`; Groq when needed |
 
 **The look is one language, in `design/tokens.css`.** The side panel and the dashboard use it
@@ -312,6 +316,19 @@ add to it whenever a change needs a manual check, and tick items off when report
       minutes), runs the 10 s export, copies the 81 MB file into place. No Python: it says so and
       carries on, since nothing calls the detector yet. `--skip-icon` skips it. The model is
       AGPL-3.0, and with it the extension is 168 MB
+- [ ] **Deploy** ([`docs/deploy.md`](docs/deploy.md), one-time, about 15 minutes):
+  - [ ] Settings → Pages → Source: GitHub Actions, then run the deploy-pages workflow. The landing
+    page opens at `https://letsbecool9792.github.io/skrim-hackspire/` and the dashboard at
+    `.../dashboard/`; check both in light and dark, and at phone width
+  - [ ] the Hugging Face Space `skrim-planner` with the `GROQ_API_KEY` secret; its URL answers
+    `{"status":"ok"}`
+  - [ ] the repository variable `SKRIM_SERVER_URL` = the Space's URL, then push a tag
+    (`v0.3.0`): the release has `skrim-chrome.zip`, and the landing page's Download button
+    gets it
+  - [ ] load that zip in Chrome (remove the local Skrim first): a task runs through the hosted
+    server, and the hosted dashboard shows it live
+  - [ ] delete the hand-made release `v0.2.0` (it talks to localhost) and its tag, and the stray
+    tag `v0.1.0`
 - [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
 - [x] **Pick the default provider**: Groq's Qwen 3.8 27B, as the study
       ([`docs/provider-study.md`](docs/provider-study.md)) recommends (decided 2026-10-02)
@@ -352,7 +369,8 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [ ] Test on three real sites (Wikipedia, Amazon.in, Gmail) with the goals real users type, not
       our own pages: [`docs/real-site-tests.md`](docs/real-site-tests.md)
 - [x] Dashboard: split-screen wire view + resource panel
-- [ ] Landing page
+- [x] Landing page (`apps/web`, PR #25), on GitHub Pages with the dashboard
+- [ ] Deployed: the one-time setup in [`docs/deploy.md`](docs/deploy.md) (waiting on Suparno)
 - [ ] Tradeoff curve: GLiNER quint8 vs fp16; hosted vs local model accuracy and latency
 
 **4. Platform**
