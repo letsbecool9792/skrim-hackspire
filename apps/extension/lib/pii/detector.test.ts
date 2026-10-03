@@ -113,6 +113,26 @@ describe("phone detection", () => {
     assert.deepEqual(detectPhones("Order 9876543210 and tracking 123456789012", vault), []);
     assert.deepEqual(vault.stats(), {});
   });
+
+  test("detects an Indian mobile number written without +91, labelled or not", () => {
+    const found = (text: string) => detectPhones(text, new TokenVault()).map((match) => match.text);
+
+    // As typed in a goal during the demo rehearsal, where it went out unredacted.
+    assert.deepEqual(found("email asha@example.com, phone 9830965520, reason option 3"), ["9830965520"]);
+    assert.deepEqual(found("ring me on 98309 65520 or 09830965520"), ["98309 65520", "09830965520"]);
+    assert.deepEqual(found("ordered by 9830965520"), ["9830965520"]);
+    assert.deepEqual(found("PNR no: 8524123456"), []);
+  });
+
+  test("detects another number after a word that names a phone", () => {
+    assert.deepEqual(detectPhones("Landline: 033 2456 7890", new TokenVault()).map((match) => match.text), ["033 2456 7890"]);
+  });
+
+  test("never cuts a mobile number out of a longer run of digits", () => {
+    assert.deepEqual(detectPhones("Aadhaar 9876 5432 1098, account 998877665544", new TokenVault()), []);
+    // One value for an international number, not a second for its last ten digits.
+    assert.deepEqual(detectPhones("Call +91 98765 43210", new TokenVault()).map((match) => match.text), ["+91 98765 43210"]);
+  });
 });
 
 describe("card detection", () => {

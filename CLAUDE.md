@@ -179,7 +179,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (255 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (258 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       without the OmniParser detector (+77 MB once exported: the built extension is
@@ -523,7 +523,11 @@ public portrait, such as an encyclopedia biography, loses its names: privacy win
 "Ananya Shah", now taken from her address, ananya.shah@ (only a local part of two or more
 plain words names a person: orders@ and no-reply@ do not). The face count once read 1 of 5
 instead of 4 of 5; not looked into. Hindi is out of scope. A plain 10-digit mobile number with
-no +91 is not caught (decided: leave it).
+no +91 was not caught, and went out in a demo goal ("phone 9830965520", 2026-10-03): since then
+ten digits starting 6 to 9 are a phone, unless the label right before names something else
+("Order", "PNR no:"), as is any number after "phone", "mobile" or "landline". The Node eval
+is unchanged by it (no fixture has one). The tripwire still catches only +91 numbers: a bare
+10-digit rule there would stop tasks on order numbers.
 
 The false positives: single capitalised words taken for names ("Aadhaar", "biryani",
 "Koramangala"), business addresses on personal pages ("Apollo Clinic, Bannerghatta Road", "MG

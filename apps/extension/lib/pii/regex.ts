@@ -19,6 +19,19 @@ const EMAIL_PATTERN = /\b[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61
 // Up to three separators between digits: "+91  98765  43210" (double spaces)
 // is still a phone number, and the outbound tripwire treats it as one.
 const PHONE_PATTERN = /\+\d{1,3}(?:[\s.-]{0,3}\d){7,12}\b/g;
+// An Indian mobile written without +91: ten digits starting 6 to 9, perhaps
+// after a 0 ("98309 65520", "9830965520", "09830965520"). Hidden with or
+// without a label: typed as "phone 9830965520" in a goal it went out as it was.
+// A longer run of digits (an Aadhaar, a card, a 12-digit account) is never
+// cut into one: the match must end where the digits do.
+const LOCAL_MOBILE_PATTERN = /\b0?[6-9](?:[ -]?\d){9}\b/g;
+// ...unless the words just before it name something else: "Order 9876543210",
+// "PNR no: 8524123456". Only a label right before the number counts, so
+// "ordered by 9830965520" is still a phone.
+const NOT_A_PHONE = /\b(?:order|invoice|tracking|awb|shipment|reference|ref|ticket|pnr|booking|transaction|txn|receipt|serial|sku|isbn|account|a\/c)\s*(?:no\.?|number|id)?\s*[:#.-]?\s*$/i;
+// Any other phone number after a word that names one: "Phone: 033 2456 7890".
+const LABELLED_PHONE_PATTERN = /\b\d(?:[ .-]?\d){7,11}\b/g;
+const PHONE_CONTEXT = /\b(?:phone|mobile|mob|cell|tel|telephone|whatsapp|landline|contact(?:\s+(?:number|no))?)\b/i;
 const CARD_PATTERN = /\b\d(?:[ -]?\d){12,18}\b/g;
 const PAN_PATTERN = /\b[A-Z]{5}\d{4}[A-Z]\b/gi;
 const IFSC_PATTERN = /\b[A-Z]{4}0[A-Z0-9]{6}\b/gi;
@@ -126,6 +139,25 @@ function looksLikeCard(digits: string): boolean {
   return passesLuhn(digits);
 }
 
+function findLocalMobiles(text: string): PiiCandidate[] {
+  return findMatches(text, "PHONE", "regex", 0.9, LOCAL_MOBILE_PATTERN)
+    .filter((candidate) => !NOT_A_PHONE.test(labelBefore(text, candidate.start)));
+}
+
+/** International numbers, labelled numbers, and Indian mobiles without +91; the first of any that overlap. */
+function findPhones(text: string): PiiCandidate[] {
+  const found: PiiCandidate[] = [];
+  const candidates = [
+    ...findMatches(text, "PHONE", "regex", 1, PHONE_PATTERN),
+    ...findContextualNumbers(text, LABELLED_PHONE_PATTERN, PHONE_CONTEXT, "PHONE"),
+    ...findLocalMobiles(text),
+  ];
+  for (const candidate of candidates) {
+    if (!found.some((kept) => candidate.start < kept.end && kept.start < candidate.end)) found.push(candidate);
+  }
+  return found.sort((a, b) => a.start - b.start);
+}
+
 function findCards(text: string): PiiCandidate[] {
   return findMatches(text, "CARD", "regex", 1, CARD_PATTERN)
     .filter((candidate) => looksLikeCard(candidate.text.replace(/[ -]/g, "")));
@@ -148,6 +180,9 @@ export function findRegexCandidates(text: string): PiiCandidate[] {
     ...findContextualNumbers(text, ACCOUNT_NUMBER_PATTERN, ACCOUNT_CONTEXT, "ACCOUNT"),
     ...findContextualNumbers(text, OTHER_ID_PATTERN, OTHER_ID_CONTEXT, "OTHER"),
     ...findContextualNumbers(text, DATE_PATTERN, DOB_CONTEXT, "DOB"),
+    // Last: on the same digits, "Account number 9876543210" is an account.
+    ...findContextualNumbers(text, LABELLED_PHONE_PATTERN, PHONE_CONTEXT, "PHONE"),
+    ...findLocalMobiles(text),
   ];
 }
 
@@ -161,7 +196,7 @@ export function detectEmails(text: string, vault: TokenVault): PiiMatch[] {
 }
 
 export function detectPhones(text: string, vault: TokenVault): PiiMatch[] {
-  return tokenise(findMatches(text, "PHONE", "regex", 1, PHONE_PATTERN), vault);
+  return tokenise(findPhones(text), vault);
 }
 
 export function detectCards(text: string, vault: TokenVault): PiiMatch[] {

@@ -84,7 +84,9 @@ destroying useful context*. Blacking out the whole page scores zero. If you reda
 Indian formats matter here — Aadhaar (12 digits), PAN (`ABCDE1234F`), IFSC, UPI ids. But
 bare 12-digit and 10-digit patterns collide with order numbers and product codes constantly.
 Prefer patterns with structure (PAN, IFSC, UPI) and use context — a nearby label saying
-"Aadhaar" is worth more than the digit count.
+"Aadhaar" is worth more than the digit count. The one exception is an Indian mobile without
++91: ten digits starting 6 to 9 are hidden unless the label right before names something else
+("Order", "PNR no:"). A demo goal sent "phone 9830965520" as it was before that rule.
 
 Note the deliberately narrow patterns in `@skrim/schema`'s `guard.ts`: that is the
 last-resort tripwire and must never false-positive. Your detector is allowed to be more
