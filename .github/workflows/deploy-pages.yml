@@ -1,0 +1,76 @@
+name: deploy-pages
+
+# Publishes the landing page and the dashboard to GitHub Pages:
+#   https://letsbecool9792.github.io/skrim-hackspire/            landing page
+#   https://letsbecool9792.github.io/skrim-hackspire/dashboard/  dashboard
+#
+# Both are static. The hosted dashboard gets its data from the extension in
+# the same browser, never from a server; release builds look for it here.
+# One-time setup: Settings → Pages → Source: GitHub Actions.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "apps/dashboard/**"
+      - "design/**"
+      - "packages/schema/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a newer push replaces a queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter "@skrim/web..." --filter "@skrim/dashboard..."
+
+      - name: Build the landing page
+        run: pnpm --filter @skrim/web build
+        env:
+          BASE_PATH: /skrim-hackspire/
+
+      - name: Build the dashboard
+        run: pnpm --filter @skrim/dashboard build
+        env:
+          BASE_PATH: /skrim-hackspire/dashboard/
+
+      - name: Put them together
+        run: |
+          mkdir site
+          cp -r apps/web/dist/. site/
+          cp -r apps/dashboard/dist site/dashboard
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
