@@ -216,7 +216,7 @@ async function exportArtifact(exporter) {
 }
 
 async function local({ from, to, skip, exporter }) {
-  if (skip && !(await exists(from))) {
+  if (skip) {
     console.log(`  skip   ${to}  (--skip-icon)`);
     return 0;
   }
@@ -256,10 +256,13 @@ async function main() {
   for (const l of LOCAL) await local(l);
 
   // The dashboard's resource panel lists these sizes; the side panel reads
-  // them from here rather than downloading 45 MB to measure it.
+  // them from here rather than downloading 45 MB to measure it. Skipping the
+  // icon detector also keeps an earlier copy out of the build (wxt.config.ts),
+  // so it is left out of the list too.
   const models = [];
   for (const entry of await readdir(DEST, { withFileTypes: true })) {
-    if (entry.isDirectory()) models.push({ name: entry.name, bytes: await diskUsage(join(DEST, entry.name)) });
+    if (!entry.isDirectory() || (SKIP_ICON && entry.name === "ui-detect")) continue;
+    models.push({ name: entry.name, bytes: await diskUsage(join(DEST, entry.name)) });
   }
   await writeFile(join(DEST, "manifest.json"), `${JSON.stringify({ models }, null, 2)}\n`);
 

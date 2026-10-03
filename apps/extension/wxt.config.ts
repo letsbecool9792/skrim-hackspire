@@ -9,6 +9,20 @@ const SERVER_URL = (process.env.SKRIM_SERVER_URL ?? "http://localhost:3000").rep
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
 
+  hooks: {
+    // SKRIM_SKIP_ICON=1 (release builds, phone installs) leaves out the icon
+    // detector, which nothing calls yet. Skipping its export is not enough
+    // where an earlier export is still in public/models: that copy would ship
+    // 81 MB for nothing, and a phone install would push 168 MB over USB.
+    "build:publicAssets": (_wxt, files) => {
+      if (process.env.SKRIM_SKIP_ICON !== "1") return;
+      for (let i = files.length - 1; i >= 0; i -= 1) {
+        // relativeDest uses the platform's separator: backslashes on Windows.
+        if (files[i]?.relativeDest.replaceAll("\\", "/").startsWith("models/ui-detect/")) files.splice(i, 1);
+      }
+    },
+  },
+
   vite: () => ({
     define: { "import.meta.env.WXT_SKRIM_SERVER_URL": JSON.stringify(SERVER_URL) },
   }),

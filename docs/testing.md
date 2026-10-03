@@ -428,7 +428,15 @@ pnpm dlx web-ext@10 run -t firefox-android --source-dir .output/firefox-mv3 --an
 ```
 
 (`--firefox-apk org.mozilla.fenix` for Firefox Nightly.) Firefox opens on the phone with Skrim
-loaded, until web-ext is stopped with Ctrl+C.
+loaded, until web-ext is stopped with Ctrl+C. `SKRIM_SKIP_ICON` keeps the unused 81 MB icon
+model out, so 87 MB goes over the cable, not 168.
+
+**If Skrim is not in the menu** (Extensions shows only "Try a recommended extension"), the install
+failed, and web-ext's terminal says why. The usual causes:
+- Firefox older than 142: Settings → About Firefox. Update it from the Play Store.
+- Remote debugging via USB is off in Firefox's settings: web-ext then waits and gives up.
+- The phone was unplugged or locked while web-ext pushed the add-on: `adb devices` must list it.
+Add `--verbose` to the web-ext command for every step it takes.
 
 1. On the phone, open a real page, for example `https://en.m.wikipedia.org`.
 2. Firefox menu (⋮) → **Extensions** → **Skrim**. Skrim opens as a new tab: "It works on the tab
