@@ -11,6 +11,7 @@ import { DEFAULT_MAX_STEPS, DEFAULT_TIMEOUT_MS, MAX_CONSECUTIVE_UNVERIFIED } fro
 import { TokenVault } from "../vault/vault.js";
 import type { PixelReader } from "../vision/read-pixels.ts";
 import { unaskedCommitment } from "./commit-guard.ts";
+import { DataGuard, type Concern } from "./data-guard.ts";
 import { PrivateNames } from "./private-names.ts";
 import { readPage, type PageReading } from "./read-page.ts";
 import { redactText, resolveTokens, type RedactionCounts } from "./redact.ts";
@@ -100,8 +101,27 @@ export interface AgentOptions {
    * never to the server. Not called when the answer holds no placeholder.
    */
   onAnswerValues?: (values: ReadonlyMap<PiiToken, string>) => void;
+  /**
+   * Asks the user whether a step may type a personal value the data guard
+   * (lib/agent/data-guard.ts) cannot allow by itself; resolves true to allow.
+   * `values` are the real values behind the placeholders asked about, for the
+   * panel to show on request, like `onAnswerValues`: never in an AgentEvent.
+   * Without it, such a step is refused.
+   */
+  confirmDataUse?: (question: DataUseQuestion, values: ReadonlyMap<PiiToken, string>, signal: AbortSignal) => Promise<boolean>;
   maxSteps?: number;
   timeoutMs?: number;
+}
+
+/** A step that would type personal values the data guard cannot allow by itself. Redacted: tokens only. */
+export interface DataUseQuestion {
+  step: number;
+  /** The placeholders it would type that need the user's say-so, and why each does. */
+  asks: Array<{ token: PiiToken; concern: Concern }>;
+  /** The field, as the server saw it. */
+  field?: string;
+  /** The site it is on, as an origin. */
+  site: string;
 }
 
 /** The schema caps history at 20 steps; older steps matter least. */
@@ -174,6 +194,9 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     const goalNames = await names.prepareGoal(options.goal);
     if (namesFailed) return stopForNames();
     const goal = redactText(options.goal, vault, goalNames);
+    // Where each value came from, for the data guard (lib/agent/data-guard.ts).
+    const guard = new DataGuard(options.goal);
+    guard.sawGoal(findPiiTokens(goal));
     onEvent({ type: "started", taskId, redactedGoal: goal });
     let unverifiedInARow = 0;
     const stateVisits = new Map<string, number>();
@@ -193,6 +216,8 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
       }
       if (namesFailed) return stopForNames();
       const { page } = reading;
+      const site = page.graph.url.origin;
+      guard.sawPage(site, findPiiTokens(page.graph.manifest.tokensInPlay.join(" ")));
       onEvent({ type: "observed", step, elements: page.graph.elements.length, redactions: page.redactions, page: `${page.graph.url.origin}${page.graph.url.pathTemplate}`, timings: reading.timings });
 
       // What the last action changed on screen goes into its history entry.
@@ -271,17 +296,28 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
         outcome = { verified: false, note: "not done again: this exact step was just taken on this same page, and the page is as it was then. If the goal is met, answer done; if not, try something else", message: "Skipped: the same step again would change nothing." };
         log.info("agent.refusedRepeat", { taskId, step });
       } else {
-        // Text read from pixels has no element behind it in the page.
-        outcome = target?.source === "vision"
-          ? actOnPixelText(action, reading.observation.elements?.find((element) => element.id === target.id)?.label)
-          : await act(link, taskId, step, action, { vault, names }, signal);
-        lastTaken = { state, key };
+        // Typing a personal value the goal did not ask for, on another site,
+        // or an ID, card or account number: the user says whether it may.
+        const withheld = action.type === "type"
+          ? await checkDataUse({ step, value: action.value, field: target?.label, site, guard, vault, confirm: options.confirmDataUse, signal })
+          : undefined;
+        if (withheld) {
+          outcome = withheld;
+          log.info("agent.withheldData", { taskId, step });
+        } else {
+          // Text read from pixels has no element behind it in the page.
+          outcome = target?.source === "vision"
+            ? actOnPixelText(action, reading.observation.elements?.find((element) => element.id === target.id)?.label)
+            : await act(link, taskId, step, action, { vault, names }, signal);
+          lastTaken = { state, key };
+        }
       }
       history.push({ cycle: step, action, verified: outcome.verified, ...(outcome.note ? { note: outcome.note } : {}) });
       onEvent({ type: "acted", step, verified: outcome.verified, ...(outcome.note ? { note: outcome.note } : {}), ...(outcome.message ? { message: outcome.message } : {}) });
       if (action.type === "extract" && outcome.extractedValue) {
         await names.prepareTexts([outcome.extractedValue]);
         extracted[action.as] = redactText(outcome.extractedValue, vault, names.lookup);
+        guard.sawPage(site, findPiiTokens(extracted[action.as]!));
       }
 
       unverifiedInARow = outcome.verified ? 0 : unverifiedInARow + 1;
@@ -412,6 +448,63 @@ function actOnPixelText(action: Action, rawText: string | undefined): ActOutcome
     note: "that is text read from an image of the screen: it can be read (quote it, or extract it), not clicked or typed into",
     message: "That text is part of an image on the page, so Skrim can read it but not click it.",
   };
+}
+
+interface DataUseCheck {
+  step: number;
+  /** The planned value, placeholders and all. */
+  value: string;
+  field?: string;
+  site: string;
+  guard: DataGuard;
+  vault: TokenVault;
+  confirm?: AgentOptions["confirmDataUse"];
+  signal: AbortSignal;
+}
+
+/**
+ * Whether a planned "type" may put these personal values on this page
+ * (lib/agent/data-guard.ts). Undefined when it may; otherwise the refused
+ * step's outcome. Asks the user when the guard cannot decide alone.
+ */
+async function checkDataUse({ step, value, field, site, guard, vault, confirm, signal }: DataUseCheck): Promise<ActOutcome | undefined> {
+  const tokens = findPiiTokens(value);
+  // A placeholder this task never issued is act()'s to refuse, not a question.
+  if (tokens.length === 0 || tokens.some((token) => vault.resolve(token) === undefined)) return undefined;
+  const { ask, refused } = guard.check(tokens, site);
+  if (refused.length > 0) return withheld(refused, true);
+  if (ask.length === 0) return undefined;
+  let allowed = false;
+  if (confirm) {
+    const values = new Map(ask.map(({ token }) => [token, vault.resolve(token)!] as const));
+    allowed = await untilAborted(confirm({ step, asks: ask, ...(field ? { field } : {}), site }, values, signal), signal);
+  }
+  const asked = ask.map(({ token }) => token);
+  guard.decide(asked, site, allowed);
+  return allowed ? undefined : withheld(asked, confirm !== undefined);
+}
+
+/** A step not taken because the user did not allow, or could not be asked to allow, these values here. */
+function withheld(tokens: PiiToken[], couldAsk: boolean): ActOutcome {
+  const listed = tokens.join(", ");
+  return {
+    verified: false,
+    note: clip(`not typed: the user did not allow ${listed} to be used here. Do not type it again; leave that field out, or answer done if nothing else is needed`, 200),
+    message: couldAsk ? `Not typed: you didn't allow ${tokens.join(" or ")} here.` : `Not typed: using ${tokens.join(" and ")} here needs your permission.`,
+  };
+}
+
+/** `promise`, or the abort: a question left unanswered must not outlive a stopped task. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(signal.reason);
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (result) => { signal.removeEventListener("abort", onAbort); resolve(result); },
+      (error) => { signal.removeEventListener("abort", onAbort); reject(error); },
+    );
+  });
 }
 
 /** The planner's note for an action the page did not react to. */

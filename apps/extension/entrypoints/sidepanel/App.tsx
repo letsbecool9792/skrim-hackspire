@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import type { Action, PiiCategory } from "@skrim/schema";
-import { AlertTriangle, ArrowDownUp, ArrowRight, ArrowUp, ChevronsUpDown, CircleCheck, Clock, Eraser, Eye, EyeOff, Keyboard, MousePointer2, ScanText, ShieldCheck, Square, type LucideIcon } from "lucide-react";
+import type { Action, PiiCategory, PiiToken } from "@skrim/schema";
+import { AlertTriangle, ArrowDownUp, ArrowRight, ArrowUp, ChevronsUpDown, CircleCheck, Clock, Eraser, Eye, EyeOff, Keyboard, MousePointer2, ScanText, ShieldAlert, ShieldCheck, Square, type LucideIcon } from "lucide-react";
 import type { ErrorCode } from "@/lib/errors.ts";
 import { getActionPlanner } from "@/lib/integration.ts";
-import { runAgentTask, type AgentEvent } from "@/lib/agent/loop.ts";
+import { runAgentTask, type AgentEvent, type DataUseQuestion } from "@/lib/agent/loop.ts";
+import { categoryOf, type Concern } from "@/lib/agent/data-guard.ts";
 import type { RedactionCounts } from "@/lib/agent/redact.ts";
 import type { NameFinder } from "@/lib/pii/gliner.ts";
 import { fetchServerInfo, type ServerInfo } from "@/lib/agent/server-planner.ts";
@@ -40,6 +41,16 @@ interface StepView {
   verified?: boolean;
   /** What happened, for the user; the planner's own note is not shown. */
   message?: string;
+  /** The site the step was taken on, for the Privacy record of what was typed where. */
+  site?: string;
+}
+
+/** A question from the data guard, open until the user answers it or the task ends. */
+interface OpenQuestion {
+  question: DataUseQuestion;
+  /** The real values behind its placeholders: shown here only, on a click. */
+  values: ReadonlyMap<string, string>;
+  answer: (allowed: boolean) => void;
 }
 
 interface TaskItem {
@@ -59,6 +70,19 @@ interface TaskItem {
    * when the user clicks it.
    */
   answerValues?: ReadonlyMap<string, string>;
+  /** The page of the last view, for the steps planned on it. */
+  page?: string;
+  question?: OpenQuestion;
+}
+
+/** "https://docs.google.com/forms/..." -> "docs.google.com". */
+function hostOf(page: string | undefined): string | undefined {
+  if (!page) return undefined;
+  try {
+    return new URL(page).host || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function applyEvent(task: TaskItem, event: AgentEvent): TaskItem {
@@ -66,10 +90,10 @@ function applyEvent(task: TaskItem, event: AgentEvent): TaskItem {
     case "started":
       return { ...task, redactedGoal: event.redactedGoal, phase: "reading" };
     case "observed":
-      return { ...task, phase: "planning", redactions: event.redactions };
+      return { ...task, phase: "planning", redactions: event.redactions, page: event.page };
     case "planned":
       if (event.action.type === "done") return task;
-      return { ...task, phase: "acting", steps: [...task.steps, { step: event.step, action: event.action, targetLabel: event.targetLabel, latencyMs: event.latencyMs }] };
+      return { ...task, phase: "acting", steps: [...task.steps, { step: event.step, action: event.action, targetLabel: event.targetLabel, latencyMs: event.latencyMs, site: hostOf(task.page) }] };
     case "acted":
       return { ...task, phase: "reading", steps: task.steps.map((s) => (s.step === event.step ? { ...s, verified: event.verified, message: event.message } : s)) };
     case "warning":
@@ -219,7 +243,7 @@ function StepRow({ step }: { step: StepView }) {
       <div className="step-body">
         <div className="step-title"><Tokenised text={describeAction(step.action, step.targetLabel)} /></div>
         {reason && <div className="step-reason"><Tokenised text={reason} /></div>}
-        {step.verified === false && <div className="step-note">{step.message ?? "Not confirmed."}</div>}
+        {step.verified === false && <div className="step-note"><Tokenised text={step.message ?? "Not confirmed."} /></div>}
       </div>
       <span className="step-meta">
         {step.verified === undefined ? <span className="spinner" aria-label="Working" /> : step.verified ? <CircleCheck className="icon" size={ICON_SIZE} aria-label="Done" /> : <AlertTriangle className="icon" size={ICON_SIZE} aria-label="Not confirmed" />}
@@ -229,10 +253,59 @@ function StepRow({ step }: { step: StepView }) {
   );
 }
 
+function wordFor(token: PiiToken): string {
+  return CATEGORY_WORDS[categoryOf(token)]?.[0] ?? "private value";
+}
+
+/** "an ID number", "a card number". */
+function withArticle(word: string): string {
+  return /^[aeiou]/i.test(word) ? `an ${word}` : `a ${word}`;
+}
+
+const CONCERN_WORDS: Record<Concern, (word: string) => string> = {
+  "not-asked": (word) => `Your request didn't mention your ${word}.`,
+  "other-site": () => "It came from a different site.",
+  sensitive: (word) => `Skrim always checks before typing ${withArticle(word)}.`,
+};
+
+/**
+ * The data guard's question (lib/agent/data-guard.ts): may this step type
+ * these values here? A placeholder can be clicked to show its real value, on
+ * this device only. The task waits for the answer.
+ */
+function AskCard({ open }: { open: OpenQuestion }) {
+  const { question, values, answer } = open;
+  const words = [...new Set(question.asks.map(({ token }) => wordFor(token)))];
+  const reasons = [...new Set(question.asks.map(({ token, concern }) => CONCERN_WORDS[concern](wordFor(token))))];
+  return (
+    <div className="ask" role="group" aria-label="Skrim needs your permission">
+      <div className="ask-title"><ShieldAlert className="icon" size={ICON_SIZE} aria-hidden="true" /> Use your {words.join(" and ")} here?</div>
+      <p>
+        The planner wants to type <Tokenised text={question.asks.map(({ token }) => token).join(" and ")} values={values} /> into{" "}
+        <Tokenised text={quote(question.field) ?? "a field"} /> on {hostOf(question.site) ?? question.site}.
+      </p>
+      {reasons.map((reason) => <p key={reason} className="ask-why">{reason}</p>)}
+      <div className="ask-actions">
+        <button type="button" className="ask-allow" onClick={() => answer(true)}>Allow</button>
+        <button type="button" className="ask-deny" onClick={() => answer(false)}>Don't allow</button>
+      </div>
+    </div>
+  );
+}
+
+const ONE_TOKEN = /<PII:[A-Z_]+:\d+>/;
+
+/** Steps that typed a personal value, for the Privacy record. */
+function typedSteps(steps: StepView[]): Array<StepView & { action: Extract<Action, { type: "type" }> }> {
+  return steps.filter((step): step is StepView & { action: Extract<Action, { type: "type" }> } =>
+    step.action.type === "type" && step.verified === true && ONE_TOKEN.test(step.action.value));
+}
+
 /** How the task ended, with what stayed on the device one click away rather than under every answer. */
-function ResultCard({ finished, answerValues }: { finished: Finished; answerValues?: ReadonlyMap<string, string> }) {
+function ResultCard({ finished, answerValues, steps }: { finished: Finished; answerValues?: ReadonlyMap<string, string>; steps: StepView[] }) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const kept = describeCounts(finished.tokens);
+  const typed = typedSteps(steps);
   return (
     <div className={`result result-${finished.outcome}`}>
       {finished.outcome === "completed" && <div className="result-title"><CircleCheck className="icon" size={ICON_SIZE} aria-hidden="true" /> Done</div>}
@@ -249,10 +322,25 @@ function ResultCard({ finished, answerValues }: { finished: Finished; answerValu
         </button>
       </div>
       {showPrivacy && (
-        <p className="privacy-detail">
+        <div className="privacy-detail">
           <ShieldCheck className="icon" size={ICON_SIZE} aria-hidden="true" />
-          <span>{kept ? `Kept on this device: ${kept}. The server only saw placeholders.` : "No personal data found on these pages."}</span>
-        </p>
+          <div>
+            <p>{kept ? `Kept on this device: ${kept}. The server only saw placeholders.` : "No personal data found on these pages."}</p>
+            {typed.length > 0 && (
+              <>
+                <p>Typed into pages, by this device:</p>
+                <ul>
+                  {typed.map((step) => (
+                    <li key={step.step}>
+                      <Tokenised text={step.action.value.match(new RegExp(ONE_TOKEN, "g"))!.join(", ")} /> into <Tokenised text={quote(step.targetLabel) ?? "a field"} />
+                      {step.site ? ` on ${step.site}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -270,10 +358,11 @@ function TaskView({ task }: { task: TaskItem }) {
         )}
         {task.warnings.map((warning) => <p key={warning} className="note note-error">{warning}</p>)}
         {task.steps.length > 0 && <ol className="steps">{task.steps.map((step) => <StepRow key={step.step} step={step} />)}</ol>}
-        {task.phase !== "done" && (
+        {task.question && <AskCard open={task.question} />}
+        {task.phase !== "done" && !task.question && (
           <div className="working"><span className="spinner" aria-hidden="true" /> {PHASE_WORDS[task.phase]}…</div>
         )}
-        {finished && <ResultCard finished={finished} answerValues={task.answerValues} />}
+        {finished && <ResultCard finished={finished} answerValues={task.answerValues} steps={task.steps} />}
       </div>
     </section>
   );
@@ -370,7 +459,18 @@ export default function App() {
     setRunning(true);
     try {
       await runAgentTask({ goal, planner, link: tabLink(tab.id), signal: controller.signal, onEvent: (e) => { update(e); feed.onEvent(e); }, findNames, readPixels: tabPixelReader(tab.id),
-        onAnswerValues: (values) => setItems((current) => current.map((item) => (item.id === id ? { ...item, answerValues: values } : item))) });
+        onAnswerValues: (values) => setItems((current) => current.map((item) => (item.id === id ? { ...item, answerValues: values } : item))),
+        // The data guard's question waits in the chat until it is answered,
+        // or the task ends: stopping it, or closing the panel, refuses.
+        confirmDataUse: (question, values, signal) => new Promise<boolean>((resolve) => {
+          const setQuestion = (open: OpenQuestion | undefined) => setItems((current) => current.map((item) => {
+            if (item.id !== id) return item;
+            const { question: _closed, ...rest } = item;
+            return open ? { ...rest, question: open } : rest;
+          }));
+          signal.addEventListener("abort", () => setQuestion(undefined), { once: true });
+          setQuestion({ question, values, answer: (allowed) => { setQuestion(undefined); resolve(allowed); } });
+        }) });
     } finally {
       controllerRef.current = null;
       setRunning(false);

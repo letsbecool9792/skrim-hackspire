@@ -509,6 +509,7 @@ function getAriaLabelledByText(element: Element): string | undefined {
 
   const seenIds = new Set<string>();
   const parts: string[] = [];
+  const included: Element[] = [];
 
   for (const id of labelledBy.trim().split(/\s+/)) {
     if (!id || seenIds.has(id)) {
@@ -516,7 +517,14 @@ function getAriaLabelledByText(element: Element): string | undefined {
     }
 
     seenIds.add(id);
-    const text = normalizeText(document.getElementById(id)?.textContent);
+    const labelElement = document.getElementById(id);
+    // Already read as part of an earlier one: a Google Form names a field by
+    // its question heading and the heading's own "*", which read "Full name * *".
+    if (!labelElement || included.some((outer) => outer.contains(labelElement))) {
+      continue;
+    }
+    included.push(labelElement);
+    const text = normalizeText(labelElement.textContent);
     if (text) {
       parts.push(text);
     }
