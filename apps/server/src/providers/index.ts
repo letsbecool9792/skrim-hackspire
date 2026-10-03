@@ -59,10 +59,16 @@ export interface Completion {
  * provider study (docs/provider-study.md) hit that limit 125 times in 42 tasks
  * with Groq's Qwen, and each time Groq said to wait 2-3 s. So a rate limit is
  * waited out when the provider says how long and it is short; a long one still
- * fails the step, with a message saying why.
+ * fails the step, with a message saying why (and goes to FALLBACK_PROVIDER).
+ *
+ * A big page, fitted to Groq's 5,500-token budget (prompts/fit.ts), uses most
+ * of a minute's 8,000 tokens, so the next big step waits about 40 s for the
+ * minute to refill. 45 s covers it; Groq's daily cap ("try again in 7m") does
+ * not fit and still fails over. The total stays under 60 s, where Vercel stops
+ * the hosted function.
  */
-const MAX_RATE_LIMIT_WAIT_MS = 20_000;
-const MAX_RATE_LIMIT_WAITING_MS = 30_000;
+const MAX_RATE_LIMIT_WAIT_MS = 45_000;
+const MAX_RATE_LIMIT_WAITING_MS = 50_000;
 
 /** How long a 429 asks to wait: the Retry-After header, or Groq's "try again in 1m2.5s". */
 export function rateLimitWaitMs(retryAfter: string | null, body: string): number | undefined {
