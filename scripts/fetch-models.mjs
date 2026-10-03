@@ -6,6 +6,10 @@
  *   pnpm models:fetch --force        # re-download everything
  *   pnpm models:fetch --skip-icon    # without the icon detector (no Python needed)
  *
+ * SKRIM_SKIP_ICON=1 does the same as --skip-icon, for the builds that run this
+ * script themselves (`build`, `zip`): the release workflow sets it, since
+ * nothing calls the icon detector yet and its Python setup takes ten minutes.
+ *
  * Run this after `pnpm install` on a fresh clone; the extension's production
  * builds run it too. Model weights are gitignored, so without this the
  * extension has nothing to load.
@@ -28,7 +32,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEST = join(ROOT, "apps", "extension", "public", "models");
 const FORCE = process.argv.includes("--force");
-const SKIP_ICON = process.argv.includes("--skip-icon");
+const SKIP_ICON = process.argv.includes("--skip-icon") || process.env.SKRIM_SKIP_ICON === "1";
 
 const HF = "https://huggingface.co/knowledgator/gliner-pii-edge-v1.0/resolve/main";
 
