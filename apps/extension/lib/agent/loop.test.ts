@@ -99,6 +99,21 @@ describe("runAgentTask", () => {
     assert.equal(requests[1]?.graph.elements.find((e) => e.label === "Email" && e.role === "textbox")?.value, "<PII:EMAIL:1>");
   });
 
+  test("hands the panel the real values behind the answer's placeholders, and only those", async () => {
+    await page(`<p>Signed in as someone@example.com</p><p>Phone on file: +91 98765 43210</p>`);
+    const { planner } = scripted(() => ({ type: "done", success: true, summary: "Your email is <PII:EMAIL:1>" }));
+    const events: AgentEvent[] = [];
+    let values: ReadonlyMap<string, string> | undefined;
+
+    await runAgentTask({ goal: "what is my email", planner, link, signal: new AbortController().signal, onEvent: (event) => events.push(event), onAnswerValues: (given) => { values = given; } });
+
+    assert.deepEqual([...(values ?? [])], [["<PII:EMAIL:1>", "someone@example.com"]]);
+    // The phone was on the page but not in the answer: not handed over.
+    assert.doesNotMatch(JSON.stringify([...(values ?? [])]), /98765/);
+    // Events also feed the dashboard: no real value in any of them.
+    assert.doesNotMatch(JSON.stringify(events), /someone@example.com/);
+  });
+
   test("redacts PII in the goal itself", async () => {
     await page(`<button>Send</button>`);
     const { planner, requests } = scripted(() => ({ type: "done", success: true, summary: "ok" }));

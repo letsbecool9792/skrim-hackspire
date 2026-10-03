@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { Action, PiiCategory } from "@skrim/schema";
-import { AlertTriangle, ArrowDownUp, ArrowRight, ArrowUp, ChevronsUpDown, CircleCheck, Clock, Eraser, Keyboard, MousePointer2, ScanText, ShieldCheck, Square, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowDownUp, ArrowRight, ArrowUp, ChevronsUpDown, CircleCheck, Clock, Eraser, Eye, EyeOff, Keyboard, MousePointer2, ScanText, ShieldCheck, Square, type LucideIcon } from "lucide-react";
 import type { ErrorCode } from "@/lib/errors.ts";
 import { getActionPlanner } from "@/lib/integration.ts";
 import { runAgentTask, type AgentEvent } from "@/lib/agent/loop.ts";
@@ -52,6 +52,13 @@ interface TaskItem {
   redactions?: RedactionCounts;
   warnings: string[];
   finished?: Finished;
+  /**
+   * The real values behind the placeholders in the final answer, from the
+   * task's vault as it ended (AgentOptions.onAnswerValues). Memory only: gone
+   * when the chat is cleared or the panel closes. Shown one pill at a time,
+   * when the user clicks it.
+   */
+  answerValues?: ReadonlyMap<string, string>;
 }
 
 function applyEvent(task: TaskItem, event: AgentEvent): TaskItem {
@@ -141,8 +148,32 @@ function describeCounts(counts: RedactionCounts): string {
   return parts.join(", ");
 }
 
-/** Shows text with each PII token as a labelled pill. */
-function Tokenised({ text }: { text: string }) {
+/**
+ * A placeholder in the answer whose real value is on this device. It shows as
+ * the placeholder; a click shows the value, here only, and another hides it.
+ * Nothing is sent: the value never left the device.
+ */
+function RevealToken({ label, word, value }: { label: string; word: string; value: string }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <button
+      type="button"
+      className="token token-reveal"
+      aria-pressed={shown}
+      onClick={() => setShown((now) => !now)}
+      title={shown ? "Shown only here; the server never saw it. Click to hide." : `The server only saw "${label}". Click to show your ${word} here; nothing is sent.`}
+    >
+      {shown ? value : label}
+      {shown ? <EyeOff className="icon" size={12} aria-hidden="true" /> : <Eye className="icon" size={12} aria-hidden="true" />}
+    </button>
+  );
+}
+
+/**
+ * Shows text with each PII token as a labelled pill. Given the real values
+ * (the final answer only), a pill can be clicked to show its value.
+ */
+function Tokenised({ text, values }: { text: string; values?: ReadonlyMap<string, string> }) {
   const parts: ReactNode[] = [];
   let last = 0;
   for (const match of text.matchAll(TOKEN_PATTERN)) {
@@ -150,7 +181,10 @@ function Tokenised({ text }: { text: string }) {
     if (index > last) parts.push(text.slice(last, index));
     const category = match[1] as PiiCategory;
     const word = CATEGORY_WORDS[category]?.[0] ?? "private value";
-    parts.push(<span className="token" key={index} title={`Your ${word}, kept on this device`}>{word} {match[2]}</span>);
+    const value = values?.get(match[0]);
+    parts.push(value === undefined
+      ? <span className="token" key={index} title={`Your ${word}, kept on this device`}>{word} {match[2]}</span>
+      : <RevealToken key={index} label={`${word} ${match[2]}`} word={word} value={value} />);
     last = index + match[0].length;
   }
   if (last < text.length) parts.push(text.slice(last));
@@ -196,7 +230,7 @@ function StepRow({ step }: { step: StepView }) {
 }
 
 /** How the task ended, with what stayed on the device one click away rather than under every answer. */
-function ResultCard({ finished }: { finished: Finished }) {
+function ResultCard({ finished, answerValues }: { finished: Finished; answerValues?: ReadonlyMap<string, string> }) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const kept = describeCounts(finished.tokens);
   return (
@@ -204,7 +238,7 @@ function ResultCard({ finished }: { finished: Finished }) {
       {finished.outcome === "completed" && <div className="result-title"><CircleCheck className="icon" size={ICON_SIZE} aria-hidden="true" /> Done</div>}
       {finished.outcome === "cancelled" && <div className="result-title"><Square className="icon" size={ICON_SIZE} aria-hidden="true" /> Stopped</div>}
       {finished.outcome === "failed" && <div className="result-title"><AlertTriangle className="icon" size={ICON_SIZE} aria-hidden="true" /> {ERROR_TITLES[finished.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? "Something went wrong"}</div>}
-      {finished.summary && <p><Tokenised text={finished.summary} /></p>}
+      {finished.summary && <p><Tokenised text={finished.summary} values={answerValues} /></p>}
       {finished.message && <p>{finished.message}</p>}
       <div className="result-foot">
         <small title={finished.errorCode}>
@@ -239,7 +273,7 @@ function TaskView({ task }: { task: TaskItem }) {
         {task.phase !== "done" && (
           <div className="working"><span className="spinner" aria-hidden="true" /> {PHASE_WORDS[task.phase]}…</div>
         )}
-        {finished && <ResultCard finished={finished} />}
+        {finished && <ResultCard finished={finished} answerValues={task.answerValues} />}
       </div>
     </section>
   );
@@ -335,7 +369,8 @@ export default function App() {
     controllerRef.current = controller;
     setRunning(true);
     try {
-      await runAgentTask({ goal, planner, link: tabLink(tab.id), signal: controller.signal, onEvent: (e) => { update(e); feed.onEvent(e); }, findNames, readPixels: tabPixelReader(tab.id) });
+      await runAgentTask({ goal, planner, link: tabLink(tab.id), signal: controller.signal, onEvent: (e) => { update(e); feed.onEvent(e); }, findNames, readPixels: tabPixelReader(tab.id),
+        onAnswerValues: (values) => setItems((current) => current.map((item) => (item.id === id ? { ...item, answerValues: values } : item))) });
     } finally {
       controllerRef.current = null;
       setRunning(false);

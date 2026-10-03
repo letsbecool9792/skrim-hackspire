@@ -1,4 +1,4 @@
-import type { Action, PlanRequest, PlanResponse, ScreenGraph, StepRecord } from "@skrim/schema";
+import { findPiiTokens, type Action, type PiiToken, type PlanRequest, type PlanResponse, type ScreenGraph, type StepRecord } from "@skrim/schema";
 import { log } from "@skrim/shared";
 
 import type { ErrorCode } from "../errors.ts";
@@ -91,6 +91,15 @@ export interface AgentOptions {
    * frame) with on-device OCR. Without it such text is invisible to the agent.
    */
   readPixels?: PixelReader;
+  /**
+   * Called once as the task ends, with the real values behind the
+   * placeholders in its final answer, and nothing else from the vault: asked
+   * "what is my PAN?", the planner can only answer "<PII:GOV_ID:1>", and the
+   * side panel shows the real number when the user asks to see it. The values
+   * never go into an AgentEvent, which the dashboard feed also reads, and
+   * never to the server. Not called when the answer holds no placeholder.
+   */
+  onAnswerValues?: (values: ReadonlyMap<PiiToken, string>) => void;
   maxSteps?: number;
   timeoutMs?: number;
 }
@@ -131,6 +140,15 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
 
   const finish = (result: Finish): void => {
     log.info("agent.finished", { taskId, outcome: result.outcome, steps: step, errorCode: result.errorCode });
+    // Before the vault is cleared (the finally below).
+    if (result.summary && options.onAnswerValues) {
+      const values = new Map<PiiToken, string>();
+      for (const token of findPiiTokens(result.summary)) {
+        const value = vault.resolve(token);
+        if (value !== undefined) values.set(token, value);
+      }
+      if (values.size > 0) options.onAnswerValues(values);
+    }
     onEvent({ type: "finished", steps: step, tokens: vault.stats(), ...result });
   };
 

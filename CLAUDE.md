@@ -330,6 +330,9 @@ add to it whenever a change needs a manual check, and tick items off when report
   - [ ] delete the hand-made release `v0.2.0` (it talks to localhost) and its tag, the stray
     tag `v0.1.0`, and the tag `v0.3.0` (its run stopped for want of the variables, which are now
     defaults; the release went out as `v0.3.1`)
+- [ ] **Click to reveal**: on `canvas-card.html`, `what is my pan number` ends with an "ID number 1"
+      pill; clicking it shows the real PAN in the side panel, clicking again hides it. The dashboard
+      still shows only the placeholder
 - [ ] **Firefox** ([`docs/testing.md`](docs/testing.md) section 10; branch `feat/firefox`):
   - [ ] on a computer: Load Temporary Add-on from `.output/firefox-mv3`; the sidebar opens from the
     toolbar button, and the section 5 goals behave as in Chrome

@@ -228,7 +228,8 @@ and the server's `[plan]` lines into a note for whoever fixes it.
 Text that exists only as pixels: open `fixtures/pages/canvas-card.html` (an ID card drawn on a
 canvas) and ask `What is the PAN on my ID?` or `what is my pan number`. Skrim captures the
 tab, reads the canvas with on-device OCR, and hides what it read like any other text, so the
-answer should show an "ID number 1" pill rather than the number. The planner reads the line
+answer should show an "ID number 1" pill rather than the number; click the pill and it shows
+the real PAN, here only (click again to hide it). The planner reads the line
 it needs ("Read “PAN ID number 1”") and answers; it should not click "Download PDF". This
 only works while the task's tab is the one on screen.
 
