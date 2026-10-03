@@ -7,6 +7,24 @@ export interface ProviderConfig {
   apiKey?: string;
   /** Extra fields for the chat-completions body, for a provider-specific switch. */
   extraBody?: Record<string, unknown>;
+  /**
+   * The most tokens a request may estimate at; a bigger page is shortened to
+   * fit (prompts/fit.ts). PROMPT_BUDGET_TOKENS overrides it for every provider.
+   */
+  promptBudgetTokens: number;
+}
+
+/**
+ * Per provider. Groq's free tier allows 8,000 tokens a minute per model, and
+ * rejects one request over that outright; 5,500 leaves room for the estimate
+ * being off and for the answer. NVIDIA counts requests, not tokens; the cap is
+ * there for speed. Ollama's skrim-planner reads 16k tokens and must answer too.
+ */
+const PROMPT_BUDGET: Record<ProviderName, number> = { groq: 5_500, nvidia: 16_000, ollama: 13_000 };
+
+function promptBudget(provider: ProviderName): number {
+  const set = Number(process.env.PROMPT_BUDGET_TOKENS);
+  return Number.isFinite(set) && set > 0 ? set : PROMPT_BUDGET[provider];
 }
 
 export interface ServerConfig {
@@ -37,6 +55,7 @@ function profile(provider: ProviderName, setting: string): ProviderConfig {
       // of 42 in the provider study; Llama 3.2 11B, the old default, none.
       model: process.env.NVIDIA_MODEL || 'nvidia/nemotron-3-super-120b-a12b',
       apiKey: requireKey('NVIDIA_API_KEY', setting, provider),
+      promptBudgetTokens: promptBudget(provider),
     };
   }
   if (provider === 'groq') {
@@ -50,6 +69,7 @@ function profile(provider: ProviderName, setting: string): ProviderConfig {
       // one JSON action, and the free tier counts thinking against its
       // 8,000 tokens a minute.
       extraBody: { reasoning_effort: process.env.GROQ_REASONING_EFFORT || 'none' },
+      promptBudgetTokens: promptBudget(provider),
     };
   }
   if (provider === 'ollama') {
@@ -62,6 +82,7 @@ function profile(provider: ProviderName, setting: string): ProviderConfig {
       // instruct build: plain "qwen3-vl:4b" is the thinking build, 10-80x slower
       // a step, and it cannot be told not to think through the OpenAI-compatible API.
       model: process.env.OLLAMA_MODEL || 'skrim-planner',
+      promptBudgetTokens: promptBudget(provider),
     };
   }
   throw new Error(`Unsupported ${setting}: ${String(provider)}. Use groq, ollama or nvidia.`);

@@ -1,5 +1,6 @@
 import type { Action, PlanRequest, ScreenElement } from '@skrim/schema';
 import type { ChatMessage } from '../providers/index.js';
+import { estimateTokens, fitRequest, type FitReport } from './fit.js';
 import { SYSTEM_PROMPT } from './system.js';
 
 /**
@@ -24,7 +25,31 @@ export function buildPrompt(request: PlanRequest): ChatMessage[] {
   ];
 }
 
-export function renderRequest(request: PlanRequest): string {
+/**
+ * The prompt, shortened to `budgetTokens` when the page is too big for it
+ * (prompts/fit.ts). A request that fits is the same as buildPrompt's.
+ */
+export function buildFittedPrompt(request: PlanRequest, budgetTokens: number): { messages: ChatMessage[]; report: FitReport | null; estimatedTokens: number } {
+  const measure = (candidate: PlanRequest, shortened: boolean) =>
+    estimateTokens(SYSTEM_PROMPT.length, renderRequest(candidate, { shortened }).length);
+  const { request: fitted, report } = fitRequest(request, budgetTokens, (candidate) => measure(candidate, candidate !== request));
+  const shortened = report !== null;
+  return {
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: renderRequest(fitted, { shortened }) },
+    ],
+    report,
+    estimatedTokens: measure(fitted, shortened),
+  };
+}
+
+/**
+ * `shortened`: the page was cut to fit the provider's budget; one line tells
+ * the planner, so it opens or scrolls to an item rather than guess at the
+ * rest of a cut text.
+ */
+export function renderRequest(request: PlanRequest, options: { shortened?: boolean } = {}): string {
   const { graph } = request;
   const lines: string[] = [];
 
@@ -39,6 +64,9 @@ export function renderRequest(request: PlanRequest): string {
   const beyond = graph.beyondView;
   if (beyond && beyond.above + beyond.below > 0) {
     lines.push(`Not listed: ${beyond.above} more elements above the view and ${beyond.below} below. Scroll to reach them.`);
+  }
+  if (options.shortened) {
+    lines.push('This page was too long to send whole: text ending in "…" is cut short, and some elements far from the view are left out. Open or scroll to an item to read it in full.');
   }
 
   if (graph.manifest.regions.length > 0) {

@@ -136,6 +136,9 @@ async function requestCompletion(config: ProviderConfig, messages: ChatMessage[]
       const retryAfterMs = rateLimitWaitMs(response.headers.get('retry-after'), body);
       throw new ProviderError('rate_limited', `The ${config.provider} rate limit was reached. Wait a minute and retry.`, detail, 429, retryAfterMs);
     }
+    if (response.status === 413) {
+      throw new ProviderError('http', `This page is too big for one ${config.provider} request, even shortened. Scroll to the part you need, or try a smaller page.`, detail, 413);
+    }
     throw new ProviderError('http', `The ${config.provider} provider returned HTTP ${response.status} for ${config.model}`, detail, response.status);
   }
 
