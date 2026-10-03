@@ -262,8 +262,8 @@ Said plainly, because a judge will find them:
 - **One eval miss:** the NER model does not find "Meera Iyer" at the head of "Meera Iyer, Rohan
   Iyer and Tara Iyer". The false positives are mostly street and place names taken for addresses
   or names, and a search results page where a business phone makes everything look personal.
-  Plain 10-digit mobile numbers with no country code are not caught by the regex bank (only
-  `+91...` and `tel` fields are).
+  A 10-digit number labelled as an order, invoice, PNR or account is not taken for a mobile;
+  unlabelled, ten digits starting 6 to 9 are.
 - **A private name on a public-looking page is readable** unless it is in the goal, follows a
   cue word, is in an email address on the page, or sits beside a face.
 - **The planner sees text only.** A task that needs to look at a picture (a chart, a CAPTCHA) is
@@ -277,8 +277,8 @@ Said plainly, because a judge will find them:
 
 ## Tests
 
-`pnpm verify` runs the invariants, typechecks all 7 packages, and 255 tests: the wire contract
-(35), the server's parsing, prompt, limits and fitting a big page (25), the scorer (11), and the extension (184:
+`pnpm verify` runs the invariants, typechecks all 7 packages, and 258 tests: the wire contract
+(35), the server's parsing, prompt, limits and fitting a big page (25), the scorer (11), and the extension (187:
 detectors, the loop with a scripted planner, the data guard, redaction of text read from pixels, which names are
 private, URL handling, vision, DOM extraction). CI runs it on every PR. `pnpm test:agent` runs
 the whole loop against a real planner on fixture pages; `pnpm study` measures a model on 17
