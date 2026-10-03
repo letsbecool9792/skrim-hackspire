@@ -49,6 +49,18 @@ questions, a rule on finding search boxes and element positions cut to the corne
 dropped) each cost it tasks it had passed every time. `pnpm study -- ollama:skrim-planner`
 runs the 16 tasks on the local model for free.
 
+**A page too big for the provider is shortened, not refused** (`src/prompts/fit.ts`). Each
+provider has a budget (`promptBudgetTokens` in `src/config.ts`: Groq 5,500, NVIDIA 16,000,
+Ollama 13,000; `PROMPT_BUDGET_TOKENS` overrides all three). A request that fits is sent exactly
+as before, which is every fixture (the largest is about 2,000 tokens), so the study numbers
+stand. One that does not loses, in order and only as far as needed: text over 160 characters,
+text outside the view, old steps' notes, then text in the view cut to 100 and 60 characters,
+then controls outside the view, farthest first. Controls in the view are never left out, a
+cut never splits a placeholder, and one line tells the model the page was shortened. If Groq
+still answers 413 ("Request too large"), the planner fits it again to 60% of the budget, once.
+Tokens are estimated from characters (prose 3.7 a token, element lines 2.8): on a Gmail-sized
+page the estimate said 5,458 and Groq counted 5,132.
+
 ## Handling model output
 
 Small open-weight models produce malformed JSON regularly. Expect it:

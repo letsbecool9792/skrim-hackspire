@@ -255,14 +255,17 @@ Said plainly, because a judge will find them:
   cue word, is in an email address on the page, or sits beside a face.
 - **The planner sees text only.** A task that needs to look at a picture (a chart, a CAPTCHA) is
   out of reach until a redacted-screenshot path exists; OCR covers text in images.
-- **Free tiers are the bottleneck.** Groq allows about 4-5 steps a minute and real pages cost
-  more tokens than our fixtures do; the 4B local model is the weakest planner of the three.
+- **Free tiers are the bottleneck.** Groq allows about 4-5 steps a minute, and refuses one
+  request over 8,000 tokens outright, which a real page can be. The server shortens such a page to
+  fit (long text first, then what is out of view; never the controls in view), so a big page
+  costs some context and about one step a minute. The 4B local model is the weakest planner of
+  the three.
 - **Our fixtures are our own.** Real-site results are pending.
 
 ## Tests
 
-`pnpm verify` runs the invariants, typechecks all 7 packages, and 234 tests: the wire contract
-(35), the server's parsing, prompt and limits (20), the scorer (11), and the extension (168:
+`pnpm verify` runs the invariants, typechecks all 7 packages, and 240 tests: the wire contract
+(35), the server's parsing, prompt, limits and fitting a big page (25), the scorer (11), and the extension (168:
 detectors, the loop with a scripted planner, redaction of text read from pixels, which names are
 private, URL handling, vision, DOM extraction). CI runs it on every PR. `pnpm test:agent` runs
 the whole loop against a real planner on fixture pages; `pnpm study` measures a model on 16

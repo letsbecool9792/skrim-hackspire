@@ -178,7 +178,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (234 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (240 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       without the OmniParser detector (+77 MB once exported: the built extension is
@@ -330,6 +330,9 @@ add to it whenever a change needs a manual check, and tick items off when report
   - [ ] delete the hand-made release `v0.2.0` (it talks to localhost) and its tag, the stray
     tag `v0.1.0`, and the tag `v0.3.0` (its run stopped for want of the variables, which are now
     defaults; the release went out as `v0.3.1`)
+- [ ] **Big pages on Groq** (branch `feat/request-budget`): on Gmail, `reply to my last email with
+      "hello"` gets past opening the email. The server prints "page too big for groq: fitted to about
+      N tokens" on the thread's steps, and no step fails with "too big"
 - [ ] **Click to reveal**: on `canvas-card.html`, `what is my pan number` ends with an "ID number 1"
       pill; clicking it shows the real PAN in the side panel, clicking again hides it. The dashboard
       still shows only the placeholder
@@ -420,6 +423,13 @@ Wikipedia's search.**
   prompt cost the local 4B model tasks (next entry), so the request is as before. What
   changed: `FALLBACK_PROVIDER` takes over when Groq says to come back later (its daily cap),
   and NVIDIA's default model is now Nemotron 3 Super.
+- *A single request over Groq's 8,000 tokens a minute is refused* (HTTP 413, "Request too
+  large"), not delayed: on Gmail the inbox fitted, the open thread did not, and the task stopped
+  after one step. Since 2026-10-03 the server fits each request to a per-provider budget
+  (`apps/server/src/prompts/fit.ts`; [`apps/server/CLAUDE.md`](apps/server/CLAUDE.md)). A
+  Gmail-sized test page: refused before; after, 5,132 tokens and Groq chose "Reply". The fixtures
+  are never shortened. The dashboard still shows the request as the extension sent it; the model
+  may get a shortened copy.
 
 Measured with `pnpm study`, 16 tasks: local Qwen3-VL 4B (3 runs each) 37 of 48 before, 45
 of 48 after, every task passed before still passing 3 of 3 (only "reply" fails, as before);
