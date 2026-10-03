@@ -9,7 +9,4 @@ export default defineConfig({
   // to move to 5174 silently and the dashboard says "disconnected" for no
   // visible reason. Fail loudly instead.
   server: { port: 5173, strictPort: true },
-  // The hosted copy lives under /skrim-hackspire/dashboard/ on GitHub Pages;
-  // the deploy workflow sets BASE_PATH. Locally it stays "/".
-  base: process.env.BASE_PATH ?? '/',
 })

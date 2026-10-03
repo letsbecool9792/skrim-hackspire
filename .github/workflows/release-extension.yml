@@ -10,9 +10,10 @@ name: release-extension
 # (releases/latest/download/skrim-chrome.zip) always gets the newest one.
 #
 # The build talks to the hosted planner and the hosted dashboard, not to
-# localhost: set the repository variable SKRIM_SERVER_URL (Settings → Secrets
-# and variables → Actions → Variables) to the Space's URL first. Without it
-# the release stops, rather than ship a zip that only works on our laptops.
+# localhost: set the repository variables SKRIM_SERVER_URL (the Space's URL)
+# and WXT_DASHBOARD_URL (the dashboard's Vercel URL) first, under Settings →
+# Secrets and variables → Actions → Variables. Without them the release
+# stops, rather than ship a zip that only works on our laptops.
 
 on:
   push:
@@ -28,16 +29,16 @@ jobs:
 
     env:
       SKRIM_SERVER_URL: ${{ vars.SKRIM_SERVER_URL }}
-      WXT_DASHBOARD_URL: ${{ vars.WXT_DASHBOARD_URL || 'https://letsbecool9792.github.io/skrim-hackspire/dashboard/' }}
+      WXT_DASHBOARD_URL: ${{ vars.WXT_DASHBOARD_URL }}
       # Nothing calls the icon detector yet, and exporting it means ten
       # minutes of Python setup on every release.
       SKRIM_SKIP_ICON: "1"
 
     steps:
-      - name: Check the planner URL is set
+      - name: Check the hosted URLs are set
         run: |
-          if [ -z "$SKRIM_SERVER_URL" ]; then
-            echo "::error::Set the repository variable SKRIM_SERVER_URL to the hosted planner's URL first."
+          if [ -z "$SKRIM_SERVER_URL" ] || [ -z "$WXT_DASHBOARD_URL" ]; then
+            echo "::error::Set the repository variables SKRIM_SERVER_URL (the planner) and WXT_DASHBOARD_URL (the dashboard) first."
             exit 1
           fi
 
@@ -88,7 +89,7 @@ jobs:
 
             It plans with our hosted server, which is on a free tier shared by everyone
             trying it: a few steps a minute. To watch what the server receives, open the
-            dashboard: https://letsbecool9792.github.io/skrim-hackspire/dashboard/
+            dashboard: ${{ vars.WXT_DASHBOARD_URL }}
 
             Firefox is not supported yet. To build from source, see the
             [README](https://github.com/letsbecool9792/skrim-hackspire#readme).

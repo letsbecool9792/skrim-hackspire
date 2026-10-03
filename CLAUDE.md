@@ -127,7 +127,7 @@ skrim/
 │   │                      split-screen wire view + live resource panel. Carries 40%
 │   │                      of the rubric by making the invisible visible (brief §9).
 │   │
-│   └── web/               Vite + React. Public landing page. Static, on GitHub Pages.
+│   └── web/               Vite + React. Public landing page. Static, on Vercel.
 │                          SEPARATE from dashboard on purpose: a broken landing-page
 │                          build must have zero ability to take the demo down.
 │
@@ -317,12 +317,13 @@ add to it whenever a change needs a manual check, and tick items off when report
       carries on, since nothing calls the detector yet. `--skip-icon` skips it. The model is
       AGPL-3.0, and with it the extension is 168 MB
 - [ ] **Deploy** ([`docs/deploy.md`](docs/deploy.md), one-time, about 15 minutes):
-  - [ ] Settings → Pages → Source: GitHub Actions, then run the deploy-pages workflow. The landing
-    page opens at `https://letsbecool9792.github.io/skrim-hackspire/` and the dashboard at
-    `.../dashboard/`; check both in light and dark, and at phone width
+  - [ ] two Vercel projects from this repo, root `apps/web` and root `apps/dashboard`; check the
+    landing page in light and dark and at phone width, and that its Download button works once a
+    release exists
   - [ ] the Hugging Face Space `skrim-planner` with the `GROQ_API_KEY` secret; its URL answers
     `{"status":"ok"}`
-  - [ ] the repository variable `SKRIM_SERVER_URL` = the Space's URL, then push a tag
+  - [ ] the repository variables `SKRIM_SERVER_URL` (the Space) and `WXT_DASHBOARD_URL` (the
+    dashboard on Vercel), then push a tag
     (`v0.3.0`): the release has `skrim-chrome.zip`, and the landing page's Download button
     gets it
   - [ ] load that zip in Chrome (remove the local Skrim first): a task runs through the hosted
@@ -369,7 +370,7 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [ ] Test on three real sites (Wikipedia, Amazon.in, Gmail) with the goals real users type, not
       our own pages: [`docs/real-site-tests.md`](docs/real-site-tests.md)
 - [x] Dashboard: split-screen wire view + resource panel
-- [x] Landing page (`apps/web`, PR #25), on GitHub Pages with the dashboard
+- [x] Landing page (`apps/web`, PR #25); it and the dashboard deploy to Vercel
 - [ ] Deployed: the one-time setup in [`docs/deploy.md`](docs/deploy.md) (waiting on Suparno)
 - [ ] Tradeoff curve: GLiNER quint8 vs fp16; hosted vs local model accuracy and latency
 
