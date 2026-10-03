@@ -7,7 +7,7 @@ extension zip on GitHub Releases.
 |---|---|---|
 | Landing page | Vercel, root `apps/web`: `https://skrim-hackspire.vercel.app` | every push to main |
 | Dashboard | Vercel, root `apps/dashboard`: `https://skrim-dashboard.vercel.app` | every push to main |
-| Planning server | Vercel, root `apps/server` (one function) | every push to main |
+| Planning server | Vercel, root `apps/server` (one function): `https://skrim-server.vercel.app` | every push to main |
 | Extension zip | GitHub Releases, `releases/latest/download/skrim-chrome.zip` | pushing a `v*` tag (`release-extension.yml`) |
 
 The demo itself still runs on a laptop (`pnpm dev:server`, `pnpm dev:dashboard`, the extension
@@ -57,7 +57,7 @@ has no per-user limit. If that becomes a problem, change the key in Vercel and r
 ### 2. The extension release
 
 1. GitHub → Settings → Secrets and variables → Actions → **Variables**, two new variables, no
-   trailing slash: `SKRIM_SERVER_URL` = the server project's URL, and `WXT_DASHBOARD_URL` =
+   trailing slash: `SKRIM_SERVER_URL` = `https://skrim-server.vercel.app`, and `WXT_DASHBOARD_URL` =
    `https://skrim-dashboard.vercel.app`. Without them the release workflow stops instead of
    shipping a zip that talks to `localhost`.
 2. Tag and push: `git tag v0.3.0`, then `git push origin v0.3.0`. The workflow builds with the
@@ -71,7 +71,7 @@ for the dashboard at `localhost:5173`. Only the release workflow sets `SKRIM_SER
 `WXT_DASHBOARD_URL`. To try a hosted build by hand:
 
 ```powershell
-$env:SKRIM_SERVER_URL = "https://<server>.vercel.app"
+$env:SKRIM_SERVER_URL = "https://skrim-server.vercel.app"
 $env:WXT_DASHBOARD_URL = "https://skrim-dashboard.vercel.app"
 $env:SKRIM_SKIP_ICON = "1"
 pnpm --filter @skrim/extension build

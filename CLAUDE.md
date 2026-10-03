@@ -13,12 +13,12 @@ architectural decision, add it to "Locked decisions" with a one-line reason.
 ## Where the project stands
 
 The agent loop is closed end to end (DOM graph → PII redaction → server → one action →
-verify), in a chat side panel, and works in Chrome on the fixture pages. Both
-Qwen planners finish all six fixture goals. The eval harness scores detection on 22
-annotated fixtures, in Chromium too. The default planner is Groq's Qwen 3.8 27B. The Chrome
-retest's bugs are fixed, all but Wikipedia's search, whose cause is not found yet. The
-dashboard shows what the server receives, live, beside a resource panel. Next: **try the
-dashboard in Chrome**, then the side panel's look. See "Status" and "Open findings".
+verify), in a chat side panel, and works in Chrome on fixture pages and real sites (Groq's Qwen
+3.8 27B; the local 4B handles simple pages only). The eval scores detection on 37 annotated
+fixtures in Chromium: 99.0% recall, 87.5% precision. The dashboard shows what the server
+receives, live, beside a resource panel. The landing page, the dashboard and the server are
+hosted on Vercel ([`docs/deploy.md`](docs/deploy.md)), and releases publish a Chrome zip. Next:
+the first release, the pitch (who pays, phones), and the demo. See "Status" and "Open findings".
 
 ---
 
@@ -318,8 +318,9 @@ add to it whenever a change needs a manual check, and tick items off when report
   - [x] Vercel projects for `apps/web` (skrim-hackspire.vercel.app) and `apps/dashboard`
     (skrim-dashboard.vercel.app). Still to check: the landing page in light and dark and at phone
     width, and its Download button once a release exists
-  - [ ] a third Vercel project, root `apps/server`, with `GROQ_API_KEY` in its environment
-    variables; its URL answers `{"status":"ok"}`
+  - [x] a third Vercel project, root `apps/server` (skrim-server.vercel.app), with `GROQ_API_KEY` in
+    its environment variables. Still to check after the server commit is pushed: its URL answers
+    `{"status":"ok"}`
   - [ ] the repository variables `SKRIM_SERVER_URL` (the server on Vercel) and
     `WXT_DASHBOARD_URL` (the dashboard on Vercel), then push a tag
     (`v0.3.0`): the release has `skrim-chrome.zip`, and the landing page's Download button

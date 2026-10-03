@@ -10,6 +10,13 @@ back in only at the moment it types it.
 
 Built by team **Chipotle**. Chrome and Firefox (MV3); Firefox is untried so far.
 
+| | |
+|---|---|
+| Landing page | https://skrim-hackspire.vercel.app |
+| Extension for Chrome | [skrim-chrome.zip](https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-chrome.zip), the latest [release](https://github.com/letsbecool9792/skrim-hackspire/releases) |
+| Live dashboard (what the server receives) | https://skrim-dashboard.vercel.app |
+| Planning server | https://skrim-server.vercel.app |
+
 ## Contents
 
 [How it works](#how-it-works) · [What the server sees](#what-the-server-sees) ·
@@ -216,6 +223,17 @@ tasks. [`docs/testing.md`](docs/testing.md) says how to see each part work.
 
 ## Run it
 
+### Without building anything
+
+Download [skrim-chrome.zip](https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-chrome.zip)
+and unzip it. In Chrome: `chrome://extensions`, turn on Developer mode, **Load unpacked**, and
+choose the unzipped folder. Open any page, click Skrim's toolbar button, and ask it to do
+something. It plans with the hosted server (Qwen 3.8 27B on Groq's free tier, shared by everyone
+trying it: a few steps a minute). To watch what the server receives, open
+https://skrim-dashboard.vercel.app in the same browser while the side panel is open.
+
+### From source
+
 Needs Node 22, pnpm (`npm install -g pnpm`), and a free Groq key.
 
 ```powershell
@@ -240,14 +258,15 @@ For the offline planner: `ollama pull qwen3-vl:4b-instruct`, `pnpm ollama:setup`
 | | |
 |---|---|
 | `apps/extension` | The product: side panel, agent loop, on-device models, WXT for Chrome and Firefox |
-| `apps/server` | Planner: one OpenAI-compatible adapter (Groq, Ollama, NVIDIA), prompt, JSON repair |
+| `apps/server` | Planner: one OpenAI-compatible adapter (Groq, Ollama, NVIDIA), prompt, JSON repair; one Vercel function when hosted |
 | `apps/dashboard` | The live view of what the server sees and what it costs |
+| `apps/web` | The landing page |
 | `packages/schema` | The contract (Zod) shared by all of them, so a mismatch is a compile error |
 | `packages/eval` | The harness behind the numbers above |
 | `design/tokens.css` | The shared look; fonts are bundled, nothing is fetched |
 | `fixtures` | Synthetic pages with a list of what is private on each |
 
-Where the project stands, what was decided and why: [`CLAUDE.md`](CLAUDE.md). The problem, the
+How the hosted copies are deployed: [`docs/deploy.md`](docs/deploy.md). Where the project stands, what was decided and why: [`CLAUDE.md`](CLAUDE.md). The problem, the
 scoring and the privacy design: [`BRIEF.md`](BRIEF.md).
 
 ## Licences
