@@ -1,6 +1,7 @@
 # Testing what exists
 
-How to see each part of Skrim working. Everything runs on your machine.
+How to see each part of Skrim working. Sections 1 to 8 run on your machine; section 9 checks
+the hosted copies.
 What still can't be tested, and why, is at the bottom. What is left to build is in
 [`CLAUDE.md`](../CLAUDE.md) under "Status" and "Open findings".
 
@@ -314,11 +315,76 @@ only the dashboard's own page gets it.
 
 ---
 
+## 8. The landing page
+
+```powershell
+pnpm dev:web                              # prints http://localhost:5173 (5174 if the dashboard has it)
+```
+
+Open the address it prints and check, top to bottom:
+
+1. **Hero**: "Skrim", the tagline, three buttons (Get it for Chrome, How it works, Source), and two
+   panels side by side: "What you see" with a name, email, phone and an order, and "What the
+   server gets" with violet pills (name 1, email 1, phone 1) where the private values were. The
+   order stays readable in both. Nothing moves or swaps by itself.
+2. **Get it for Chrome** scrolls to "Try it"; **How it works** to the five-stage pipeline;
+   **Source** opens the GitHub repo in a new tab.
+3. **The numbers**: six cards (99.0%, 87.5%, 1.9%, 42 of 42, 137 ms, 87 MB) and the model sizes
+   table. They must match README "The numbers"; every figure lives in `apps/web/src/content.ts`.
+4. **Try it**: the Download for Chrome button, five install steps with a link to the live
+   dashboard, then the build-from-source steps.
+5. **Footer**: "by Chipotle", the licences, Source on GitHub.
+6. **Both themes**: switch Windows to dark (Settings → Personalisation → Colours) and back. Every
+   section stays readable; the pills stay violet.
+7. **Phone width**: DevTools (F12) → the device toolbar (Ctrl+Shift+M) → 360 px wide. The hero
+   stacks, nothing scrolls sideways, the long commands wrap.
+8. **Nothing is fetched from elsewhere**: DevTools → Network, reload. Every request goes to
+   localhost: the fonts are bundled, there is no analytics.
+
+Before a pull request: `pnpm --filter @skrim/web build` and `pnpm --filter @skrim/web lint`
+both pass.
+
+---
+
+## 9. The hosted copies
+
+What is deployed where, and how: [`deploy.md`](deploy.md). After a push to main, Vercel
+redeploys all three in a minute or two.
+
+| Check | Expected |
+|---|---|
+| https://skrim-server.vercel.app | `{"status":"ok", ... "model":"qwen/qwen3.8-27b"}` |
+| https://skrim-hackspire.vercel.app | the landing page, as in section 8 |
+| https://skrim-dashboard.vercel.app | "Waiting for a task…" |
+| The landing page's **Download for Chrome** | downloads `skrim-chrome.zip` (a 404 until the first release) |
+
+The server from the command line: four real steps (about 5,000 Groq tokens), each checked
+for a sensible action:
+
+```powershell
+$env:SKRIM_SERVER_URL = "https://skrim-server.vercel.app"; pnpm smoke:server
+Remove-Item Env:SKRIM_SERVER_URL
+```
+
+The whole hosted path, in Chrome:
+
+1. On `chrome://extensions`, turn off (or remove) your local Skrim, so only one is loaded.
+2. Download the zip from the latest release, unzip it, **Load unpacked** the folder.
+3. Open https://skrim-dashboard.vercel.app in one tab, and `fixtures/pages/form-test.html` (or any
+   page) in another.
+4. Open Skrim's side panel. Its header names `qwen/qwen3.8-27b`; the dashboard turns live within
+   about 2 s.
+5. Run the support-form goal (section 5). The steps go through the hosted server, and the
+   dashboard shows each one and the request with tokens only, as in section 7.
+
+Afterwards, remove the released copy and turn your local build back on.
+
+---
+
 ## What cannot be tested yet
 
 | Part | Why |
 |---|---|
-| Face detection | Not built; it matters once a screenshot goes to the server, and today none does. No eval fixture has a face yet |
-| Icon detection, vision fusion | The OmniParser model is not exported; fusion waits for it. (OCR is in the loop: text in a canvas, image or frame is read and redacted) |
-| Landing page | Still the Vite template |
+| Icon detection, vision fusion | The OmniParser model is exported and its test passes, but nothing calls it yet |
+| Faces in a request | Faces are counted (section 6), but no screenshot goes to the server today, so nothing is blurred or sent |
 | Firefox | Builds, but nothing has been tried in it yet |
