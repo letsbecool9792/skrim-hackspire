@@ -57,7 +57,7 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 254 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 255 tests:
 
 | Tests | Covers |
 |---|---|
@@ -67,7 +67,7 @@ Runs the five invariant rules, typechecks all 7 packages, and runs 254 tests:
 | 80 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection (birth dates, labels from the element before, Aadhaar numbers on an ID card, emails OCR split, passport numbers and patient or member ids after their labels), form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), whole addresses, the token vault |
 | 22 in `lib/vision` | DOM + vision fusion, the escalation policy, which regions to read with OCR, face size, and the icon detector on the real model (skipped when it is not exported) |
 | 18 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons, a Google Form question named once, only what is near the view) and click verification, in a simulated DOM |
-| 63 in `lib/agent` | The data guard (which kinds a goal asks for, the site a value came from, IDs always asked, answers remembered; in the loop: asked, allowed, refused, no one to ask, stopped while asking), typing into the field a question heading names, redacting text read from pixels (an ID card image, an email in a frame), names in a URL's path, the dashboard feed (its format, what it holds back, the heartbeat), and the whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order, text read from pixels, a step repeated for nothing, a click whose change shows late, the end of the page, stopping when name detection cannot start), which names are private (including a name spelled out by an email address, and a page with a face in view), which clicks commit the user, and which tab a panel opened as a tab (Firefox for Android) works on |
+| 64 in `lib/agent` | The data guard (which kinds a goal asks for, the site a value came from, IDs always asked, answers remembered; in the loop: asked, allowed, refused, no one to ask, stopped while asking), typing into the field a question heading names, redacting text read from pixels (an ID card image, an email in a frame), names in a URL's path, the dashboard feed (its format, what it holds back, the heartbeat), and the whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order, text read from pixels, a step repeated for nothing, a click whose change shows late, the end of the page, stopping when name detection cannot start), which names are private (including a name spelled out by an email address, and a page with a face in view), which clicks commit the user, and which tab a panel opened as a tab (Firefox for Android) works on |
 
 The same command runs in CI on every PR.
 
@@ -170,6 +170,9 @@ right (or, for a question, the answer says the right token), the task ends as it
 nothing unasked was touched (no "Place order" when asked to change a coupon), and no raw
 personal data reached the server. `pnpm test:agent -- --tasks pan,wiki-search` runs only the
 tasks named, step by step.
+
+On Groq, these runs use the same daily allowance as the side panel: 200,000 tokens a day per
+model, and the quick run uses about 45,000. Do not run them on the key you will demo with.
 
 ### Comparing models: the provider study
 

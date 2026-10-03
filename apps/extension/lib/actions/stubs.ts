@@ -22,11 +22,16 @@ function isTextField(element: Element): element is Field {
   return element instanceof HTMLTextAreaElement || (element instanceof HTMLElement && element.isContentEditable);
 }
 
+/** How far up from the target to look for the section it heads: a Google Form question is 3 levels. */
+const MAX_SECTION_DEPTH = 5;
+
 /**
- * The field to type into: the target itself, or the one text field it names.
- * On a Google Form a question's heading names its field (aria-labelledby), so
- * both carry the question as their name, and the planner may pick the
- * heading. A <label>, or a box holding a single field, is the same case.
+ * The field to type into: the target itself, or the one text field it stands
+ * for. On a Google Form the planner may pick a question's heading rather than
+ * its box: a short answer's box is named by the heading (aria-labelledby), a
+ * paragraph's only "Your answer". So a heading, a <label> or any other
+ * element stands for the field it names, or else for the only field in its
+ * own section of the page.
  */
 function fieldFor(target: Element | undefined): Field | undefined {
   if (!target?.isConnected) return undefined;
@@ -34,11 +39,16 @@ function fieldFor(target: Element | undefined): Field | undefined {
   if (target instanceof HTMLLabelElement && target.control && isTextField(target.control)) return target.control;
   if (target.id) {
     const named = Array.from(document.querySelectorAll("[aria-labelledby]"))
-      .filter((element) => element.getAttribute("aria-labelledby")!.split(/s+/).includes(target.id) && isTextField(element));
+      .filter((element) => element.getAttribute("aria-labelledby")!.trim().split(/\s+/).includes(target.id) && isTextField(element));
     if (named.length === 1) return named[0] as Field;
   }
-  const inside = Array.from(target.querySelectorAll("input, textarea, [contenteditable]")).filter(isTextField);
-  return inside.length === 1 ? inside[0] : undefined;
+  // The nearest section holding any text field stands for it only if it holds one.
+  let section: Element | null = target;
+  for (let depth = 0; section && section !== document.body && depth <= MAX_SECTION_DEPTH; depth++, section = section.parentElement) {
+    const fields = Array.from(section.querySelectorAll("input, textarea, [contenteditable]")).filter(isTextField);
+    if (fields.length > 0) return fields.length === 1 ? fields[0] : undefined;
+  }
+  return undefined;
 }
 
 export async function executeType(action: TypeAction, actionId: string, registry: Map<string, Element>, getObservationVersion: () => number, resolveToken?: (value: string) => string | null): Promise<ActionResult> {
