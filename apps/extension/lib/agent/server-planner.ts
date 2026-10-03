@@ -15,7 +15,11 @@ export class PlannerError extends Error {
   }
 }
 
-export function createServerPlanner(serverUrl: string): ActionPlanner {
+/**
+ * `providerKey`: the user's own key for a model picked in the side panel. Sent
+ * as a header, never in the request, which the dashboard shows.
+ */
+export function createServerPlanner(serverUrl: string, providerKey?: string): ActionPlanner {
   return async (request, signal) => {
     // The last line of defence, in the one place that touches the network.
     // Throws on raw PII; the loop stops the task rather than sending.
@@ -25,7 +29,7 @@ export function createServerPlanner(serverUrl: string): ActionPlanner {
     try {
       response = await fetch(`${serverUrl}/plan`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(providerKey ? { "X-Provider-Key": providerKey } : {}) },
         body: JSON.stringify(request),
         signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
       });

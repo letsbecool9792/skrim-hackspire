@@ -9,6 +9,10 @@ const SERVER_URL = (process.env.SKRIM_SERVER_URL ?? "http://localhost:3000").rep
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
 
+  // WXT's own HMR dev server. Pin it to 3001 so it never collides with the
+  // Skrim planning server, which defaults to 3000 (apps/server/src/index.ts).
+  dev: { server: { port: 3001 } },
+
   hooks: {
     // SKRIM_SKIP_ICON=1 (release builds, phone installs) leaves out the icon
     // detector, which nothing calls yet. Skipping its export is not enough
