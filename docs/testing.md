@@ -57,7 +57,7 @@ Lines from the extension look like `[skrim] {event: "agent.planned", ...}`.
 pnpm verify
 ```
 
-Runs the five invariant rules, typechecks all 7 packages, and runs 240 tests:
+Runs the five invariant rules, typechecks all 7 packages, and runs 254 tests:
 
 | Tests | Covers |
 |---|---|
@@ -66,8 +66,8 @@ Runs the five invariant rules, typechecks all 7 packages, and runs 240 tests:
 | 11 in `@skrim/eval` | Scoring: lining redacted text up with the original, recall, precision, IoU, over-redaction, and values read from pixels despite OCR's slips |
 | 80 in `@skrim/extension` `lib/pii`, `lib/vault` | Regex PII detection (birth dates, labels from the element before, Aadhaar numbers on an ID card, emails OCR split, passport numbers and patient or member ids after their labels), form-field hints, GLiNER's pre- and post-processing and one run of the real model (skipped when it is not fetched), whole addresses, the token vault |
 | 22 in `lib/vision` | DOM + vision fusion, the escalation policy, which regions to read with OCR, face size, and the icon detector on the real model (skipped when it is not exported) |
-| 17 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons, only what is near the view) and click verification, in a simulated DOM |
-| 49 in `lib/agent` | Redacting text read from pixels (an ID card image, an email in a frame), names in a URL's path, the dashboard feed (its format, what it holds back, the heartbeat), and the whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order, text read from pixels, a step repeated for nothing, a click whose change shows late, the end of the page, stopping when name detection cannot start), which names are private (including a name spelled out by an email address, and a page with a face in view), which clicks commit the user, and which tab a panel opened as a tab (Firefox for Android) works on |
+| 18 in `lib/dom`, `lib/actions` | The extractor (visible text, field values, dropdowns, names from images and icons, a Google Form question named once, only what is near the view) and click verification, in a simulated DOM |
+| 63 in `lib/agent` | The data guard (which kinds a goal asks for, the site a value came from, IDs always asked, answers remembered; in the loop: asked, allowed, refused, no one to ask, stopped while asking), typing into the field a question heading names, redacting text read from pixels (an ID card image, an email in a frame), names in a URL's path, the dashboard feed (its format, what it holds back, the heartbeat), and the whole loop with a scripted planner (redaction, typing via tokens, what appeared after each action, an action whose reply never comes, the stops, tripwire, cancel, a refused order, text read from pixels, a step repeated for nothing, a click whose change shows late, the end of the page, stopping when name detection cannot start), which names are private (including a name spelled out by an email address, and a page with a face in view), which clicks commit the user, and which tab a panel opened as a tab (Firefox for Android) works on |
 
 The same command runs in CI on every PR.
 
@@ -160,9 +160,12 @@ drawn on a canvas (the OCR is played by a stand-in, since happy-dom draws nothin
 search on an encyclopedia page whose search box is folded into an icon link, as Wikipedia's
 is beside the side panel.
 
-`pnpm test:agent -- --all` runs all 16 tasks: the eight above, plus a goal the page cannot
+`pnpm test:agent -- --all` runs all 17 tasks: the eight above, plus a goal the page cannot
 do, filling a sign-up form, changing a coupon, saving a profile field, a search, opening a
-result, replying in a chat, and following a nav link. A task passes only when the page ends
+result, replying in a chat, following a nav link, and filling in and submitting a Google Form
+(`gform`). The harness has no one to answer the data guard's questions, so it answers no: a
+task whose planner tries to type a value the goal did not ask for prints
+"personal values the data guard did not let it type". A task passes only when the page ends
 right (or, for a question, the answer says the right token), the task ends as it should,
 nothing unasked was touched (no "Place order" when asked to change a coupon), and no raw
 personal data reached the server. `pnpm test:agent -- --tasks pan,wiki-search` runs only the
@@ -211,8 +214,31 @@ Then the form: open `fixtures/pages/form-test.html` and try
 `Send support a message saying my parcel is late. Use my email from the account box.`
 The chat shows every step the model took; the email goes in as a labelled "email address 1"
 pill, and the page gets the real address. The name and phone fields may stay empty: the
-form does not need them and the goal did not ask. The **ⓘ** button under the result says
-what stayed on the device: here a name, an email address, a phone number and an address.
+form does not need them and the goal did not ask. If the planner tries to fill them anyway,
+Skrim stops and asks first (the data guard, below). The **Privacy** button under the result
+says what stayed on the device (here a name, an email address, a phone number and an
+address) and lists each value typed into the page, and where.
+
+**The data guard** asks before a step types a personal value your goal did not ask for, on a
+site it did not come from, or that is an ID, card or account number. On the same form, ask
+`Send support a message saying my parcel is late` (no mention of the email): when the planner
+types the email, a yellow card asks "Use your email address here?", with Allow and Don't
+allow, and the task waits. Click the "email address 1" pill in the card to see the real
+address. Allow: it is typed, and not asked again in that task. Don't allow: the field stays
+empty, the step says "Not typed: you didn't allow email address 1 here.", and the planner
+carries on without it. Press Stop while the card is open: the task ends as stopped, and
+nothing is typed.
+
+**A Google Form**: open `fixtures/pages/google-form.html` (a copy of a Google Form's markup:
+questions named by their headings, choices and Submit as plain `div`s) and ask
+`Fill in this form with my name Asha Rao, email asha.rao@example.com, phone +91 98765 43210
+and PAN ABCDE1234F. The reason is a refund, and the message is that my parcel arrived
+damaged. Then submit it.` "Sent to the server as" shows only placeholders. The name, email and
+phone go in without a question (the goal asked for them); the PAN stops at a card ("Skrim
+always checks before typing an ID number"). It scrolls, picks Refund, writes the message,
+clicks Submit, and the page says "Your response has been recorded." The account address at
+the top (asha.rao.demo@gmail.com) is hidden too. On Groq this takes about ten steps, most of
+them about 20 s apart once the minute's tokens run out. Then the same on a real Google Form.
 
 Then a real site, for example Wikipedia with `Search for Alan Turing`. The chat shows "Sent to
 the server as: Search for name 1": every name in a goal is hidden, public or not, because no

@@ -40,6 +40,7 @@ Settled in the setup session. Do not reopen without a reason.
 | Ollama `skrim-planner` (`qwen3-vl:4b-instruct` with a 16k context) for air-gap | 6 GB VRAM ceiling. See "Hardware reality". The instruct build, not the plain tag, which is the much slower thinking build |
 | **WS1 exposes registration hooks instead of owning perception/privacy/planning** | WS2 registers the graph provider (content script) and WS4 the planner (side panel); this prevents duplicate extractors and keeps browser execution independent. Token resolution needs no hook: the loop owns one vault per task |
 | **On a phone, the panel is a tab** (Firefox for Android) | Firefox for Android has no sidebar, and Chrome on phones runs no extensions. The toolbar button opens `sidepanel.html?tab=<id>`, which works on the tab it was opened from; everything else is the same add-on ([`docs/phones.md`](docs/phones.md)) |
+| **The data guard decides where a personal value may be typed, and asks the user otherwise** (`lib/agent/data-guard.ts`) | The planner never holds a value but can point at one, and a planner tricked by text on a page could type the phone number into the wrong field. Typing is the only way a value leaves the vault, so one on-device check covers every route, whatever the model or prompt: the goal asked for that kind of data (or holds the value), the site is the value's own, and an ID, card or account number always asks. A judge asked for guardrails beyond the system prompt (2026-10-03); Suparno chose asking over refusing |
 | **The agent loop runs in the side panel, not the background** | Chrome terminates an extension service worker when one `fetch()` takes over 30 s, and a local model takes up to ~40 s a step. The side panel is an ordinary page with no such limit; the task, its vault and the chat live exactly as long as the panel. Closing it stops the task |
 
 ### Provider config
@@ -178,7 +179,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (240 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (254 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       without the OmniParser detector (+77 MB once exported: the built extension is
@@ -200,7 +201,11 @@ Built, by workstream:
       and for going in circles, the tab fixed per task. Each step tells the user what
       happened in plain words; a line read from pixels can be read, not clicked; a step whose
       change shows only in the next view counts as verified; the same step on an unchanged
-      page is not repeated; a task stops before sending if name detection cannot start
+      page is not repeated; a task stops before sending if name detection cannot start.
+      **The data guard** asks in the chat before a personal value the goal did not ask for, from
+      another site, or an ID, card or account number is typed; Privacy lists what was typed where.
+      A field named by a question heading (a Google Form) is typed into when the planner picks
+      the heading
 - [x] **WS2 perception:** DOM extraction with visible text, field values, dropdown options,
       and names from images and icons (alt text, svg titles); only what is in and near the
       view, at most 120 elements, with a count of the rest. **Text in pixels** (a canvas, a
@@ -333,6 +338,18 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [ ] **Big pages on Groq** (branch `feat/request-budget`): on Gmail, `reply to my last email with
       "hello"` gets past opening the email. The server prints "page too big for groq: fitted to about
       N tokens" on the thread's steps, and no step fails with "too big"
+- [ ] **Guardrails and Google Forms** (branch `feat/guardrails`; rebuild the extension, reload
+      Skrim; [`docs/testing.md`](docs/testing.md) section 5):
+  - [ ] `form-test.html`, `Send support a message saying my parcel is late`: a yellow card asks
+    "Use your email address here?"; its pill shows the real address on a click; Allow types it,
+    Don't allow leaves the field empty with "Not typed: you didn't allow ..."; Stop while it is
+    open ends the task, nothing typed
+  - [ ] `google-form.html`, the goal in section 5: name, email and phone go in without a
+    question, the PAN asks, Refund is picked, Submit gives "Your response has been recorded."
+  - [ ] a real Google Form for the demo (short answer and paragraph questions, multiple choice
+    and checkboxes; no dropdown or date question, which are untried): the same goal works on it.
+    Send Claude its link, to compare its markup with the fixture's
+  - [ ] Privacy under a finished form task lists each value typed and the site
 - [ ] **Click to reveal**: on `canvas-card.html`, `what is my pan number` ends with an "ID number 1"
       pill; clicking it shows the real PAN in the side panel, clicking again hides it. The dashboard
       still shows only the placeholder
@@ -443,7 +460,10 @@ form's labels: 1 run of 4 passed) and cutting them to the top-left corner (it cl
 search box instead of typing: 0 of 3). The prompt and element format are as they were, plus
 three small additions. Change either only with `pnpm study -- ollama:qwen3-vl:4b-instruct`
 numbers in hand. And the Node harness has no layout, so a task that hangs on scrolling
-(`section-2`) is decided by wording alone there.
+(`section-2`) is decided by wording alone there. Its stand-in layout stacks elements down the
+page; since 2026-10-03 a scroll moves that stack (and stops at its end), because the Google
+Form task needs a scroll to reach its lower questions. Study runs before that date scrolled
+nothing.
 
 **A line read from pixels can be read, not clicked.** The content script carries out
 actions by element id, and lines from OCR (and icons from the detector, once it exists) have
