@@ -79,3 +79,14 @@ pnpm test:agent       # the fixture pages through the whole extension loop
 ```
 
 Every teammate needs their **own** keys — free-tier limits are per account.
+
+## Where it runs
+
+`src/app.ts` holds the routes and listens on nothing. `src/index.ts` serves them locally
+(`pnpm dev:server`); `src/vercel.ts` is the same app as one Vercel function, which
+`scripts/build-vercel.mjs` bundles with every dependency into `.vercel/output/` (see
+[`docs/deploy.md`](../../docs/deploy.md)). Add routes to `app.ts`, and a new top-level path
+also to `ROUTES` in the build script: each path is its own copy of the function.
+
+The hosted server is serverless, so it must stay stateless: nothing kept between requests,
+no background work after a response, no files written.

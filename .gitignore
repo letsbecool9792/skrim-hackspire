@@ -53,3 +53,6 @@ packages/eval/results/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# Vercel build output (apps/server/scripts/build-vercel.mjs) and CLI state
+.vercel/

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npx pnpm@11.25.0 install --frozen-lockfile --filter @skrim/server...",
+  "buildCommand": "node scripts/build-vercel.mjs"
+}

@@ -10,7 +10,7 @@ name: release-extension
 # (releases/latest/download/skrim-chrome.zip) always gets the newest one.
 #
 # The build talks to the hosted planner and the hosted dashboard, not to
-# localhost: set the repository variables SKRIM_SERVER_URL (the Space's URL)
+# localhost: set the repository variables SKRIM_SERVER_URL (the server's Vercel URL)
 # and WXT_DASHBOARD_URL (the dashboard's Vercel URL) first, under Settings →
 # Secrets and variables → Actions → Variables. Without them the release
 # stops, rather than ship a zip that only works on our laptops.

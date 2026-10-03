@@ -13,14 +13,15 @@
     "probe": "node --env-file-if-exists=../../.env scripts/probe-models.mjs"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.1",
     "@skrim/schema": "workspace:*",
     "@skrim/shared": "workspace:*",
-    "@hono/node-server": "^2.1.1",
     "hono": "^4.13.5",
     "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
+    "esbuild": "0.28.2",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3"
   }

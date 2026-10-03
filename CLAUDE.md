@@ -119,6 +119,8 @@ skrim/
 │   │   └── public/models/     Model weights. GITIGNORED — `pnpm models:fetch` fills it.
 │   │
 │   ├── server/            Hono + Node 22. Stateless. No user identity, no session.
+│   │                      src/app.ts holds the routes; index.ts serves them locally,
+│   │                      vercel.ts is the hosted function (docs/deploy.md).
 │   │   ├── providers/         nvidia | cloudflare | ollama | openrouter adapters.
 │   │   ├── prompts/           System prompts, few-shot examples.
 │   │   └── planner/           screen graph -> prompt -> action, with JSON repair + retry.
@@ -155,10 +157,6 @@ skrim/
 │   ├── artifacts/         ONNX we export ourselves. Gitignored: made by fetch-models.
 │   ├── requirements.txt   Python pins for the ONNX export venv.
 │   └── .venv/             Python venv, made by fetch-models. Gitignored.
-│
-├── deploy/
-│   └── huggingface/       The planning server's Space: a Dockerfile that clones
-│                          this repo, and the Space's README. docs/deploy.md.
 │
 └── docs/
     └── decisions/         ADRs. Feed these straight into the PPT — the tradeoff
@@ -317,13 +315,13 @@ add to it whenever a change needs a manual check, and tick items off when report
       carries on, since nothing calls the detector yet. `--skip-icon` skips it. The model is
       AGPL-3.0, and with it the extension is 168 MB
 - [ ] **Deploy** ([`docs/deploy.md`](docs/deploy.md), one-time, about 15 minutes):
-  - [ ] two Vercel projects from this repo, root `apps/web` and root `apps/dashboard`; check the
-    landing page in light and dark and at phone width, and that its Download button works once a
-    release exists
-  - [ ] the Hugging Face Space `skrim-planner` with the `GROQ_API_KEY` secret; its URL answers
-    `{"status":"ok"}`
-  - [ ] the repository variables `SKRIM_SERVER_URL` (the Space) and `WXT_DASHBOARD_URL` (the
-    dashboard on Vercel), then push a tag
+  - [x] Vercel projects for `apps/web` (skrim-hackspire.vercel.app) and `apps/dashboard`
+    (skrim-dashboard.vercel.app). Still to check: the landing page in light and dark and at phone
+    width, and its Download button once a release exists
+  - [ ] a third Vercel project, root `apps/server`, with `GROQ_API_KEY` in its environment
+    variables; its URL answers `{"status":"ok"}`
+  - [ ] the repository variables `SKRIM_SERVER_URL` (the server on Vercel) and
+    `WXT_DASHBOARD_URL` (the dashboard on Vercel), then push a tag
     (`v0.3.0`): the release has `skrim-chrome.zip`, and the landing page's Download button
     gets it
   - [ ] load that zip in Chrome (remove the local Skrim first): a task runs through the hosted
