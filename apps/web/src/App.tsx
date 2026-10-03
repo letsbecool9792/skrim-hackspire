@@ -122,7 +122,7 @@ export default function App() {
       {/* ── Nav ── */}
       <header className="site-header" role="banner">
         <div className="container site-header-inner">
-          <a href="/" className="site-brand" aria-label="Skrim home">
+          <a href={import.meta.env.BASE_URL} className="site-brand" aria-label="Skrim home">
             <span className="brand-icon" aria-hidden="true">
               <ShieldCheck size={18} strokeWidth={2.25} />
             </span>
@@ -195,7 +195,7 @@ export default function App() {
         <Section id="how-it-works">
           <SectionHeading>How it works</SectionHeading>
           <p className="section-body section-body--lead">
-            Five stages. The first four happen entirely on your device. The server only ever sees stage four's output.
+            Five stages. Four run on your device. The server only plans, from what stage three left of the page.
           </p>
           <ol className="pipeline" aria-label="Processing pipeline">
             {PIPELINE.map(({ icon, title, detail }, i) => (
@@ -234,7 +234,7 @@ export default function App() {
                 {"{ id: \"e17\", role: \"textbox\", label: \"Email\","}{"\n"}
                 {"  value: \""}<Token label="PII:EMAIL:1" />{"\" }"}{"\n\n"}
                 <span className="code-comment">{"// Server returns"}</span>{"\n"}
-                {"{ action: \"fill\", target: \"e17\","}{"\n"}
+                {"{ type: \"type\", target: \"e17\","}{"\n"}
                 {"  value: \""}<Token label="PII:EMAIL:1" />{"\" }"}
               </code>
             </pre>
@@ -250,7 +250,7 @@ export default function App() {
         <Section id="numbers">
           <SectionHeading>The numbers</SectionHeading>
           <p className="section-body section-body--lead">
-            Measured on the actual dev machine (RTX 4050 Laptop, 6 GB VRAM, Chrome 152). Not assumed.
+            Measured in a real Chromium with the extension loaded, on 37 pages we annotated by hand. Not assumed.
           </p>
 
           <div className="metrics-grid">
@@ -283,8 +283,7 @@ export default function App() {
             </table>
           </div>
           <p className="section-note">
-            Both WASM packages ship every build variant they support; shipping only the variants Chrome and Firefox
-            actually load saves 63 MB versus including all variants.
+            The OmniParser icon detector (81 MB) is exported but not used yet, so releases leave it out.
           </p>
         </Section>
 
@@ -363,8 +362,8 @@ export default function App() {
               <div className="install-step">
                 <span className="install-num" aria-hidden="true">5</span>
                 <span>
-                  Start the server: <code className="inline-code">pnpm dev:server</code> (requires a{" "}
-                  <a href="https://console.groq.com" className="text-link" target="_blank" rel="noopener noreferrer">free Groq key</a>).
+                  Open any page and click Skrim's toolbar button. It plans with our hosted server, which is on a
+                  free tier shared by everyone trying it: a few steps a minute. For your own, build from source.
                 </span>
               </div>
             </div>
@@ -396,8 +395,10 @@ export default function App() {
             >
               Groq API key
             </a>{" "}
-            (6,000 requests/day, no credit card). Alternatively, run Ollama locally with{" "}
-            <code className="inline-code">ollama pull qwen3-vl:4b</code> for a fully offline setup.
+            (no credit card). To plan on your own machine instead, install Ollama, run{" "}
+            <code className="inline-code">ollama pull qwen3-vl:4b-instruct</code> and{" "}
+            <code className="inline-code">pnpm ollama:setup</code>, then start the server with{" "}
+            <code className="inline-code">MODEL_PROVIDER=ollama</code>.
           </p>
         </Section>
       </main>

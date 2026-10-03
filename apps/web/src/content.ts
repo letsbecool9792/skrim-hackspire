@@ -1,21 +1,21 @@
 /**
  * src/content.ts — every number and piece of copy on the landing page lives here.
- * Updating a metric is a one-line change. Numbers come from BRIEF.md §13 only;
- * nothing is invented.
+ * Updating a metric is a one-line change. Numbers come from README.md ("The numbers")
+ * only; nothing is invented.
  */
 
 export const SITE = {
   title: "Skrim",
   tagline: "An AI agent that does tasks on your behalf — and never shows the server your data.",
   githubUrl: "https://github.com/letsbecool9792/skrim-hackspire",
-  team: "tropical crush",
+  team: "Chipotle",
   /**
-   * Direct link to the latest release .zip on GitHub Releases.
-   * Format: https://github.com/letsbecool9792/skrim-hackspire/releases/download/v0.1.0/skrim-chrome-v0.1.0.zip
-   * Leave empty ("") until the first GitHub Release is published; the
-   * landing page falls back to build-from-source instructions when empty.
+   * The newest release's zip. GitHub redirects "latest/download/<name>" to the
+   * newest published release, and the release workflow always names the
+   * asset skrim-chrome.zip, so this link never needs editing. Set it to ""
+   * to fall back to the releases page.
    */
-  downloadUrl: "",
+  downloadUrl: "https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-chrome.zip",
   /** Link to the GitHub Releases page (always shown). */
   releasesUrl: "https://github.com/letsbecool9792/skrim-hackspire/releases",
 } as const;
@@ -42,13 +42,13 @@ export const PIPELINE: PipelineStep[] = [
     icon: "Eye",
     title: "Read the page",
     detail:
-      "The extension walks the live DOM — roles, labels, values — and captures rendered pixels for anything the DOM cannot describe.",
+      "The extension walks the live DOM — roles, labels, values — and reads text that exists only as pixels (a canvas, an image, an embedded frame) with on-device OCR.",
   },
   {
     icon: "ScanText",
     title: "Find personal data",
     detail:
-      "A local NER model spots names and addresses in text. Regex catches structured formats: emails, phone numbers, card numbers. Both run on your device.",
+      "A local NER model spots names and addresses in text. Rules catch structured formats: emails, phone numbers, cards, PAN, Aadhaar, account numbers. All of it runs on your device.",
   },
   {
     icon: "ShieldCheck",
@@ -60,7 +60,7 @@ export const PIPELINE: PipelineStep[] = [
     icon: "Brain",
     title: "Plan on the server",
     detail:
-      "The scrubbed description goes to an open-weight model. It returns one action: \u201cclick button in row 3.\u201d No personal data ever crossed the wire.",
+      "The scrubbed description goes to an open-weight model (Qwen 3.8 27B by default). It returns one action: \u201cclick e12.\u201d The server sees placeholders, not people.",
   },
   {
     icon: "MousePointerClick",
@@ -70,8 +70,8 @@ export const PIPELINE: PipelineStep[] = [
   },
 ];
 
-// ─── Numbers from BRIEF.md §13 ─────────────────────────────────────────────────
-// Only values explicitly stated in the document are included. Nothing is invented.
+// ─── Numbers from README.md "The numbers" ──────────────────────────────────────
+// Only values stated there are included. Nothing is invented.
 
 export interface Metric {
   value: string;
@@ -81,19 +81,34 @@ export interface Metric {
 
 export const METRICS: Metric[] = [
   {
-    value: "63.6 MB",
-    label: "On-device footprint",
-    detail: "Total model + runtime size cached in the browser after first run.",
+    value: "99.0%",
+    label: "Personal data found",
+    detail: "97 of 98 private values on 37 annotated pages, hidden everywhere they appeared.",
   },
   {
-    value: "~76 MB",
-    label: "With icon detector",
-    detail: "Once the OmniParser YOLO icon detector is exported and bundled.",
+    value: "87.5%",
+    label: "Precision",
+    detail: "Of everything Skrim hid, the share that really was private.",
   },
   {
-    value: "6 GB",
-    label: "VRAM on dev machine",
-    detail: "RTX 4050 Laptop. ~4.5 GB free after Windows and Chrome.",
+    value: "1.9%",
+    label: "Ordinary text hidden",
+    detail: "The cost of hiding: non-private characters lost to the planner by mistake.",
+  },
+  {
+    value: "42 of 42",
+    label: "Test runs finished",
+    detail: "14 goals, 3 runs each, by the default planner: Qwen 3.8 27B on Groq's free tier.",
+  },
+  {
+    value: "137 ms",
+    label: "To find names",
+    detail: "Median per page view, on the device. Reading the page takes 5 ms; redacting under 1 ms.",
+  },
+  {
+    value: "87 MB",
+    label: "The whole extension",
+    detail: "Every model included. Nothing is downloaded at run time, and nothing is stored.",
   },
 ];
 
@@ -103,41 +118,40 @@ export interface FootprintRow {
 }
 
 export const FOOTPRINT_ROWS: FootprintRow[] = [
-  { asset: "GLiNER PII, quantised uint8 ONNX", size: "44.7 MB" },
-  { asset: "GLiNER tokenizer + configs",        size: "3.5 MB"  },
-  { asset: "MediaPipe vision WASM (SIMD only)", size: "11.5 MB" },
-  { asset: "Tesseract core WASM (LSTM + SIMD)", size: "2.8 MB"  },
-  { asset: "Tesseract eng.traineddata.gz",      size: "1.9 MB"  },
-  { asset: "BlazeFace short-range",             size: "0.2 MB"  },
-  { asset: "OmniParser icon detector (pending export)", size: "~12 MB" },
+  { asset: "GLiNER PII edge (names, addresses), uint8 ONNX + tokenizer", size: "49.4 MB" },
+  { asset: "ONNX Runtime WebAssembly (runs GLiNER)",                   size: "14 MB"   },
+  { asset: "MediaPipe WebAssembly + BlazeFace (faces)",                size: "12.3 MB" },
+  { asset: "Tesseract core + English data (OCR)",                      size: "9.9 MB"  },
 ];
 
-// ─── Known limits ──────────────────────────────────────────────────────────────
+// ─── Known limits (README.md "Known limits") ─────────────────────────────────
 
 export const KNOWN_LIMITS: string[] = [
-  "Detection is statistical — recall will never be exactly 100%. We publish our numbers; we do not claim perfection.",
-  "Screen capture is hard-capped at roughly 2 calls per second by the browser. Loop frequency is bounded by this ceiling.",
-  "A 2B local model is unlikely to plan multi-step tasks reliably; 4B is borderline. 8B is where this class of task starts working but exceeds the dev machine's free VRAM.",
-  "Firefox is not yet supported. Chrome only for now.",
-  "The extension is not on the Chrome Web Store. Build from source (instructions below).",
-  "ONNX Runtime Web operator coverage on the WebGPU backend must be verified per model — silent WASM fallback is a latency regression you would otherwise not notice.",
+  "English only. Names, labels and cue words (\"Welcome back\") are English.",
+  "One miss on our pages: the name model skips \"Meera Iyer\" at the head of a list of names. Street and place names are sometimes hidden as if private.",
+  "A private name on a page that does not look personal stays readable, unless it is in your goal, follows a cue like \"Welcome back\", is in an email address on the page, or sits beside a face.",
+  "The planner sees text only. A task that needs to look at a picture (a chart, a CAPTCHA) is out of reach; text inside images is read by OCR.",
+  "Free tiers are the bottleneck: Groq allows about 4–5 steps a minute, and real pages cost more than our test pages.",
+  "Our test pages are our own, written by the same hands as the fixes. Expect lower numbers on sites we did not write.",
+  "Chrome only for now (and other Chromium browsers, untested). Not on the Chrome Web Store.",
 ];
 
-// ─── Build steps from README → "Run it" (cross-referenced with CLAUDE.md) ─────
+// ─── Build steps from README.md "Run it" ───────────────────────────────────────
 
 export const BUILD_STEPS: { step: string; code: string }[] = [
-  { step: "Clone the repo",            code: "git clone https://github.com/letsbecool9792/skrim-hackspire" },
-  { step: "Install dependencies",      code: "pnpm install" },
-  { step: "Copy env and add API key",  code: "cp .env.example .env  # then paste your Groq key" },
-  { step: "Start the server",          code: "pnpm dev:server" },
-  { step: "Build the extension",       code: "pnpm --filter @skrim/extension dev" },
-  { step: "Load unpacked in Chrome",   code: "chrome://extensions  →  Developer mode  →  Load unpacked  →  apps/extension/.output/chrome-mv3" },
+  { step: "Clone the repo",               code: "git clone https://github.com/letsbecool9792/skrim-hackspire" },
+  { step: "Install dependencies",         code: "pnpm install" },
+  { step: "Fetch the on-device models",   code: "pnpm models:fetch --skip-icon" },
+  { step: "Copy env and add a Groq key",  code: "cp .env.example .env  # then put your GROQ_API_KEY in it" },
+  { step: "Start the planning server",    code: "pnpm dev:server" },
+  { step: "Build the extension",          code: "pnpm --filter @skrim/extension build" },
+  { step: "Load it in Chrome",            code: "chrome://extensions  →  Developer mode  →  Load unpacked  →  apps/extension/.output/chrome-mv3" },
 ];
 
 // ─── Licences from BRIEF.md §13.3 (open-weight model licence context) ─────────
 
 export const LICENCES: { name: string; notes: string }[] = [
-  { name: "Extension & server code", notes: "ISC" },
+  { name: "Skrim's code", notes: "ISC" },
   { name: "GLiNER PII model weights", notes: "Apache 2.0 — knowledgator/gliner-pii-edge-v1.0" },
   { name: "Qwen3-VL model weights",   notes: "Apache 2.0 — Qwen team, Alibaba Cloud" },
   { name: "BlazeFace",                notes: "Apache 2.0 — Google" },
