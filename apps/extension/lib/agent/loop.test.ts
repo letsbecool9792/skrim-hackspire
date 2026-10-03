@@ -9,7 +9,7 @@ import { domScreenGraphProvider } from "../dom/provider.ts";
 import { registerScreenGraphProvider, type ActionPlanner } from "../integration.ts";
 import type { NameFinder } from "../pii/gliner.js";
 import type { PixelReader } from "../vision/read-pixels.ts";
-import { runAgentTask, type AgentEvent, type PageLink } from "./loop.ts";
+import { runAgentTask, type AgentEvent, type DataUseQuestion, type PageLink } from "./loop.ts";
 
 /**
  * The whole loop in Node: the real content-side handler, DOM extractor, action
@@ -396,5 +396,92 @@ describe("runAgentTask", () => {
     const { finished } = await run("Go", planner, controller.signal);
 
     assert.equal(finished.outcome, "cancelled");
+  });
+});
+
+describe("typing into forms", () => {
+  test("types into the field a question heading names, as on a Google Form", async () => {
+    await page(`<div role="heading" id="q1"><span>Message</span></div><div><input type="hidden" name="entry.1"><textarea aria-labelledby="q1"></textarea></div>`);
+    const { planner } = scripted((request, step) => {
+      const heading = request.graph.elements.find((element) => element.role === "heading");
+      return step === 0 ? { type: "type", target: heading!.id, value: "My parcel arrived damaged" } : { type: "done", success: true, summary: "Typed" };
+    });
+
+    const { finished } = await run("Say my parcel arrived damaged", planner);
+
+    assert.equal(finished.outcome, "completed");
+    assert.equal(document.querySelector("textarea")?.value, "My parcel arrived damaged");
+  });
+});
+
+describe("the data guard in the loop", () => {
+  const PHONE_FORM = `<p>Phone on file: +91 98765 43210</p><label for="phone">Phone</label><input id="phone" type="tel"><label for="alt">Other phone</label><input id="alt" type="tel">`;
+  const field = (id: string) => (document.querySelector(`#${id}`) as HTMLInputElement).value;
+  const typePhoneInto = (...labels: string[]) => scripted((request, step) =>
+    step < labels.length ? { type: "type", target: idOf(request, labels[step]!), value: "<PII:PHONE:1>" } : { type: "done", success: true, summary: "Filled" });
+
+  test("asks before typing a value the goal did not ask for, and types nothing when refused", async () => {
+    await page(PHONE_FORM);
+    const { planner, requests } = typePhoneInto("Phone");
+    const questions: DataUseQuestion[] = [];
+    const shown: string[] = [];
+    const events: AgentEvent[] = [];
+
+    await runAgentTask({
+      goal: "Fill in my name", planner, link, signal: new AbortController().signal, onEvent: (event) => events.push(event),
+      confirmDataUse: async (question, values) => { questions.push(question); shown.push(...values.values()); return false; },
+    });
+
+    assert.equal(field("phone"), "");
+    assert.deepEqual(questions.map((question) => question.asks), [[{ token: "<PII:PHONE:1>", concern: "not-asked" }]]);
+    assert.equal(questions[0]?.field, "Phone");
+    // The real value goes to the question's asker, and nowhere else.
+    assert.deepEqual(shown, ["+91 98765 43210"]);
+    assert.doesNotMatch(JSON.stringify(events), /98765/);
+    assert.match(requests[1]?.history[0]?.note ?? "", /did not allow <PII:PHONE:1>/);
+  });
+
+  test("types it once the user allows it, and asks once for that value on that site", async () => {
+    await page(PHONE_FORM);
+    const { planner } = typePhoneInto("Phone", "Other phone");
+    let asked = 0;
+
+    await runAgentTask({ goal: "Fill in the form", planner, link, signal: new AbortController().signal, onEvent: () => {}, confirmDataUse: async () => { asked += 1; return true; } });
+
+    assert.equal(field("phone"), "+91 98765 43210");
+    assert.equal(field("alt"), "+91 98765 43210");
+    assert.equal(asked, 1);
+  });
+
+  test("with no one to ask, a value the goal did not ask for is not typed", async () => {
+    await page(PHONE_FORM);
+    const { planner } = typePhoneInto("Phone");
+
+    const { events } = await run("Fill in the form", planner);
+
+    assert.equal(field("phone"), "");
+    assert.ok(events.some((event) => event.type === "acted" && /needs your permission/.test(event.message ?? "")));
+  });
+
+  test("a value the goal asks for is typed without a question", async () => {
+    await page(PHONE_FORM);
+    const { planner } = typePhoneInto("Phone");
+
+    await run("Put my phone number in the form", planner);
+
+    assert.equal(field("phone"), "+91 98765 43210");
+  });
+
+  test("stopping while the question is open ends the task as cancelled", async () => {
+    await page(PHONE_FORM);
+    const { planner } = typePhoneInto("Phone");
+    const controller = new AbortController();
+    const events: AgentEvent[] = [];
+
+    await runAgentTask({ goal: "Fill in the form", planner, link, signal: controller.signal, onEvent: (event) => events.push(event), confirmDataUse: () => { controller.abort(); return new Promise(() => {}); } });
+
+    const last = events.at(-1);
+    assert.equal(field("phone"), "");
+    assert.equal(last?.type === "finished" ? last.outcome : last?.type, "cancelled");
   });
 });

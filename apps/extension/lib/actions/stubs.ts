@@ -8,9 +8,42 @@ type NavigateAction = Extract<Action, { type: "navigate" }>;
 type ExtractAction = Extract<Action, { type: "extract" }>;
 type WaitAction = Extract<Action, { type: "wait" }>;
 
+type Field = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
+
+/** Input types that take typed text, as the DOM extractor counts them. */
+const TEXT_INPUT_TYPES = new Set(["text", "email", "password", "search", "tel", "url", "number"]);
+
+function isField(element: Element): element is Field {
+  return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || (element instanceof HTMLElement && element.isContentEditable);
+}
+
+function isTextField(element: Element): element is Field {
+  if (element instanceof HTMLInputElement) return TEXT_INPUT_TYPES.has(element.type) && !element.disabled && !element.readOnly;
+  return element instanceof HTMLTextAreaElement || (element instanceof HTMLElement && element.isContentEditable);
+}
+
+/**
+ * The field to type into: the target itself, or the one text field it names.
+ * On a Google Form a question's heading names its field (aria-labelledby), so
+ * both carry the question as their name, and the planner may pick the
+ * heading. A <label>, or a box holding a single field, is the same case.
+ */
+function fieldFor(target: Element | undefined): Field | undefined {
+  if (!target?.isConnected) return undefined;
+  if (isField(target)) return target;
+  if (target instanceof HTMLLabelElement && target.control && isTextField(target.control)) return target.control;
+  if (target.id) {
+    const named = Array.from(document.querySelectorAll("[aria-labelledby]"))
+      .filter((element) => element.getAttribute("aria-labelledby")!.split(/s+/).includes(target.id) && isTextField(element));
+    if (named.length === 1) return named[0] as Field;
+  }
+  const inside = Array.from(target.querySelectorAll("input, textarea, [contenteditable]")).filter(isTextField);
+  return inside.length === 1 ? inside[0] : undefined;
+}
+
 export async function executeType(action: TypeAction, actionId: string, registry: Map<string, Element>, getObservationVersion: () => number, resolveToken?: (value: string) => string | null): Promise<ActionResult> {
-  const element = registry.get(action.target);
-  if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLElement && element.isContentEditable)) return failure(actionId, "TARGET_NOT_FOUND", getObservationVersion);
+  const element = fieldFor(registry.get(action.target));
+  if (!element) return failure(actionId, "TARGET_NOT_FOUND", getObservationVersion);
   const value = resolveToken?.(action.value) ?? action.value;
   // Fail closed: never type a token into a real form, even one buried in a sentence.
   if (findPiiTokens(value).length > 0) return failure(actionId, "CONTENT_SCRIPT_ERROR", getObservationVersion);

@@ -44,7 +44,11 @@ planning, display or anything else. The last line of defence is `assertOutboundS
 (`lib/agent/server-planner.ts`).
 
 Tokens are swapped for real values only at the moment of typing, by the loop, from the
-vault. The content script refuses any value that still contains a token.
+vault. The content script refuses any value that still contains a token. Before that, the data
+guard (`lib/agent/data-guard.ts`) decides whether the value may be typed there at all, and
+asks the user when it cannot decide alone. Typing is the only way a value leaves the vault:
+keep it that way. A new action that puts a resolved value on a page must go through the same
+check.
 
 ## Writing for both browsers
 

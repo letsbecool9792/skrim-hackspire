@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Customer support request</title>
+  <!--
+    A stand-in for a Google Form, with its markup's shape: questions are
+    role="listitem"s, each field is named by aria-labelledby pointing at the
+    question's heading and its "*", choices are <div role="radio"> and
+    <div role="checkbox"> with aria-checked, and Submit is a <div
+    role="button">, not a <button>. The class names are dropped; Skrim never
+    reads them. The signed-in account's address sits above the questions, as
+    on a real form.
+  -->
+  <style>
+    body { margin: 0; background: #f0ebf8; font-family: Roboto, Arial, sans-serif; color: #202124; }
+    .form { max-width: 640px; margin: 12px auto; }
+    .card { background: #fff; border: 1px solid #dadce0; border-radius: 8px; padding: 24px; margin-bottom: 12px; }
+    .card.title { border-top: 10px solid #673ab7; }
+    .title h1 { margin: 0 0 12px; font-size: 32px; font-weight: 400; }
+    .account { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid #dadce0; margin-top: 12px; font-size: 14px; }
+    .account a { color: #1a73e8; }
+    .required-note { color: #d93025; font-size: 14px; }
+    [role="heading"] { font-size: 16px; margin-bottom: 16px; }
+    .star { color: #d93025; }
+    .answer { position: relative; }
+    .answer input, .answer textarea { width: 50%; border: 0; border-bottom: 1px solid #dadce0; font: inherit; padding: 4px 0; background: transparent; }
+    .answer textarea { width: 100%; resize: none; }
+    .placeholder { position: absolute; top: 4px; left: 0; color: #70757a; pointer-events: none; }
+    .answer.filled .placeholder { display: none; }
+    [role="radio"], [role="checkbox"] { display: inline-block; width: 20px; height: 20px; border: 2px solid #5f6368; vertical-align: middle; cursor: pointer; }
+    [role="radio"] { border-radius: 50%; }
+    [role="radio"][aria-checked="true"], [role="checkbox"][aria-checked="true"] { background: #673ab7; border-color: #673ab7; }
+    .choice { display: flex; gap: 12px; align-items: center; margin: 10px 0; }
+    .error { color: #d93025; font-size: 12px; margin-top: 8px; }
+    .error:empty { display: none; }
+    .actions { display: flex; justify-content: space-between; align-items: center; }
+    [role="button"] { display: inline-block; padding: 8px 24px; border-radius: 4px; cursor: pointer; }
+    #submit { background: #673ab7; color: #fff; }
+    #clear { color: #673ab7; }
+    .footer { color: #70757a; font-size: 12px; text-align: center; margin-top: 16px; }
+    #done { display: none; }
+  </style>
+</head>
+<body>
+  <div class="form">
+    <form id="mG61Hd" action="#formResponse" method="POST">
+      <div class="card title">
+        <div role="heading" aria-level="1"><h1>Customer support request</h1></div>
+        <div>Tell us what went wrong with your order and we'll get back to you within two days.</div>
+        <div class="account">
+          <div>asha.rao.demo@gmail.com</div>
+          <a href="#switch">Switch account</a>
+          <span aria-label="Not shared" title="Not shared">&#9729;</span>
+        </div>
+        <div class="required-note" aria-hidden="true">* Indicates required question</div>
+      </div>
+
+      <div role="list">
+        <div role="listitem" class="card">
+          <div role="heading" aria-level="3" id="i1"><span>Full name</span><span class="star" id="i4" aria-label="Required question"> *</span></div>
+          <div class="answer"><input type="text" autocomplete="off" tabindex="0" aria-labelledby="i1 i4" aria-describedby="i3" required dir="auto" data-initial-value=""><div class="placeholder" aria-hidden="true">Your answer</div></div>
+          <div class="error" id="i3" role="alert"></div>
+          <input type="hidden" name="entry.1001">
+        </div>
+
+        <div role="listitem" class="card">
+          <div role="heading" aria-level="3" id="i5"><span>Email</span><span class="star" id="i8" aria-label="Required question"> *</span></div>
+          <div class="answer"><input type="email" autocomplete="off" tabindex="0" aria-labelledby="i5 i8" aria-describedby="i7" required dir="auto" data-initial-value=""><div class="placeholder" aria-hidden="true">Your answer</div></div>
+          <div class="error" id="i7" role="alert"></div>
+          <input type="hidden" name="entry.1002">
+        </div>
+
+        <div role="listitem" class="card">
+          <div role="heading" aria-level="3" id="i9"><span>Phone number</span></div>
+          <div class="answer"><input type="text" autocomplete="off" tabindex="0" aria-labelledby="i9" dir="auto" data-initial-value=""><div class="placeholder" aria-hidden="true">Your answer</div></div>
+          <input type="hidden" name="entry.1003">
+        </div>
+
+        <div role="listitem" class="card">
+          <div role="heading" aria-level="3" id="i13"><span>PAN (for refunds over ₹5,000)</span></div>
+          <div class="answer"><input type="text" autocomplete="off" tabindex="0" aria-labelledby="i13" dir="auto" data-initial-value=""><div class="placeholder" aria-hidden="true">Your answer</div></div>
+          <input type="hidden" name="entry.1004">
+        </div>
+
+        <div role="listitem" class="card">
+          <div role="heading" aria-level="3" id="i17"><span>Reason for contacting us</span><span class="star" id="i20" aria-label="Required question"> *</span></div>
+          <div role="radiogroup" aria-labelledby="i17 i20" aria-describedby="i19">
+            <label class="choice"><div role="radio" aria-label="Refund" data-value="Refund" aria-checked="false" tabindex="0"></div><span dir="auto">Refund</span></label>
+            <label class="choice"><div role="radio" aria-label="Exchange" data-value="Exchange" aria-checked="false" tabindex="-1"></div><span dir="auto">Exchange</span></label>
+            <label class="choice"><div role="radio" aria-label="Delivery problem" data-value="Delivery problem" aria-checked="false" tabindex="-1"></div><span dir="auto">Delivery problem</span></label>
+          </div>
+          <div class="error" id="i19" role="alert"></div>
+          <input type="hidden" name="entry.1005">
+        </div>
+
+        <div role="listitem" class="card">
+          <div role="heading" aria-level="3" id="i21"><span>Message</span></div>
+          <div class="answer"><textarea data-rows="1" tabindex="0" aria-labelledby="i21" dir="auto"></textarea><div class="placeholder" aria-hidden="true">Your answer</div></div>
+          <input type="hidden" name="entry.1006">
+        </div>
+
+        <div role="listitem" class="card">
+          <div role="heading" aria-level="3" id="i25"><span>Can we contact you about this?</span></div>
+          <label class="choice"><div role="checkbox" aria-label="Yes, contact me by email" data-answer-value="Yes" aria-checked="false" tabindex="0"></div><span dir="auto">Yes, contact me by email</span></label>
+          <input type="hidden" name="entry.1007">
+        </div>
+      </div>
+
+      <div class="actions">
+        <div role="button" id="submit" aria-disabled="false" tabindex="0"><span><span>Submit</span></span></div>
+        <div role="button" id="clear" aria-disabled="false" tabindex="0"><span><span>Clear form</span></span></div>
+      </div>
+      <div class="footer">Never submit passwords through this form.</div>
+    </form>
+
+    <div id="done" class="card title">
+      <div role="heading" aria-level="1"><h1>Customer support request</h1></div>
+      <div id="recorded">Your response has been recorded.</div>
+      <a href="#viewform">Submit another response</a>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const form = document.getElementById("mG61Hd");
+      // The "Your answer" hint hides once there is text, as on a real form.
+      for (const field of form.querySelectorAll(".answer input, .answer textarea")) {
+        field.addEventListener("input", () => field.parentElement.classList.toggle("filled", field.value !== ""));
+      }
+      for (const group of form.querySelectorAll('[role="radiogroup"]')) {
+        for (const radio of group.querySelectorAll('[role="radio"]')) {
+          radio.addEventListener("click", () => {
+            for (const other of group.querySelectorAll('[role="radio"]')) other.setAttribute("aria-checked", String(other === radio));
+          });
+        }
+      }
+      for (const box of form.querySelectorAll('[role="checkbox"]')) {
+        box.addEventListener("click", () => box.setAttribute("aria-checked", String(box.getAttribute("aria-checked") !== "true")));
+      }
+      document.getElementById("clear").addEventListener("click", () => {
+        for (const field of form.querySelectorAll(".answer input, .answer textarea")) { field.value = ""; field.parentElement.classList.remove("filled"); }
+        for (const choice of form.querySelectorAll('[aria-checked="true"]')) choice.setAttribute("aria-checked", "false");
+      });
+      document.getElementById("submit").addEventListener("click", () => {
+        let ok = true;
+        for (const field of form.querySelectorAll(".answer [required]")) {
+          const error = document.getElementById(field.getAttribute("aria-describedby"));
+          const missing = field.value.trim() === "";
+          error.textContent = missing ? "This is a required question" : "";
+          if (missing) ok = false;
+        }
+        const reason = form.querySelector('[role="radiogroup"]');
+        const reasonError = document.getElementById(reason.getAttribute("aria-describedby"));
+        const chosen = reason.querySelector('[aria-checked="true"]');
+        reasonError.textContent = chosen ? "" : "This is a required question";
+        if (!chosen) ok = false;
+        if (!ok) return;
+        form.style.display = "none";
+        document.getElementById("done").style.display = "block";
+        document.body.dataset.submitted = "true";
+      });
+    })();
+  </script>
+</body>
+</html>

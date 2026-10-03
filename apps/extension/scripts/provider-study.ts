@@ -163,6 +163,7 @@ for (let repeat = 1; repeat <= repeats; repeat++) {
       endedRight: result.endedRight,
       overreach: result.overreach.length > 0,
       refused: result.refused,
+      withheld: result.withheld,
       leaked: result.leaked.length,
       outcome: result.finished.outcome,
       errorCode: result.finished.errorCode ?? null,

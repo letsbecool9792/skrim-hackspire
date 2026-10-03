@@ -70,6 +70,7 @@ for (const [index, scenario] of scenarios.entries()) {
   console.log(`  task ${finished.outcome}${finished.errorCode ? ` (${finished.errorCode})` : ""}${finished.message ? `: ${finished.message}` : ""}, ${((Date.now() - started) / 1000).toFixed(1)} s`);
   console.log(`  ${result.pageOk ? "ok" : "x "} expected ${scenario.expected}`);
   if (!result.endedRight) console.log(`  x  expected the task to end ${scenario.ending === "gives up" ? "by giving up" : "done"}`);
+  if (result.withheld > 0) console.log(`  !  personal values the data guard did not let it type: ${result.withheld} (the harness answers no to its questions)`);
   if (result.overreach.length > 0) console.log(`  x  acted on what nobody asked for: ${[...new Set(result.overreach)].join(", ")}`);
   if (scenario.secrets) console.log(`  ${result.leaked.length === 0 ? "ok" : "x "} raw personal data sent to the server: ${result.leaked.length === 0 ? "none" : `${result.leaked.length} value(s)`}`);
   console.log("");

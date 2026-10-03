@@ -66,6 +66,12 @@ describe("extractScreenGraph", () => {
     assert.equal(elements.filter((element) => element.role === "option").length, 0);
   });
 
+  test("names a Google Form's field by its question once, not the question and its star again", () => {
+    const { elements } = extract(`<div role="heading" id="q1"><span>Full name</span><span id="q1star" aria-label="Required question"> *</span></div><input type="text" aria-labelledby="q1 q1star">`);
+
+    assert.equal(elements.find((element) => element.role === "textbox")?.label, "Full name *");
+  });
+
   test("describes a checkbox by its state, not a value", () => {
     const { byLabel } = extract(`<input type="checkbox" id="terms"><label for="terms">Accept terms</label>`);
 
