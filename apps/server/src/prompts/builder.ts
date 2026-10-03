@@ -18,9 +18,16 @@ import { SYSTEM_PROMPT } from './system.js';
  * passed), and with only the top-left corner it clicked a search box instead
  * of typing into it (0 of 3). Measure before trimming this format again.
  */
+/** The system prompt, then the user's own rules from the side panel (redacted there, like the goal). */
+function systemPrompt(request: PlanRequest): string {
+  return request.customInstructions
+    ? `${SYSTEM_PROMPT}\n\nUSER-SPECIFIC INSTRUCTIONS:\n${request.customInstructions}`
+    : SYSTEM_PROMPT;
+}
+
 export function buildPrompt(request: PlanRequest): ChatMessage[] {
   return [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: systemPrompt(request) },
     { role: 'user', content: renderRequest(request) }
   ];
 }
@@ -31,12 +38,12 @@ export function buildPrompt(request: PlanRequest): ChatMessage[] {
  */
 export function buildFittedPrompt(request: PlanRequest, budgetTokens: number): { messages: ChatMessage[]; report: FitReport | null; estimatedTokens: number } {
   const measure = (candidate: PlanRequest, shortened: boolean) =>
-    estimateTokens(SYSTEM_PROMPT.length, renderRequest(candidate, { shortened }).length);
+    estimateTokens(systemPrompt(request).length, renderRequest(candidate, { shortened }).length);
   const { request: fitted, report } = fitRequest(request, budgetTokens, (candidate) => measure(candidate, candidate !== request));
   const shortened = report !== null;
   return {
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt(request) },
       { role: 'user', content: renderRequest(fitted, { shortened }) },
     ],
     report,

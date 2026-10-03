@@ -399,6 +399,18 @@ describe("runAgentTask", () => {
   });
 });
 
+describe("the user's own rules", () => {
+  test("custom instructions are redacted like the goal before they are sent", async () => {
+    await page(`<button>Send</button>`);
+    const { planner, requests } = scripted(() => ({ type: "done", success: true, summary: "ok" }));
+
+    await runAgentTask({ goal: "Press send", planner, link, signal: new AbortController().signal, onEvent: () => {}, permissions: { allowedActions: ["click", "done"], customInstructions: "Reply from asha.rao@example.com only" } });
+
+    assert.equal(requests[0]?.customInstructions, "Reply from <PII:EMAIL:1> only");
+    assert.doesNotMatch(JSON.stringify(requests), /asha\.rao@example\.com/);
+  });
+});
+
 describe("typing into forms", () => {
   test("types into the field a question heading names, as on a Google Form", async () => {
     await page(`<div role="heading" id="q1"><span>Message</span></div><div><input type="hidden" name="entry.1"><textarea aria-labelledby="q1"></textarea></div>`);

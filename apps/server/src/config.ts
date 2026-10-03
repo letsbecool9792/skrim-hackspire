@@ -46,7 +46,8 @@ function requireKey(name: string, setting: string, provider: ProviderName): stri
   return key;
 }
 
-function profile(provider: ProviderName, setting: string): ProviderConfig {
+/** `apiKey` given: use it instead of the one in the environment (a model override). */
+function profile(provider: ProviderName, setting: string, apiKey?: string): ProviderConfig {
   if (provider === 'nvidia') {
     return {
       provider,
@@ -54,7 +55,7 @@ function profile(provider: ProviderName, setting: string): ProviderConfig {
       // Must match .env.example. NVIDIA hosts no Qwen. Nemotron 3 Super did 37
       // of 42 in the provider study; Llama 3.2 11B, the old default, none.
       model: process.env.NVIDIA_MODEL || 'nvidia/nemotron-3-super-120b-a12b',
-      apiKey: requireKey('NVIDIA_API_KEY', setting, provider),
+      apiKey: apiKey ?? requireKey('NVIDIA_API_KEY', setting, provider),
       promptBudgetTokens: promptBudget(provider),
     };
   }
@@ -64,7 +65,7 @@ function profile(provider: ProviderName, setting: string): ProviderConfig {
       baseURL: process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1',
       // Must match .env.example. Open-weight Qwen, free without a card.
       model: process.env.GROQ_MODEL || 'qwen/qwen3.8-27b',
-      apiKey: requireKey('GROQ_API_KEY', setting, provider),
+      apiKey: apiKey ?? requireKey('GROQ_API_KEY', setting, provider),
       // Qwen 3.x thinks before answering unless told not to. The planner wants
       // one JSON action, and the free tier counts thinking against its
       // 8,000 tokens a minute.
@@ -86,6 +87,28 @@ function profile(provider: ProviderName, setting: string): ProviderConfig {
     };
   }
   throw new Error(`Unsupported ${setting}: ${String(provider)}. Use groq, ollama or nvidia.`);
+}
+
+const KEY_SETTINGS: Record<ProviderName, string | undefined> = { groq: 'GROQ_API_KEY', nvidia: 'NVIDIA_API_KEY', ollama: undefined };
+
+/**
+ * A model picked in the side panel for one request: "provider:model" (the
+ * model id may hold colons: "ollama:qwen3-vl:4b-instruct"). The user's own
+ * key comes in a header, never in the request body; without one, this
+ * server's key for that provider. Undefined when the provider is not one of
+ * ours, or a hosted one has no key at all: the default planner then plans.
+ */
+export function overrideConfig(modelOverride: string, userKey: string | undefined): ProviderConfig | undefined {
+  const at = modelOverride.indexOf(':');
+  const provider = modelOverride.slice(0, at) as ProviderName;
+  const model = modelOverride.slice(at + 1).trim();
+  if (at <= 0 || !model || !(provider in PROMPT_BUDGET)) return undefined;
+  const setting = KEY_SETTINGS[provider];
+  const apiKey = userKey || (setting ? process.env[setting] : undefined);
+  if (setting && !apiKey) return undefined;
+  // "Don't think first" is a Qwen switch; Groq rejects it for other models.
+  const { extraBody, ...base } = profile(provider, 'model override', apiKey);
+  return { ...base, model, ...(extraBody && /qwen/i.test(model) ? { extraBody } : {}) };
 }
 
 export function getConfig(): ServerConfig {

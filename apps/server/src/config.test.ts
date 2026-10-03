@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
-import { getConfig } from './config.js';
+import { getConfig, overrideConfig } from './config.js';
 
 const SETTINGS = ['MODEL_PROVIDER', 'FALLBACK_PROVIDER', 'GROQ_API_KEY', 'NVIDIA_API_KEY', 'NVIDIA_MODEL'];
 const saved = Object.fromEntries(SETTINGS.map((name) => [name, process.env[name]]));
@@ -39,5 +39,26 @@ describe('getConfig', () => {
   test('refuses a fallback that is the main provider', () => {
     set({ GROQ_API_KEY: 'test-key', FALLBACK_PROVIDER: 'groq' });
     assert.throws(() => getConfig(), /same as MODEL_PROVIDER/);
+  });
+});
+
+describe('overrideConfig: a model picked in the side panel', () => {
+  test('keeps a model id that holds a colon, and needs no key for Ollama', () => {
+    set({});
+    const config = overrideConfig('ollama:qwen3-vl:4b-instruct', undefined);
+    assert.equal(config?.provider, 'ollama');
+    assert.equal(config?.model, 'qwen3-vl:4b-instruct');
+  });
+
+  test("uses the user's key, else this server's, and plans as before without either", () => {
+    set({});
+    assert.equal(overrideConfig('groq:llama-3.3-70b-versatile', 'user-key')?.apiKey, 'user-key');
+    assert.equal(overrideConfig('groq:llama-3.3-70b-versatile', undefined), undefined);
+    set({ GROQ_API_KEY: 'server-key' });
+    const config = overrideConfig('groq:llama-3.3-70b-versatile', undefined);
+    assert.equal(config?.apiKey, 'server-key');
+    // "Do not think first" is for Qwen; Groq rejects it for other models.
+    assert.equal(config?.extraBody, undefined);
+    assert.equal(overrideConfig('nope:model', 'k'), undefined);
   });
 });

@@ -46,6 +46,22 @@ const COMMITMENTS: Commitment[] = [
     button: /\b(subscribe|unsubscribe|cancel (?:order|subscription|booking|plan)|transfer|send money)\b/i,
     goal: /\b(subscribe|unsubscribe|cancel|transfer|send money)\b/i,
   },
+  // TASK_04: additional high-risk categories not covered by the original four.
+  {
+    does: "change a password or credentials",
+    button: /\b(change password|update password|reset password|save (?:new )?password|confirm (?:new )?password|set password)\b/i,
+    goal: /\b(change|update|reset|set)\b.{0,20}\bpassword\b/i,
+  },
+  {
+    does: "share, forward or send data to others",
+    button: /\b(share (?:with|to|publicly)|forward(?: to)?|send to (?:others|contacts|email)|publish(?: publicly)?|make public|export (?:and )?share)\b/i,
+    goal: /\b(share|forward|publish|send to|make public)\b/i,
+  },
+  {
+    does: "upload or submit a file or attachment",
+    button: /\b(upload (?:and )?submit|send (?:file|attachment|document)|submit (?:form|application|document)|attach (?:and )?send)\b/i,
+    goal: /\b(upload|attach|send (?:file|document)|submit (?:form|application))\b/i,
+  },
 ];
 
 /**

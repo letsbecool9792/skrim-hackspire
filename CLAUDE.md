@@ -179,7 +179,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (258 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (261 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       without the OmniParser detector (+77 MB once exported: the built extension is
@@ -352,6 +352,11 @@ add to it whenever a change needs a manual check, and tick items off when report
     "Option 1" to "Option 4": rename them. On the first try it typed three fields and picked a
     choice before Groq's day ran out
   - [ ] Privacy under a finished form task lists each value typed and the site
+- [ ] **The settings panel** (PR #26, Aritra; merged with the guardrails on `feat/final-round`): the
+      gear in the top bar opens one compact row per setting (allowed actions, model, key, rules,
+      server) and closes when a task starts. A model picked there plans the steps (the server's
+      log names it); its key is not in the dashboard's request view; a name or email typed in
+      Rules reaches the server as a placeholder; turning off Type makes a form task skip typing
 - [ ] **Click to reveal**: on `canvas-card.html`, `what is my pan number` ends with an "ID number 1"
       pill; clicking it shows the real PAN in the side panel, clicking again hides it. The dashboard
       still shows only the placeholder

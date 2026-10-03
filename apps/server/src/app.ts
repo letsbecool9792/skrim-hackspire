@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { PlanRequestSchema, type PlanRequest } from '@skrim/schema';
-import { getConfig } from './config.js';
+import { getConfig, overrideConfig } from './config.js';
 import { planAction, UnparseableOutputError } from './planner/index.js';
 import { ProviderError } from './providers/index.js';
 
@@ -29,7 +29,10 @@ app.get('/', (c) => {
  * server already waited out the short pauses), the fallback plans this one.
  * Each step is planned from scratch, so the task carries on.
  */
-async function plan(request: PlanRequest) {
+async function plan(request: PlanRequest, userKey: string | undefined) {
+  // A model picked in the side panel, with the user's key from a header.
+  const override = request.modelOverride ? overrideConfig(request.modelOverride, userKey) : undefined;
+  if (override) return planAction(override, request);
   try {
     return await planAction(config.providerConfig, request);
   } catch (error) {
@@ -66,7 +69,9 @@ app.post('/plan', async (c) => {
   const shape = `step ${request.graph.cycle}, ${request.graph.elements.length} elements, ${request.history.length} in history`;
 
   try {
-    const result = await plan(request);
+    // The user's own provider key, for a model picked in the side panel. A
+    // header, not the body: the body is what the dashboard shows. Never logged.
+    const result = await plan(request, c.req.header('x-provider-key') || undefined);
     const latencyMs = Math.round(performance.now() - start);
     const target = 'target' in result.action && result.action.target ? ` ${result.action.target}` : '';
     const tokens = result.usage ? `, ${result.usage.promptTokens}+${result.usage.completionTokens} tokens` : '';
