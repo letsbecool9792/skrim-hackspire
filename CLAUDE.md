@@ -17,8 +17,9 @@ verify), in a chat side panel, and works in Chrome on fixture pages and real sit
 3.8 27B; the local 4B handles simple pages only). The eval scores detection on 37 annotated
 fixtures in Chromium: 99.0% recall, 87.5% precision. The dashboard shows what the server
 receives, live, beside a resource panel. The landing page, the dashboard and the server are
-hosted on Vercel ([`docs/deploy.md`](docs/deploy.md)), and releases publish a Chrome zip. Next:
-the first release, the pitch (who pays, phones), and the demo. See "Status" and "Open findings".
+hosted on Vercel ([`docs/deploy.md`](docs/deploy.md)), and v0.3.1 is the first release's Chrome
+zip. The tradeoffs are measured ([`docs/tradeoffs.md`](docs/tradeoffs.md)). Next: the pitch (who
+pays, phones), Firefox (undecided), the real-site results, and the demo. See "Status" and "Open findings".
 
 ---
 
@@ -235,13 +236,13 @@ Built, by workstream:
 
 | Who | Working on | Tests on |
 |---|---|---|
-| Suparno | The Chrome retest's fixes, the dashboard, the design language (all merged); next, the real-site tests, then the demo | Ollama |
+| Suparno | The Chrome retest's fixes, the dashboard, the design language, the deploy (all done); next, the real-site results, the pitch, then the demo | Ollama |
 | Aritra (WS1) | The dashboard (PR #15), finished by Suparno; the landing page and the release workflow (PR #25), finished with the deploy setup. The offline rehearsal (demo beat 8) is under "Waiting on Suparno" | Ollama |
 | Ayushi (WS3) | Her six detection PRs are merged (OCR leaks, false positives, names in URLs, faces counted, and PR 24: labelled ids, names in email addresses, a face makes a page personal), which took recall to 99.0%. Next: not assigned yet | `pnpm eval`; Groq when needed |
 | Dhruba (WS2) | Fixtures and the icon detector are merged. Next: run the icon detector in the pixel reader and fuse it with the DOM, and a click at a position for what it finds | `pnpm eval`; Groq when needed |
 
 **The look is one language, in `design/tokens.css`.** The side panel and the dashboard use it
-(first pass on `design/ui-language`, 2026-10-03, waiting on Suparno's eyes). Use its tokens,
+(approved by Suparno, 2026-10-03). Use its tokens,
 not new hex values or pixel sizes; icons are lucide, never emoji; fonts are bundled
 (`@fontsource-variable`), never fetched. Ask Suparno before changing the side panel's layout.
 Face detection and the icon detector can plug into `lib/agent/read-page.ts` now.
@@ -293,7 +294,7 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [ ] **Run the real-site tests** ([`docs/real-site-tests.md`](docs/real-site-tests.md)): 14 goals on
       Wikipedia, Amazon.in and Gmail, on Groq and on Ollama; fill in the table and copy the
       failures and leaks into "Open findings"
-- [ ] **The new look** (`design/ui-language`; rebuild with `pnpm --filter @skrim/extension build`
+- [x] **The new look**, approved 2026-10-03 (`design/ui-language`; rebuild with `pnpm --filter @skrim/extension build`
       and reload Skrim, restart `pnpm dev:dashboard`). Look at both in light and dark (Windows
       colour mode) and say what to change:
   - side panel: the empty state, a finished task (steps, the result card, the "Privacy" button),
