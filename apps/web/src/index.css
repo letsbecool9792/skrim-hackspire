@@ -448,6 +448,13 @@ html { font-size: 16px; scroll-behavior: smooth; }
   line-height: var(--leading-body);
 }
 
+/* The row Skrim ships, in a tradeoff table. */
+.data-table .row-shipped th,
+.data-table .row-shipped td {
+  background: var(--accent-soft);
+  font-weight: var(--weight-semibold);
+}
+
 .table-wrapper {
   overflow-x: auto;
   border: var(--border-width) solid var(--border);
@@ -480,7 +487,18 @@ html { font-size: 16px; scroll-behavior: smooth; }
   vertical-align: middle;
 }
 
-.data-table tr:last-child td { border-bottom: 0; }
+/* A row label (th scope="row") reads like a cell, not a column heading. */
+.data-table tbody th {
+  background: none;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.data-table tr:last-child td,
+.data-table tbody tr:last-child th { border-bottom: 0; }
 
 .col-size {
   width: 7rem;

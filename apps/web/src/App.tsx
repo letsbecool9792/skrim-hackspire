@@ -15,6 +15,7 @@ import {
   METRICS,
   FOOTPRINT_ROWS,
   KNOWN_LIMITS,
+  TRADEOFFS,
   BUILD_STEPS,
   LICENCES,
 } from "./content";
@@ -283,8 +284,46 @@ export default function App() {
           </p>
         </Section>
 
+        {/* ── 5b. Tradeoffs ── */}
+        <Section id="tradeoffs" className="section--alt">
+          <SectionHeading>What we traded, and why</SectionHeading>
+          <p className="section-body">
+            Where a bigger or looser model buys something and costs something, we measured both sides
+            on the same pages and picked. The highlighted row is what Skrim ships.
+          </p>
+          {TRADEOFFS.map(({ title, head, rows, note }) => (
+            <div key={title}>
+              <h3 className="subsection-heading">{title}</h3>
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      {head.map((h) => <th key={h} scope="col">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(({ cells, shipped }) => (
+                      <tr key={cells[0]} className={shipped ? "row-shipped" : undefined}>
+                        {cells.map((cell, i) => (i === 0 ? <th key={i} scope="row">{cell}</th> : <td key={i}>{cell}</td>))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="section-note">{note}</p>
+            </div>
+          ))}
+          <p className="section-note">
+            Method and every run:{" "}
+            <a href={`${SITE.githubUrl}/blob/main/docs/tradeoffs.md`} className="text-link" target="_blank" rel="noopener noreferrer">
+              docs/tradeoffs.md
+            </a>
+            .
+          </p>
+        </Section>
+
         {/* ── 6. Known limits ── */}
-        <Section id="known-limits" className="section--alt">
+        <Section id="known-limits">
           <SectionHeading>Known limits</SectionHeading>
           <p className="section-body">
             What Skrim does not do yet, or cannot do by design, said plainly.
@@ -299,7 +338,7 @@ export default function App() {
         </Section>
 
         {/* ── 7. Try it ── */}
-        <Section id="try-it">
+        <Section id="try-it" className="section--alt">
           <SectionHeading>Try it</SectionHeading>
           <p className="section-body">
             Skrim is not on the Chrome Web Store yet. Firefox is not supported yet. Chrome only for now.
