@@ -8,14 +8,15 @@ model that does the thinking only ever sees a scrubbed description of the page, 
 private value swapped for a placeholder like `<PII:EMAIL:1>`. The extension swaps the real value
 back in only at the moment it types it.
 
-Built by team **Chipotle**. Chrome, and Firefox on a computer and on Android (MV3); on a phone,
-where Firefox has no sidebar, Skrim opens as a tab that works on the tab you came from. Firefox is
-built and in testing ([`docs/testing.md`](docs/testing.md) section 10).
+Built by team **Chipotle**. Runs in Chrome, in Firefox on a computer, and **on Android phones**
+in Firefox, where Skrim opens as a tab that works on the tab you came from
+([`docs/phones.md`](docs/phones.md)). All MV3, one codebase.
 
 | | |
 |---|---|
 | Landing page | https://skrim-hackspire.vercel.app |
 | Extension for Chrome | [skrim-chrome.zip](https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-chrome.zip), the latest [release](https://github.com/letsbecool9792/skrim-hackspire/releases) |
+| Extension for Firefox | [skrim-firefox.zip](https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-firefox.zip) (unsigned, a temporary add-on); on Android see [`docs/phones.md`](docs/phones.md) |
 | Live dashboard (what the server receives) | https://skrim-dashboard.vercel.app |
 | Planning server | https://skrim-server.vercel.app |
 
@@ -24,7 +25,7 @@ built and in testing ([`docs/testing.md`](docs/testing.md) section 10).
 [How it works](#how-it-works) · [What the server sees](#what-the-server-sees) ·
 [Finding private data](#finding-private-data) · [The numbers](#the-numbers) · [Tradeoffs](#tradeoffs) ·
 [Which model plans](#which-model-plans) · [What stops it going wrong](#what-stops-it-going-wrong) ·
-[Known limits](#known-limits) · [Run it](#run-it) · [The repo](#the-repo)
+[On a phone](#on-a-phone) · [Known limits](#known-limits) · [Run it](#run-it) · [The repo](#the-repo)
 
 ## How it works
 
@@ -227,6 +228,16 @@ Rules enforced by machine, not by hoping ([`CLAUDE.md`](CLAUDE.md), "Guardrails"
   of the same step on an unchanged page.
 - **No telemetry, no screenshot on disk, ids and counts in logs, never values.**
 
+## On a phone
+
+Skrim runs on Android in Firefox, the same add-on as on a computer. Firefox for Android has no
+sidebar, so the toolbar button opens Skrim as a tab of its own that works on the tab it was
+opened from (`sidepanel.html?tab=<id>`); the models run on the phone and the hosted server
+plans. Tried on a phone with Firefox 157: a task ran on Wikipedia end to end. Chrome on phones
+runs no extensions at all, which is why Firefox is the phone route today and why the pipeline is
+meant to be a library for phone agents too. The routes compared, and how to install:
+[`docs/phones.md`](docs/phones.md).
+
 ## Known limits
 
 Said plainly, because a judge will find them:
@@ -265,6 +276,10 @@ choose the unzipped folder. Open any page, click Skrim's toolbar button, and ask
 something. It plans with the hosted server (Qwen 3.8 27B on Groq's free tier, shared by everyone
 trying it: a few steps a minute). To watch what the server receives, open
 https://skrim-dashboard.vercel.app in the same browser while the side panel is open.
+
+In Firefox on a computer: download [skrim-firefox.zip](https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-firefox.zip),
+open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** → pick the zip. It lasts
+until Firefox closes. On an Android phone: [`docs/phones.md`](docs/phones.md), "How to install it".
 
 ### From source
 

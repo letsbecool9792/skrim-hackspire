@@ -39,6 +39,7 @@ Settled in the setup session. Do not reopen without a reason.
 | **Eval runs in a real browser** via Playwright | The rubric scores precision/recall on the shipped path. Node-side numbers would measure different code than we demo |
 | Ollama `skrim-planner` (`qwen3-vl:4b-instruct` with a 16k context) for air-gap | 6 GB VRAM ceiling. See "Hardware reality". The instruct build, not the plain tag, which is the much slower thinking build |
 | **WS1 exposes registration hooks instead of owning perception/privacy/planning** | WS2 registers the graph provider (content script) and WS4 the planner (side panel); this prevents duplicate extractors and keeps browser execution independent. Token resolution needs no hook: the loop owns one vault per task |
+| **On a phone, the panel is a tab** (Firefox for Android) | Firefox for Android has no sidebar, and Chrome on phones runs no extensions. The toolbar button opens `sidepanel.html?tab=<id>`, which works on the tab it was opened from; everything else is the same add-on ([`docs/phones.md`](docs/phones.md)) |
 | **The agent loop runs in the side panel, not the background** | Chrome terminates an extension service worker when one `fetch()` takes over 30 s, and a local model takes up to ~40 s a step. The side panel is an ordinary page with no such limit; the task, its vault and the chat live exactly as long as the panel. Closing it stops the task |
 
 ### Provider config
@@ -332,8 +333,9 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [ ] **Firefox** ([`docs/testing.md`](docs/testing.md) section 10; branch `feat/firefox`):
   - [ ] on a computer: Load Temporary Add-on from `.output/firefox-mv3`; the sidebar opens from the
     toolbar button, and the section 5 goals behave as in Chrome
-  - [ ] on Android over USB (`web-ext run -t firefox-android`, hosted server): menu → Extensions →
-    Skrim opens a tab; "search for alan turing" on Wikipedia runs on the tab it came from
+  - [x] on Android over USB (`web-ext run -t firefox-android`, hosted server): menu → Extensions →
+    Skrim opens a tab and a task runs on the tab it came from (2026-10-03, Firefox 157; it needed
+    Firefox's "Remote debugging via USB" switch on)
   - [ ] the yellow "Allow on all sites" notice, if Firefox shows it, fixes access in one press
   - [ ] optional: AMO API keys as repository secrets ([`docs/deploy.md`](docs/deploy.md)), so
     releases carry a signed `skrim-firefox.xpi` that installs for good, phone included
@@ -383,8 +385,9 @@ add to it whenever a change needs a manual check, and tick items off when report
       local 4B at 4k vs 16k context
 
 **4. Platform**
-- [ ] Firefox, on a computer and on Android: built (`feat/firefox`), waiting on Suparno's test
-      ([`docs/testing.md`](docs/testing.md) section 10)
+- [x] Firefox on Android: works on a phone (2026-10-03); on a computer, built and untried
+      ([`docs/testing.md`](docs/testing.md) section 10, [`docs/phones.md`](docs/phones.md))
+- [ ] Firefox for Android for anyone: a Mozilla-signed build (AMO keys), then a listed add-on
 - [ ] Cloudflare fallback provider (deferred; only if Groq's and NVIDIA's limits bite)
 
 ---

@@ -341,7 +341,8 @@ export default function App() {
         <Section id="try-it" className="section--alt">
           <SectionHeading>Try it</SectionHeading>
           <p className="section-body">
-            Skrim is not on the Chrome Web Store yet. Firefox is not supported yet. Chrome only for now.
+            Chrome, and Firefox on a computer or an Android phone. Not in the browsers' add-on stores yet: you
+            load it yourself, in a minute.
           </p>
 
           {/* Download or Releases link */}
@@ -407,6 +408,26 @@ export default function App() {
               </div>
             </div>
           )}
+
+          <h3 className="subsection-heading">Firefox, on a computer or an Android phone</h3>
+          <div className="download-row">
+            <a href={SITE.firefoxUrl} className="btn btn--ghost" download aria-label="Download Skrim for Firefox, zip">
+              <Download size={18} aria-hidden="true" />
+              Download for Firefox (.zip)
+            </a>
+            <span className="download-note">
+              about:debugging → This Firefox → Load Temporary Add-on → pick the zip
+            </span>
+          </div>
+          <p className="section-body">
+            On a computer it opens in Firefox's sidebar and lasts until Firefox closes. On an Android phone, where
+            Firefox has no sidebar, Skrim opens as a tab of its own that works on the tab you opened it from;
+            installing it there takes a Mozilla-signed build or a USB cable:{" "}
+            <a href={SITE.phonesUrl} className="text-link" target="_blank" rel="noopener noreferrer">
+              how Skrim runs on a phone
+            </a>
+            .
+          </p>
 
           {/* Build from source (always shown as secondary path) */}
           <h3 className="subsection-heading">Build from source</h3>

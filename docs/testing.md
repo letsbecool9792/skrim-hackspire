@@ -334,7 +334,8 @@ Open the address it prints and check, top to bottom:
    **What we traded, and why**: three tables (planners, name-model files, cutoffs), the shipped
    row highlighted in each; they must match README "Tradeoffs".
 4. **Try it**: the Download for Chrome button, five install steps with a link to the live
-   dashboard, then the build-from-source steps.
+   dashboard; then "Download for Firefox (.zip)" and a link to how Skrim runs on a phone; then the
+   build-from-source steps.
 5. **Footer**: "by Chipotle", the licences, Source on GitHub.
 6. **Both themes**: switch Windows to dark (Settings → Personalisation → Colours) and back. Every
    section stays readable; the pills stay violet.
@@ -434,7 +435,9 @@ model out, so 87 MB goes over the cable, not 168.
 **If Skrim is not in the menu** (Extensions shows only "Try a recommended extension"), the install
 failed, and web-ext's terminal says why. The usual causes:
 - Firefox older than 142: Settings → About Firefox. Update it from the Play Store.
-- Remote debugging via USB is off in Firefox's settings: web-ext then waits and gives up.
+- Remote debugging via USB is off in Firefox's settings (at the bottom of Settings, under Advanced):
+  web-ext copies the add-on over, then repeats "Waiting for org.mozilla.firefox Remote Debugging
+  Server..." and never installs it. Turn the switch on while it waits; it installs within seconds.
 - The phone was unplugged or locked while web-ext pushed the add-on: `adb devices` must list it.
 Add `--verbose` to the web-ext command for every step it takes.
 

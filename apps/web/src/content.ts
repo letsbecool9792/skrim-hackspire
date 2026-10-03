@@ -16,6 +16,10 @@ export const SITE = {
    * to fall back to the releases page.
    */
   downloadUrl: "https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-chrome.zip",
+  /** The newest release's Firefox build: unsigned, so it loads as a temporary add-on. */
+  firefoxUrl: "https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-firefox.zip",
+  /** How Skrim runs on an Android phone, and the routes compared. */
+  phonesUrl: "https://github.com/letsbecool9792/skrim-hackspire/blob/main/docs/phones.md",
   /** The hosted dashboard: what the server receives, fed by the extension in the same browser. */
   dashboardUrl: "https://skrim-dashboard.vercel.app",
   /** Link to the GitHub Releases page (always shown). */
@@ -182,7 +186,7 @@ export const KNOWN_LIMITS: string[] = [
   "The planner sees text only. A task that needs to look at a picture (a chart, a CAPTCHA) is out of reach; text inside images is read by OCR.",
   "Free tiers are the bottleneck: Groq allows about 4–5 steps a minute, and real pages cost more than our test pages.",
   "Our test pages are our own, written by the same hands as the fixes. Expect lower numbers on sites we did not write.",
-  "Chrome only for now (and other Chromium browsers, untested). Not on the Chrome Web Store.",
+  "Chrome and Firefox, on a computer and on Android. Not on the Chrome Web Store or addons.mozilla.org yet. On a phone, text inside images is not read while the Skrim tab is in front.",
 ];
 
 // ─── Build steps from README.md "Run it" ───────────────────────────────────────
