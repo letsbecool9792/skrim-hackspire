@@ -19,6 +19,8 @@ in Firefox, where Skrim opens as a tab that works on the tab you came from
 | Extension for Firefox | [skrim-firefox.zip](https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-firefox.zip) (unsigned, a temporary add-on); on Android see [`docs/phones.md`](docs/phones.md) |
 | Live dashboard (what the server receives) | https://skrim-dashboard.vercel.app |
 | Planning server | https://skrim-server.vercel.app |
+| **Measurements and tradeoffs** | [`docs/tradeoffs.md`](docs/tradeoffs.md): what each model choice gains and costs, measured; the numbers below |
+| Skrim on a phone | [`docs/phones.md`](docs/phones.md) |
 
 ## Contents
 
