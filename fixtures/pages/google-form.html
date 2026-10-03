@@ -8,7 +8,7 @@
     role="listitem"s, each field is named by aria-labelledby pointing at the
     question's heading and its "*", choices are <div role="radio"> and
     <div role="checkbox"> with aria-checked, and Submit is a <div
-    role="button">, not a <button>. The class names are dropped; Skrim never
+    role="button">, not a <button>. A paragraph box is named only "Your answer". The class names are dropped; Skrim never
     reads them. The signed-in account's address sits above the questions, as
     on a real form.
   -->
@@ -96,7 +96,7 @@
 
         <div role="listitem" class="card">
           <div role="heading" aria-level="3" id="i21"><span>Message</span></div>
-          <div class="answer"><textarea data-rows="1" tabindex="0" aria-labelledby="i21" dir="auto"></textarea><div class="placeholder" aria-hidden="true">Your answer</div></div>
+          <div class="answer"><textarea data-rows="1" tabindex="0" aria-label="Your answer" dir="auto"></textarea><div class="placeholder" aria-hidden="true">Your answer</div></div>
           <input type="hidden" name="entry.1006">
         </div>
 

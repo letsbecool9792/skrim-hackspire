@@ -412,6 +412,24 @@ describe("typing into forms", () => {
     assert.equal(finished.outcome, "completed");
     assert.equal(document.querySelector("textarea")?.value, "My parcel arrived damaged");
   });
+
+  test("a heading named with its star, or heading a box named only \"Your answer\", stands for its own question's field", async () => {
+    // As a real Google Form: aria-labelledby with two ids; a paragraph box named only by aria-label.
+    const question = (id: string, title: string, field: string) =>
+      `<div role="listitem"><div><div><div role="heading" id="${id}"><span>${title}</span><span id="${id}s"> *</span></div></div><div>${field}</div></div></div>`;
+    await page(question("q1", "Full name", `<input type="text" aria-labelledby="q1 q1s">`) + question("q2", "Message", `<textarea aria-label="Your answer"></textarea>`));
+    const { planner } = scripted((request, step) => {
+      const headings = request.graph.elements.filter((element) => element.role === "heading");
+      if (step === 0) return { type: "type", target: headings[0]!.id, value: "Asha" };
+      if (step === 1) return { type: "type", target: headings[1]!.id, value: "Hello" };
+      return { type: "done", success: true, summary: "Typed" };
+    });
+
+    await run("Type Asha as the name and Hello as the message", planner);
+
+    assert.equal(document.querySelector("input")?.value, "Asha");
+    assert.equal(document.querySelector("textarea")?.value, "Hello");
+  });
 });
 
 describe("the data guard in the loop", () => {

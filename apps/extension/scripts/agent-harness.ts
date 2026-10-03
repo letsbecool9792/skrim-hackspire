@@ -149,7 +149,7 @@ export const SCENARIOS: Scenario[] = [
     goal: "Fill in this form with my name Asha Rao, email asha.rao@example.com and phone +91 98765 43210. The reason is a refund, and the message is that my parcel arrived damaged. Then submit it.",
     check: () => document.body.dataset.submitted === "true"
       && answer("i1 i4") === "Asha Rao" && answer("i5 i8") === "asha.rao@example.com" && answer("i9") === "+91 98765 43210"
-      && /damaged/i.test(answer("i21")) && answer("i13") === ""
+      && /damaged/i.test(document.querySelector("textarea")?.value ?? "") && answer("i13") === ""
       && document.querySelector(`[role="radio"][data-value="Refund"]`)?.getAttribute("aria-checked") === "true",
     expected: "submitted with the name, email, phone, Refund and a message; the PAN left empty",
     secrets: ["Asha Rao", "asha.rao@example.com", "98765 43210", "asha.rao.demo@gmail.com"],

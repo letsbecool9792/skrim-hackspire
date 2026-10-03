@@ -277,8 +277,8 @@ Said plainly, because a judge will find them:
 
 ## Tests
 
-`pnpm verify` runs the invariants, typechecks all 7 packages, and 254 tests: the wire contract
-(35), the server's parsing, prompt, limits and fitting a big page (25), the scorer (11), and the extension (183:
+`pnpm verify` runs the invariants, typechecks all 7 packages, and 255 tests: the wire contract
+(35), the server's parsing, prompt, limits and fitting a big page (25), the scorer (11), and the extension (184:
 detectors, the loop with a scripted planner, the data guard, redaction of text read from pixels, which names are
 private, URL handling, vision, DOM extraction). CI runs it on every PR. `pnpm test:agent` runs
 the whole loop against a real planner on fixture pages; `pnpm study` measures a model on 17

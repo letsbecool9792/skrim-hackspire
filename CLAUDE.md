@@ -54,7 +54,7 @@ documented so we know where to go if those stop being sufficient — do not add 
 
 | Profile | Status | Use | Cost |
 |---|---|---|---|
-| `groq` | **wired, default** | hosted Qwen (`qwen/qwen3.8-27b`), 42 of 42 in the provider study | free, no card, per model: 1,000 requests/day, 8,000 tokens/min (7,000 input; about 4–5 steps); the server waits out short 429s |
+| `groq` | **wired, default** | hosted Qwen (`qwen/qwen3.8-27b`), 42 of 42 in the provider study | free, no card, per model: 1,000 requests/day, **200,000 tokens/day** (about 80 steps of a real page; a `pnpm test:agent` quick run uses about 45,000), 8,000 tokens/min (7,000 input; about 4–5 steps); the server waits out short 429s |
 | `ollama` | **wired** | air-gap demo, offline dev, and the fallback when Groq's day runs out (`FALLBACK_PROVIDER=ollama`) | free, local |
 | `nvidia` | **wired** | no daily cap. Its default model is now `nvidia/nemotron-3-super-120b-a12b` (37 of 42 in the provider study); Llama 3.2 11B, the old default, did 0 of 42 | free, no card, ~40 RPM, no daily cap |
 | `cloudflare` | not wired | also hosts `qwen3.8-27b` | free, no card, 10k neurons/day |
@@ -179,7 +179,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (254 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (255 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       without the OmniParser detector (+77 MB once exported: the built extension is
@@ -348,7 +348,9 @@ add to it whenever a change needs a manual check, and tick items off when report
     question, the PAN asks, Refund is picked, Submit gives "Your response has been recorded."
   - [ ] a real Google Form for the demo (short answer and paragraph questions, multiple choice
     and checkboxes; no dropdown or date question, which are untried): the same goal works on it.
-    Send Claude its link, to compare its markup with the fixture's
+    Its markup matches the fixture's (checked 2026-10-03), but its Reason choices are still
+    "Option 1" to "Option 4": rename them. On the first try it typed three fields and picked a
+    choice before Groq's day ran out
   - [ ] Privacy under a finished form task lists each value typed and the site
 - [ ] **Click to reveal**: on `canvas-card.html`, `what is my pan number` ends with an "ID number 1"
       pill; clicking it shows the real PAN in the side panel, clicking again hides it. The dashboard
@@ -476,7 +478,9 @@ content script; the icon detector will need that.
 free tier is the cost: 4–5 steps a minute, which the server waits out (back-to-back steps
 take ~14 s), and a daily cap that two study runs in a row used up. When Groq says to come
 back later, `FALLBACK_PROVIDER` (`ollama`, or `nvidia` with Nemotron 3 Super) plans that
-step and the task carries on; unset, the step fails. Still open:
+step and the task carries on; unset, the step fails. Groq's day is **200,000 tokens per model**, and it runs out mid-task: on 2026-10-03 the demo
+form stopped at step 6, after a day of agent test runs on the same key. On a demo day, run no
+`pnpm test:agent` or `pnpm study` on the demo key, and set `FALLBACK_PROVIDER`. Still open:
 - The fallback is tried again from Groq on every step: a long cap costs one quick 429 a step.
 - Groq's `openai/gpt-oss-120b` also did 42 of 42, on its own quota, which would double the
   day. Whether OpenAI's open-weight model is acceptable on the slides is a team call.
