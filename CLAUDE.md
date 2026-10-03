@@ -319,8 +319,8 @@ add to it whenever a change needs a manual check, and tick items off when report
     (skrim-dashboard.vercel.app). Still to check: the landing page in light and dark and at phone
     width, and its Download button once a release exists
   - [x] a third Vercel project, root `apps/server` (skrim-server.vercel.app), with `GROQ_API_KEY` in
-    its environment variables. Still to check after the server commit is pushed: its URL answers
-    `{"status":"ok"}`
+    its environment variables. Checked 2026-10-03: `GET /` answers `{"status":"ok"}`, and a
+    real step came back from Groq in 2.4 s
   - [ ] the repository variables `SKRIM_SERVER_URL` (the server on Vercel) and
     `WXT_DASHBOARD_URL` (the dashboard on Vercel), then push a tag
     (`v0.3.0`): the release has `skrim-chrome.zip`, and the landing page's Download button
@@ -371,7 +371,9 @@ add to it whenever a change needs a manual check, and tick items off when report
 - [x] Dashboard: split-screen wire view + resource panel
 - [x] Landing page (`apps/web`, PR #25); it and the dashboard deploy to Vercel
 - [ ] Deployed: the one-time setup in [`docs/deploy.md`](docs/deploy.md) (waiting on Suparno)
-- [ ] Tradeoff curve: GLiNER quint8 vs fp16; hosted vs local model accuracy and latency
+- [x] Tradeoff curve ([`docs/tradeoffs.md`](docs/tradeoffs.md), 2026-10-03): GLiNER quint8 /
+      fp16 / fp32 and the cutoff 0.4–0.8 in the browser eval; hosted vs local planners, and the
+      local 4B at 4k vs 16k context
 
 **4. Platform**
 - [ ] Firefox: run the tests in [`docs/testing.md`](docs/testing.md) (parked for now)
@@ -622,7 +624,7 @@ Working VRAM after Windows + Chrome is ~4.5 GB:
 | Model | Q4 + vision tower + KV | Verdict |
 |---|---|---|
 | Qwen3-VL-2B | ~2.7 GB | fits; likely too weak for reliable multi-step planning |
-| Qwen3-VL-4B | ~4.3–4.5 GB | fits, near-zero headroom — **our ceiling** |
+| Qwen3-VL-4B | ~3.3 GB with a 4k context; 5.8 GB with 16k (a third spills to CPU, a step 3x slower) | fits, near-zero headroom — **our ceiling** |
 | Qwen3-VL-8B | ~7 GB | **will not fit**, spills to CPU |
 
 **Do not treat this as a limitation to hide.** It is the tradeoff curve the brief
@@ -644,8 +646,12 @@ Run the air-gap beat with the extension's WebGPU path idle, or accept it being s
   system message. This is the likeliest reason the local planner looked "stupid" on real sites
   while passing the small fixtures. Fix: `pnpm ollama:setup` makes `skrim-planner`, the same
   model with a 16k context (`scripts/ollama/Modelfile`), and it is the server's default now.
-  All local-model numbers in `docs/provider-study.md` were measured before this and are
-  probably too low. Re-run `pnpm study -- ollama:skrim-planner` before quoting them.
+  The fixture studies were never cut (their largest request is about 2,000 tokens), so their
+  numbers stand. Its cost: on the 6 GB card the 16k cache does not fit beside the model, so
+  5.8 GB load with a third on the CPU, and a step takes 1.7 s instead of 0.6 s (same 45 of 48
+  tasks; `docs/provider-study.md`). With Chrome holding GPU memory, Ollama could fail to load
+  it at all ("cudaMalloc failed: out of memory") until a restart. If that happens before the
+  offline demo beat: close Chrome's other tabs, `ollama stop` every model, and try again.
 - **No inference in the Chrome service worker.** Transformers.js cannot reach WebGPU *or*
   WASM there ([#787](https://github.com/huggingface/transformers.js/issues/787)). Every
   model runs in the side panel, an ordinary extension page on both browsers. The offscreen

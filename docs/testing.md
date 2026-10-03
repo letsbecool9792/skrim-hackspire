@@ -329,8 +329,10 @@ Open the address it prints and check, top to bottom:
    order stays readable in both. Nothing moves or swaps by itself.
 2. **Get it for Chrome** scrolls to "Try it"; **How it works** to the five-stage pipeline;
    **Source** opens the GitHub repo in a new tab.
-3. **The numbers**: six cards (99.0%, 87.5%, 1.9%, 42 of 42, 137 ms, 87 MB) and the model sizes
+3. **The numbers**: six cards (99.0%, 87.5%, 1.9%, 42 of 42, ~200 ms, 87 MB) and the model sizes
    table. They must match README "The numbers"; every figure lives in `apps/web/src/content.ts`.
+   **What we traded, and why**: three tables (planners, name-model files, cutoffs), the shipped
+   row highlighted in each; they must match README "Tradeoffs".
 4. **Try it**: the Download for Chrome button, five install steps with a link to the live
    dashboard, then the build-from-source steps.
 5. **Footer**: "by Chipotle", the licences, Source on GitHub.

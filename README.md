@@ -20,7 +20,7 @@ Built by team **Chipotle**. Chrome and Firefox (MV3); Firefox is untried so far.
 ## Contents
 
 [How it works](#how-it-works) · [What the server sees](#what-the-server-sees) ·
-[Finding private data](#finding-private-data) · [The numbers](#the-numbers) ·
+[Finding private data](#finding-private-data) · [The numbers](#the-numbers) · [Tradeoffs](#tradeoffs) ·
 [Which model plans](#which-model-plans) · [What stops it going wrong](#what-stops-it-going-wrong) ·
 [Known limits](#known-limits) · [Run it](#run-it) · [The repo](#the-repo)
 
@@ -148,7 +148,7 @@ is the plan for that).
 | OmniParser icon detector (YOLO, 1280x1280; exported, not yet used) | 80.9 MB, optional |
 | **Built extension** | **87 MB** without the icon detector, 168 MB with it |
 
-Per page view, medians in Chromium: read the page **5 ms**, find names **137 ms** (up to about 1 s
+Per page view, medians in Chromium: read the page **5 ms**, find names **about 200 ms** (166 to 264 ms over six runs; up to about 1 s
 on a big personal page), OCR **0.4 to 0.8 s** when the page has a canvas, image or frame (0
 otherwise), redact **under 1 ms**. The first name lookup also loads the model.
 
@@ -159,12 +159,44 @@ otherwise), redact **under 1 ms**. The first name lookup also loads the model.
 | Groq `qwen/qwen3.8-27b` | **42 of 42** | 0.5 / 0.9 s | 1,566 + 39 | 8,000 tokens a minute, about 4-5 steps; 1,000 requests a day |
 | Groq `openai/gpt-oss-120b` | 42 of 42 | 1.0 / 1.6 s | 1,469 + 76 | same, separate quota |
 | NVIDIA `nemotron-3-super-120b-a12b` | 37 of 42 (with the prompt rule) | 2.6 / 8.3 s | 1,670 + 222 | 40 requests a minute, no daily cap |
-| Ollama `qwen3-vl:4b-instruct`, local | 37 of 42 (with the guards) | 0.6 / 1.1 s | 1,544 + 21 | none; needs about 3.7 GB of VRAM |
+| Ollama `qwen3-vl:4b-instruct`, local, 4k context | 37 of 42 (with the guards) | 0.6 / 1.1 s | 1,544 + 21 | none; about 3.3 GB of VRAM |
+| Ollama `skrim-planner` (the same, 16k context), local | 45 of 48 on 16 tasks, as the 4k context | 1.7 / 2.4 s | 1,689 + 23 | none; 5.8 GB, a third on the CPU of a 6 GB card |
 
 Eight models were studied ([`docs/provider-study.md`](docs/provider-study.md)); NVIDIA's old
-default, Llama 3.2 11B, did 0 of 42 because it never says "done". The local numbers were measured
-while Ollama silently cut long requests to its 4k context (found later; fixed with
-`pnpm ollama:setup`, which gives it 16k), so they are probably too low and are being re-measured.
+default, Llama 3.2 11B, did 0 of 42 because it never says "done". Ollama's default 4k context
+cuts a longer request from the front; no fixture request came near it (the largest was about
+2,000 tokens), but real sites' requests run 3,000 to 12,000. `skrim-planner` (`pnpm ollama:setup`)
+gives it 16k: the same tasks pass, and each step is about three times slower, since on a 6 GB
+card a third of it runs on the CPU.
+
+## Tradeoffs
+
+Two places where a bigger or looser model buys something and costs something, both measured
+([`docs/tradeoffs.md`](docs/tradeoffs.md) has the method and the rest):
+
+**The name model, in the browser eval.** The three ONNX files of the same model, at the shipped
+cutoff, and the cutoff on the shipped file:
+
+| Model file | Size | Recall | Precision | Names, median |
+|---|---|---|---|---|
+| **quint8** (shipped) | **46 MB** | **99.0%** | **87.5%** | **238 ms** |
+| fp32 | 181 MB | 99.0% | 82.5% | 356 ms |
+| fp16 | 91 MB | 66.3% | 97.1% | 506 ms |
+
+| Cutoff | 0.4 | 0.5 | **0.6** | 0.7 | 0.8 |
+|---|---|---|---|---|---|
+| Recall | 95.9% | 96.9% | **99.0%** | 92.9% | 75.5% |
+| Precision | 73.7% | 81.3% | **87.5%** | 92.9% | 93.8% |
+
+The 8-bit model loses nothing measurable against full precision, at a quarter of the size. Above
+0.6, names get through (20 of 36 at 0.8); below it, addresses split into pieces that leave parts
+readable, and twice as much ordinary text is hidden.
+
+**The planner.** Qwen 3.8 27B on Groq: 42 of 42 at 0.5 s a step. The local 4B, the only one
+that fits a 6 GB laptop GPU: 37 of 42, and it loses its way on real sites. The 16k context real
+pages need passes the same tasks but runs a third on the CPU: 1.7 s a step instead of 0.6 s. So
+the model that does the task well does not fit on the device, which is why Skrim makes the
+hosted one safe instead.
 
 ## Which model plans
 

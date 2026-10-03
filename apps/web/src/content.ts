@@ -103,9 +103,9 @@ export const METRICS: Metric[] = [
     detail: "14 goals, 3 runs each, by the default planner: Qwen 3.8 27B on Groq's free tier.",
   },
   {
-    value: "137 ms",
+    value: "~200 ms",
     label: "To find names",
-    detail: "Median per page view, on the device. Reading the page takes 5 ms; redacting under 1 ms.",
+    detail: "Median per page view, on the device, over six runs. Reading the page takes 5 ms; redacting under 1 ms.",
   },
   {
     value: "87 MB",
@@ -124,6 +124,53 @@ export const FOOTPRINT_ROWS: FootprintRow[] = [
   { asset: "ONNX Runtime WebAssembly (runs GLiNER)",                   size: "14 MB"   },
   { asset: "MediaPipe WebAssembly + BlazeFace (faces)",                size: "12.3 MB" },
   { asset: "Tesseract core + English data (OCR)",                      size: "9.9 MB"  },
+];
+
+// ─── Tradeoffs (docs/tradeoffs.md) ────────────────────────────────────────────
+// Each table: a header row, then rows; the row marked shipped is highlighted.
+
+export interface TradeoffTable {
+  title: string;
+  head: string[];
+  rows: { cells: string[]; shipped?: boolean }[];
+  note: string;
+}
+
+export const TRADEOFFS: TradeoffTable[] = [
+  {
+    title: "The planner: tasks passed against speed",
+    head: ["Planner", "Runs on", "Tasks passed", "Step, median"],
+    rows: [
+      { cells: ["Qwen 3.8 27B (Groq)", "hosted", "42 of 42", "0.5 s"], shipped: true },
+      { cells: ["gpt-oss-120b (Groq)", "hosted", "42 of 42", "1.0 s"] },
+      { cells: ["Nemotron 3 Super 120B (NVIDIA)", "hosted", "37 of 42", "2.6 s"] },
+      { cells: ["Qwen3-VL 4B, 4k context", "this laptop", "37 of 42", "0.6 s"] },
+      { cells: ["Qwen3-VL 4B, 16k context", "this laptop, a third on CPU", "same tasks", "1.7 s"] },
+    ],
+    note: "The model that does the task well does not fit on a laptop's 6 GB GPU, let alone a phone. So Skrim keeps it on a server and makes what reaches it safe.",
+  },
+  {
+    title: "The name model: size and format",
+    head: ["Model file", "Size", "Found", "Precision", "Median"],
+    rows: [
+      { cells: ["8-bit (quint8)", "46 MB", "99.0%", "87.5%", "238 ms"], shipped: true },
+      { cells: ["Full precision (fp32)", "181 MB", "99.0%", "82.5%", "356 ms"] },
+      { cells: ["Half precision (fp16)", "91 MB", "66.3%", "97.1%", "506 ms"] },
+    ],
+    note: "The 8-bit model loses nothing measurable against full precision, at a quarter of the size and a third faster.",
+  },
+  {
+    title: "The name model: how sure it must be",
+    head: ["Cutoff", "Found", "Precision", "Names missed"],
+    rows: [
+      { cells: ["0.4", "95.9%", "73.7%", "1 (3 addresses split)"] },
+      { cells: ["0.5", "96.9%", "81.3%", "1"] },
+      { cells: ["0.6", "99.0%", "87.5%", "1"], shipped: true },
+      { cells: ["0.7", "92.9%", "92.9%", "5"] },
+      { cells: ["0.8", "75.5%", "93.8%", "20"] },
+    ],
+    note: "Above 0.6, names get through. Below it, addresses break into pieces that leave parts readable, and twice as much ordinary text is hidden.",
+  },
 ];
 
 // ─── Known limits (README.md "Known limits") ─────────────────────────────────

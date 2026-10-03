@@ -3,9 +3,11 @@
 **Question.** Which free, open-weight model should be Skrim's default planner, weighing how
 well it does tasks against how much work its free tier allows?
 
-> **Caveat, found 2026-10-03.** Every local-model number here was measured with Ollama's
-> default 4k context, which cut the request from the front (see CLAUDE.md, Gotchas). They are
-> probably too low. The Groq and NVIDIA numbers are unaffected.
+> **On Ollama's 4k context (checked 2026-10-03).** The local numbers here were measured with
+> Ollama's default 4k context, which cuts a longer request from the front (CLAUDE.md, Gotchas).
+> No request in this study came near it: the largest was about 2,000 tokens. So the local
+> numbers stand. The cut hurt real sites, whose requests run 3,000 to 12,000 tokens; the 16k
+> context that fixes it costs speed, not tasks (last section of the results).
 
 **Short answer.** Groq's `qwen/qwen3.8-27b`: it did every task, fastest and in the fewest
 steps. Its free tier is the catch: 4–5 steps a minute, and a daily cap that two study runs
@@ -182,6 +184,23 @@ on finding search boxes, element positions dropped (1 of 4 on the support form: 
 labels) and cut to the top-left corner (0 of 3 on the search: it clicked the search box
 instead of typing). So the request costs what it did, about 1,650 tokens a step on the
 fixtures, and Groq's per-minute limit stays as it was.
+
+### The local model with a 16k context (2026-10-03)
+
+Ollama's default 4k context cut real sites' requests from the front, so the local planner is
+now `skrim-planner`: the same Qwen3-VL 4B with a 16k context (`pnpm ollama:setup`). Same 16
+tasks, 3 runs each, on the RTX 4050 with nothing else on the GPU:
+
+| Model | Passed | Step p50 / p90 | Memory | Where it runs |
+|---|---|---|---|---|
+| `qwen3-vl:4b-instruct`, 4k context | 45 of 48 | **0.6 / 0.8 s** | about 3.3 GB | all on the GPU |
+| `skrim-planner`, 16k context | 45 of 48 | 1.7 / 2.4 s | 5.8 GB | 65% GPU, 35% CPU |
+
+Every task passed or failed the same way (`reply` 0 of 3 in both). The fixtures' requests fit
+in 4k, so the bigger context cannot win tasks here; on real sites it is what keeps the system
+prompt in. Its cost is the 6 GB card: the 16k cache does not fit beside the model, a third of
+it runs on the CPU, and each step is about three times slower. With Chrome holding GPU memory
+too, Ollama could not load it at all until the machine was restarted.
 
 ---
 
