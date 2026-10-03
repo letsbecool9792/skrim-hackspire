@@ -196,9 +196,15 @@ html { font-size: 16px; scroll-behavior: smooth; }
 /* Hero privacy visual */
 
 .hero-visual {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.hero-figure {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  margin: 0;
 }
 
 .hero-panel-label {
@@ -207,7 +213,6 @@ html { font-size: 16px; scroll-behavior: smooth; }
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-3);
-  transition: color var(--duration) var(--ease);
 }
 
 .hero-panel {
@@ -216,12 +221,11 @@ html { font-size: 16px; scroll-behavior: smooth; }
   background: var(--surface);
   box-shadow: var(--shadow-md);
   overflow: hidden;
-  transition: border-color var(--duration) var(--ease);
 }
 
+/* Violet, not green: violet means "this is hidden" everywhere (tokens.css). */
 .hero-panel--redacted {
-  border-color: var(--accent-border);
-  background: var(--accent-soft);
+  border-color: var(--private-border);
 }
 
 .hero-table {
@@ -231,6 +235,7 @@ html { font-size: 16px; scroll-behavior: smooth; }
 
 .hero-cell-label {
   padding: var(--space-3) var(--space-5);
+  text-align: left;
   width: 6rem;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
@@ -246,24 +251,6 @@ html { font-size: 16px; scroll-behavior: smooth; }
   font-size: var(--text-sm);
   color: var(--text);
   border-bottom: var(--border-width) solid var(--border);
-  transition: all var(--duration) var(--ease);
-}
-
-/* Animate the swap with a short fade */
-@media (prefers-reduced-motion: no-preference) {
-  .hero-panel {
-    transition: border-color 300ms var(--ease), background 300ms var(--ease);
-  }
-  .hero-cell-value {
-    animation: none;
-  }
-  .hero-panel--redacted .hero-cell-value {
-    animation: swap-in 300ms var(--ease) both;
-  }
-  @keyframes swap-in {
-    from { opacity: 0; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
 }
 
 /* ── 4. Generic section helpers ────────────────────────────────────────── */

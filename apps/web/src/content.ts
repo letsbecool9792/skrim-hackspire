@@ -16,6 +16,8 @@ export const SITE = {
    * to fall back to the releases page.
    */
   downloadUrl: "https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-chrome.zip",
+  /** The hosted dashboard: what the server receives, fed by the extension in the same browser. */
+  dashboardUrl: "https://skrim-dashboard.vercel.app",
   /** Link to the GitHub Releases page (always shown). */
   releasesUrl: "https://github.com/letsbecool9792/skrim-hackspire/releases",
 } as const;

@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import {
   Brain,
   Download,
@@ -45,45 +44,38 @@ function Token({ label }: { label: string }) {
 
 // ─── Hero visual ───────────────────────────────────────────────────────────────
 
+/**
+ * The same page lines twice, side by side: what the user sees, and what the
+ * server gets. Both at once, so the point lands without waiting for a swap.
+ */
 function HeroVisual() {
-  const [showRedacted, setShowRedacted] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  useEffect(() => {
-    function cycle() {
-      timerRef.current = setTimeout(() => {
-        setShowRedacted((v) => !v);
-        cycle();
-      }, 2800);
-    }
-    cycle();
-    return () => clearTimeout(timerRef.current);
-  }, []);
-
   return (
-    <div className="hero-visual" aria-label="Privacy demonstration">
-      <div className="hero-panel-label" aria-live="polite">
-        {showRedacted ? "What the server gets" : "What you see"}
-      </div>
-      <div className={`hero-panel${showRedacted ? " hero-panel--redacted" : ""}`}>
-        <table className="hero-table" role="presentation">
+    <div className="hero-visual">
+      <HeroPanel title="What you see" redacted={false} />
+      <HeroPanel title="What the server gets" redacted />
+    </div>
+  );
+}
+
+function HeroPanel({ title, redacted }: { title: string; redacted: boolean }) {
+  return (
+    <figure className="hero-figure">
+      <figcaption className="hero-panel-label">{title}</figcaption>
+      <div className={`hero-panel${redacted ? " hero-panel--redacted" : ""}`}>
+        <table className="hero-table">
           <tbody>
             {HERO_ROWS.map(({ label, value, tokenLabel }) => (
               <tr key={label}>
-                <td className="hero-cell-label">{label}</td>
+                <th scope="row" className="hero-cell-label">{label}</th>
                 <td className="hero-cell-value">
-                  {showRedacted && tokenLabel !== null ? (
-                    <Token label={tokenLabel} />
-                  ) : (
-                    <span>{value}</span>
-                  )}
+                  {redacted && tokenLabel !== null ? <Token label={tokenLabel} /> : value}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </div>
+    </figure>
   );
 }
 
@@ -158,17 +150,21 @@ export default function App() {
               <h1 className="hero-title">{SITE.title}</h1>
               <p className="hero-tagline">{SITE.tagline}</p>
               <div className="hero-actions">
+                <a href="#try-it" className="btn btn--primary">
+                  <Download size={16} aria-hidden="true" />
+                  Get it for Chrome
+                </a>
+                <a href="#how-it-works" className="btn btn--ghost">
+                  How it works
+                </a>
                 <a
                   href={SITE.githubUrl}
-                  className="btn btn--primary"
+                  className="btn btn--ghost"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   <ExternalLink size={16} aria-hidden="true" />
-                  View on GitHub
-                </a>
-                <a href="#how-it-works" className="btn btn--ghost">
-                  How it works
+                  Source
                 </a>
               </div>
             </div>
@@ -291,8 +287,7 @@ export default function App() {
         <Section id="known-limits" className="section--alt">
           <SectionHeading>Known limits</SectionHeading>
           <p className="section-body">
-            Teams that claim perfection get taken apart in questioning. Here is what Skrim doesn't do yet, or can't
-            do by design.
+            What Skrim does not do yet, or cannot do by design, said plainly.
           </p>
           <ul className="limits-list">
             {KNOWN_LIMITS.map((limit) => (
@@ -363,7 +358,12 @@ export default function App() {
                 <span className="install-num" aria-hidden="true">5</span>
                 <span>
                   Open any page and click Skrim's toolbar button. It plans with our hosted server, which is on a
-                  free tier shared by everyone trying it: a few steps a minute. For your own, build from source.
+                  free tier shared by everyone trying it: a few steps a minute. To watch what the server receives,
+                  open{" "}
+                  <a href={SITE.dashboardUrl} className="text-link" target="_blank" rel="noopener noreferrer">
+                    the live dashboard
+                  </a>{" "}
+                  in the same browser while the side panel is open.
                 </span>
               </div>
             </div>
