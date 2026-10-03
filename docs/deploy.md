@@ -56,13 +56,12 @@ has no per-user limit. If that becomes a problem, change the key in Vercel and r
 
 ### 2. The extension release
 
-1. GitHub → Settings → Secrets and variables → Actions → **Variables**, two new variables, no
-   trailing slash: `SKRIM_SERVER_URL` = `https://skrim-server.vercel.app`, and `WXT_DASHBOARD_URL` =
-   `https://skrim-dashboard.vercel.app`. Without them the release workflow stops instead of
-   shipping a zip that talks to `localhost`.
-2. Tag and push: `git tag v0.3.0`, then `git push origin v0.3.0`. The workflow builds with the
-   hosted server and dashboard URLs, stamps the version from the tag, and publishes the release
-   with `skrim-chrome.zip`. It leaves out the icon detector (nothing calls it yet).
+Tag and push: `git tag v0.3.1`, then `git push origin v0.3.1`. The workflow builds against
+`https://skrim-server.vercel.app` and `https://skrim-dashboard.vercel.app`, stamps the version
+from the tag, and publishes the release with `skrim-chrome.zip`. It leaves out the icon
+detector (nothing calls it yet). To build a release against other hosts, set the repository
+variables `SKRIM_SERVER_URL` and `WXT_DASHBOARD_URL` (Settings → Secrets and variables →
+Actions → Variables, no trailing slash); they override the defaults.
 
 ## Local builds stay local
 

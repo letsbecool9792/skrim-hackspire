@@ -321,14 +321,13 @@ add to it whenever a change needs a manual check, and tick items off when report
   - [x] a third Vercel project, root `apps/server` (skrim-server.vercel.app), with `GROQ_API_KEY` in
     its environment variables. Checked 2026-10-03: `GET /` answers `{"status":"ok"}`, and a
     real step came back from Groq in 2.4 s
-  - [ ] the repository variables `SKRIM_SERVER_URL` (the server on Vercel) and
-    `WXT_DASHBOARD_URL` (the dashboard on Vercel), then push a tag
-    (`v0.3.0`): the release has `skrim-chrome.zip`, and the landing page's Download button
-    gets it
+  - [x] the first release: the workflow builds against the Vercel URLs by default (no
+    repository variables needed); v0.3.1; see "The extension release" in [`docs/deploy.md`](docs/deploy.md)
   - [ ] load that zip in Chrome (remove the local Skrim first): a task runs through the hosted
     server, and the hosted dashboard shows it live
-  - [ ] delete the hand-made release `v0.2.0` (it talks to localhost) and its tag, and the stray
-    tag `v0.1.0`
+  - [ ] delete the hand-made release `v0.2.0` (it talks to localhost) and its tag, the stray
+    tag `v0.1.0`, and the tag `v0.3.0` (its run stopped for want of the variables, which are now
+    defaults; the release went out as `v0.3.1`)
 - [ ] **Firefox**: [`docs/testing.md`](docs/testing.md) section 5 (parked for now)
 - [x] **Pick the default provider**: Groq's Qwen 3.8 27B, as the study
       ([`docs/provider-study.md`](docs/provider-study.md)) recommends (decided 2026-10-02)
