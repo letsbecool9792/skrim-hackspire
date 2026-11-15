@@ -315,7 +315,7 @@ export default function App() {
             </ol>
             <p className="note">
               You'll need a free <External href="https://console.groq.com">Groq API key</External> (no card). To plan on
-              your own machine instead, install Ollama, run <code>ollama pull qwen3-vl:4b-instruct</code> and{" "}
+              your own machine instead, install Ollama, run <code>ollama pull qwen3:4b-instruct-2507-q4_K_M</code> and{" "}
               <code>pnpm ollama:setup</code>, then start the server with <code>MODEL_PROVIDER=ollama</code>.
             </p>
           </div>

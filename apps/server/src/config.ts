@@ -34,9 +34,9 @@ export interface ProviderConfig {
  * Per provider. Groq's free tier allows 8,000 tokens a minute per model, and
  * rejects one request over that outright; 5,500 leaves room for the estimate
  * being off and for the answer. NVIDIA counts requests, not tokens; the cap is
- * there for speed. Ollama's skrim-planner reads 16k tokens and must answer too.
+ * there for speed. Ollama's skrim-planner reads 12k tokens and must answer too.
  */
-const PROMPT_BUDGET: Record<ProviderName, number> = { groq: 5_500, cerebras: 12_000, nvidia: 16_000, ollama: 13_000 };
+const PROMPT_BUDGET: Record<ProviderName, number> = { groq: 5_500, cerebras: 12_000, nvidia: 16_000, ollama: 10_000 };
 
 function promptStyle(provider: ProviderName): PromptStyle {
   const set = process.env.PROMPT_STYLE;
@@ -124,11 +124,11 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
     return {
       provider,
       baseURL: process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1',
-      // Must match .env.example. "skrim-planner" is qwen3-vl:4b-instruct with a
-      // 16k context (scripts/ollama/Modelfile; make it with `pnpm ollama:setup`):
-      // at Ollama's default 4k a real page's request is cut from the front. The
-      // instruct build: plain "qwen3-vl:4b" is the thinking build, 10-80x slower
-      // a step, and it cannot be told not to think through the OpenAI-compatible API.
+      // Must match .env.example. "skrim-planner" is Qwen3 4B Instruct (2507), text
+      // only, with a 12k context (scripts/ollama/Modelfile; `pnpm ollama:setup`):
+      // at Ollama's default 4k a real page's request is cut from the front. An
+      // instruct build: a thinking build is 10-80x slower a step, and cannot be
+      // told not to think through the OpenAI-compatible API.
       model: process.env.OLLAMA_MODEL || 'skrim-planner',
       promptBudgetTokens: promptBudget(provider),
       promptStyle: promptStyle(provider),
