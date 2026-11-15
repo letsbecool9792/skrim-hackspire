@@ -2,7 +2,6 @@ import { useState } from "react";
 import { ArrowRight, Download, ExternalLink, Terminal } from "lucide-react";
 import {
   SITE,
-  HERO_ROWS,
   PIPELINE,
   METRICS,
   FOOTPRINT_ROWS,
@@ -37,38 +36,40 @@ function External({ href, children, className = "text-link" }: { href: string; c
   return <a href={href} className={className} target="_blank" rel="noopener noreferrer">{children}</a>;
 }
 
-/**
- * The hero's document: a page of someone's details. Flip it to see what the
- * planning server gets: the same page, each private value a placeholder.
- */
-function HeroDocument() {
-  const [serverView, setServerView] = useState(true);
+/** One private value in the hero letter: covered by a bar that sweeps in, its placeholder's name shown on hover. */
+function Redact({ value, token, order }: { value: string; token: string; order: number }) {
   return (
-    <figure className="doc-figure">
-      <div className="doc-switch" role="group" aria-label="Whose view">
-        <button type="button" aria-pressed={!serverView} onClick={() => setServerView(false)}>What you see</button>
-        <button type="button" aria-pressed={serverView} onClick={() => setServerView(true)}>What the server gets</button>
-      </div>
-      <div className="doc">
-        <div className="doc-head">
-          <span className="doc-kind">Order confirmation</span>
-          <span className="doc-ref">checkout · step 3 of 3</span>
-        </div>
-        <dl className="doc-rows">
-          {HERO_ROWS.map(({ label, value, tokenLabel }) => (
-            <div key={label} className="doc-row">
-              <dt>{label}</dt>
-              <dd>{serverView && tokenLabel !== null ? <Token label={tokenLabel} /> : value}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="doc-note">
-          {serverView
-            ? <>The planner reads this and answers <code>type <Token label="email 1" /> into e17</code>. Your device types the real address.</>
-            : <>This is the page in your browser. None of the values marked as private leave it.</>}
+    <span className="redact" data-token={token} style={{ "--i": order } as React.CSSProperties} tabIndex={0} aria-label={`${token} (hidden)`}>
+      {value}
+    </span>
+  );
+}
+
+/**
+ * The hero's letter: it loads showing someone's details, then a bar sweeps
+ * over each private value in turn and the stamp lands. That is Skrim's whole
+ * job in four seconds. Hover a bar to see the placeholder the server gets.
+ * "Run it again" replays it; with reduced motion it simply rests redacted.
+ */
+function HeroLetter() {
+  const [run, setRun] = useState(0);
+  return (
+    <figure className="letter-figure">
+      <div className="letter" key={run}>
+        <p>
+          Dear <Redact value="Asha Rao" token="name 1" order={0} />, your order to{" "}
+          <Redact value="12 MG Road, Bengaluru" token="address 1" order={1} /> has shipped. Questions? Call{" "}
+          <Redact value="+91 98765 43210" token="phone 1" order={2} />.
+        </p>
+        <p>
+          The invoice is under PAN <Redact value="ABCDE1234F" token="ID number 1" order={3} />.
         </p>
         <span className="stamp" aria-hidden="true">97 of 98 hidden</span>
       </div>
+      <figcaption className="letter-caption">
+        <span>What the planning server gets. Hover a bar for its placeholder.</span>
+        <button type="button" className="replay" onClick={() => setRun((n) => n + 1)}>Run it again</button>
+      </figcaption>
     </figure>
   );
 }
@@ -111,7 +112,7 @@ export default function App() {
             <div className="hero-copy">
               <span className="kicker">A browser agent · open source · open-weight models</span>
               <h1>
-                Your agent gets the page. Your <span className="bar" aria-label="name">name</span> stays here.
+                Your agent gets the page. Your <span className="bar">name</span> stays here.
               </h1>
               <p className="hero-lead">{SITE.tagline} Before anything leaves your browser, every personal detail is blacked out and given a placeholder. The real value is typed back only on your device.</p>
               <div className="hero-actions">
@@ -120,7 +121,7 @@ export default function App() {
                 <a href="#numbers" className="btn btn-pen">Read the numbers <ArrowRight size={16} aria-hidden="true" /></a>
               </div>
             </div>
-            <HeroDocument />
+            <HeroLetter />
           </div>
         </section>
 
