@@ -5,7 +5,11 @@
 ## What it does
 
 Receives a `PlanRequest` (redacted screen graph + goal + history), builds a prompt, calls an
-open-weight VLM, validates the response against `ActionSchema`, returns one `PlanResponse`.
+open-weight model, validates the response against `ActionSchema`, returns one `PlanResponse`:
+the next action, and optionally `then`, up to six that follow it (the rest of a form and its
+button), which the extension carries out without asking again. The parser takes them as "then"
+on the action, a bare list, or `{"actions": [...]}`, keeps valid ones up to the first invalid one,
+and never a done.
 
 That is the whole job. **No ML runs here.** No image processing, no detection, no redaction —
 redaction cannot happen server-side by definition, because the data would already have
@@ -41,6 +45,10 @@ smaller than JSON. The screenshot is not sent; text read from pixels is marked `
 The history comes with each step's `verified` flag and note ("now it is expanded"), and
 the system prompt tells the model to answer `done` once the history shows the goal
 reached. Some models ignore that; measure with `pnpm test:agent` before choosing one.
+
+**Two system prompts** (`src/prompts/system.ts`): the full one, with worked examples, for the
+small local model, and a compact one, about a third of the tokens, for hosted models (Groq,
+Cerebras, NVIDIA). Each profile sets `promptStyle`; `PROMPT_STYLE` overrides it.
 
 **Change the prompt only with `pnpm study` numbers in hand.** Every word is sent with every
 step, so a shorter prompt is fewer of Groq's 8,000 tokens a minute. But Qwen3-VL 4B, the
@@ -82,6 +90,11 @@ One `.env` at the **repo root**, loaded via `--env-file-if-exists=../../.env`. S
 [`/.env.example`](../../.env.example). `groq` (the default), `ollama` and `nvidia` are wired;
 pick one with `MODEL_PROVIDER`. `FALLBACK_PROVIDER` names another to plan a step when the
 first says to come back later (Groq's daily cap); short waits the server sits out itself.
+It is a comma list, tried in order (`src/planner/chain.ts`): a provider with another after it
+hands over any pause over 5 s, one that said to come back later is skipped until then, a fallback
+that fails for its own reasons passes the step on, and when all fail a short pause is sat out.
+The rest times are about providers, not users, kept per server instance. `cerebras` is wired: the
+same Qwen 3.8 27B with its own allowance.
 It is the same adapter with other settings, not a second code path.
 
 ```powershell
