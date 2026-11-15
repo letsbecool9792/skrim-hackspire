@@ -93,8 +93,8 @@ first says to come back later (Groq's daily cap); short waits the server sits ou
 It is a comma list, tried in order (`src/planner/chain.ts`): a provider with another after it
 hands over any pause over 5 s, one that said to come back later is skipped until then, a fallback
 that fails for its own reasons passes the step on, and when all fail a short pause is sat out.
-The rest times are about providers, not users, kept per server instance. `cerebras` is wired: the
-same Qwen 3.8 27B with its own allowance.
+The rest times are about providers, not users, kept per server instance. `cerebras` is wired (the
+same Qwen 3.8 27B with its own allowance) but needs a card, so it is not used.
 It is the same adapter with other settings, not a second code path.
 
 ```powershell

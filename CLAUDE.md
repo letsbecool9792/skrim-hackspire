@@ -58,11 +58,11 @@ documented so we know where to go if those stop being sufficient — do not add 
 |---|---|---|---|
 | `groq` | **wired, default** | hosted Qwen (`qwen/qwen3.8-27b`), 42 of 42 in the provider study | free, no card, per model: 1,000 requests/day, **200,000 tokens/day** (about 80 steps of a real page; a `pnpm test:agent` quick run uses about 45,000), 8,000 tokens/min (7,000 input; about 4–5 steps); the server waits out short 429s |
 | `ollama` | **wired** | air-gap demo, offline dev, and the fallback when Groq's day runs out (`FALLBACK_PROVIDER=ollama`) | free, local |
-| `cerebras` | **wired** (2026-11-15) | the same Qwen 3.8 27B (`qwen-3.8-27b`) on its own allowance: the first fallback to set | free trial, reportedly about 1M tokens/day and 5 requests/min; whether it needs a card is unclear |
+| `cerebras` | wired (2026-11-15), **not to be used** | the same Qwen 3.8 27B (`qwen-3.8-27b`) on its own allowance | **needs a card**: API access starts only after a payment method is added ($5 of credit), checked 2026-11-15. Outside the free, no-card rule |
 | `nvidia` | **wired** | no daily cap. Default model `nvidia/nemotron-3.5-lightning-30b-a3b` (2026-11-15): Nemotron 3 Super (37 of 42 in the provider study) now answers 404 for a free account. Lightning did 6 of 8 agent tasks at about 11 s a step, thinking; `NVIDIA_THINKING=off` makes it ~25x faster but it then loops on every page | free, no card, ~40 RPM, no daily cap |
 | `cloudflare` | not wired | also hosts `qwen3.8-27b` | free, no card, 10k neurons/day |
 
-`FALLBACK_PROVIDER` is a comma list (`cerebras,nvidia`): each plans a step when the one before
+`FALLBACK_PROVIDER` is a comma list (`nvidia,ollama`): each plans a step when the one before
 cannot. A provider with another after it sits out only pauses up to 5 s; a provider that said to
 come back later is skipped until then; a fallback that fails for its own reasons (a 404) passes the
 step on; and when all fail, a short pause is sat out after all (`apps/server/src/planner/chain.ts`).
@@ -385,10 +385,10 @@ add to it whenever a change needs a manual check, and tick items off when report
       rebuild the extension and reload Skrim):
   - [ ] a form task: the side panel shows several steps at 0.0 s (planned in one request), and the
     server log says "(+N more)"; a Gmail reply on Groq gets through without "rate limit"
-  - [ ] a Cerebras key (`CEREBRAS_API_KEY`, https://cloud.cerebras.ai) and
-    `FALLBACK_PROVIDER=cerebras,nvidia`, with `NVIDIA_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b`
-    (your NVIDIA key works; Nemotron 3 Super answers 404 for it now). The server prints each fallback at start; when Groq
-    pauses, the log says "this step goes to cerebras"
+  - [ ] `FALLBACK_PROVIDER=nvidia`, with `NVIDIA_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b`
+    (your NVIDIA key works; Nemotron 3 Super answers 404 for it now; Cerebras needs a card, so it
+    is out). The server prints the fallback at start; when Groq pauses for over 5 s, the log says
+    "this step goes to nvidia"
   - [ ] the local planner: install Ollama, `ollama pull qwen3:4b-instruct-2507-q4_K_M`,
     `pnpm ollama:setup`, then `pnpm study -- ollama:skrim-planner`. To compare with the old model:
     `ollama pull qwen3-vl:4b-instruct`, `pnpm ollama:setup:vl`, `pnpm study -- ollama:skrim-planner-vl`,

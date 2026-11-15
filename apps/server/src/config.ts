@@ -120,7 +120,7 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       provider,
       baseURL: process.env.CEREBRAS_BASE_URL || 'https://api.cerebras.ai/v1',
       // Must match .env.example. The same Qwen 3.8 27B as Groq's, with its own
-      // free allowance (about 1M tokens a day), so it shares the load.
+      // allowance. It needs a card (a payment method before any request), so it is not used.
       model: process.env.CEREBRAS_MODEL || 'qwen-3.8-27b',
       apiKey: apiKey ?? requireKey('CEREBRAS_API_KEY', setting, provider),
       ...(process.env.CEREBRAS_REASONING_EFFORT ? { extraBody: { reasoning_effort: process.env.CEREBRAS_REASONING_EFFORT } } : {}),
