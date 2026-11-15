@@ -141,3 +141,40 @@ kbd { display: inline-grid; place-items: center; min-width: 1.1rem; padding: 0 0
 .send { display: grid; place-items: center; flex: none; width: 2.25rem; height: 2.25rem; border: 0; border-radius: var(--radius-sm); background: var(--accent); color: var(--on-accent); transition: background var(--duration) var(--ease); }
 .send:hover:not(:disabled) { background: var(--accent-hover); }
 .send.stop { background: var(--bad); color: var(--bg); }
+
+/* ── Motion ──────────────────────────────────────────────── */
+/* Each thing animates once, as it appears: a new log line rises in, its check
+   pops when it verifies, each placeholder's redaction bar sweeps on, the
+   question nudges once, the closing rule draws across. tokens.css turns all
+   of it off for reduced motion. */
+@keyframes rise { from { opacity: 0; transform: translateY(0.375rem); } to { opacity: 1; transform: none; } }
+@keyframes pop { 0% { opacity: 0; transform: scale(0.3); } 70% { transform: scale(1.25); } 100% { opacity: 1; transform: none; } }
+@keyframes cover { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+@keyframes nudge { 0%, 100% { transform: none; } 30% { transform: translateX(-3px); } 60% { transform: translateX(3px); } }
+@keyframes draw { from { transform: scaleX(0); } to { transform: none; } }
+@keyframes drop { from { opacity: 0; transform: translateY(-0.375rem); } to { opacity: 1; transform: none; } }
+
+.goal, .sent-as, .line, .working, .result, .note, .notice { animation: rise 0.32s var(--ease) both; }
+.line-ok .glyph .icon, .line-warn .glyph .icon, .result .glyph .icon { animation: pop 0.34s var(--ease) both; }
+.sent-as .token, .line-text .token, .line-sub .token, .result .token, .ask .token { animation: cover 0.4s var(--ease) 0.12s both; }
+.ask { animation: rise 0.3s var(--ease) both, nudge 0.45s var(--ease) 0.35s; }
+.settings-panel { animation: drop 0.2s var(--ease) both; }
+.privacy-detail { animation: drop 0.2s var(--ease) both; }
+
+/* The closing rule draws across instead of appearing. */
+.result-line { position: relative; border-top: 0; }
+.result-line::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--rule, var(--text)); transform-origin: left; animation: draw 0.5s var(--ease) both; }
+.result-completed .result-line { --rule: var(--ok); }
+.result-failed .result-line { --rule: var(--bad); }
+
+/* The empty state arrives in order. */
+.empty > * { animation: rise 0.4s var(--ease) both; }
+.empty > :nth-child(2) { animation-delay: 60ms; }
+.empty > :nth-child(3) { animation-delay: 120ms; }
+.empty > :nth-child(4) { animation-delay: 180ms; }
+.empty > :nth-child(5) { animation-delay: 240ms; }
+.empty .mark rect { transform-box: fill-box; transform-origin: left; animation: draw 0.5s var(--ease) 0.25s both; }
+
+/* The send button answers the press. */
+.send { transition: background var(--duration) var(--ease), transform var(--duration) var(--ease); }
+.send:active:not(:disabled) { transform: scale(0.92); }

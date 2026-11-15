@@ -86,3 +86,10 @@ body { overflow: hidden; }
 .res-key-sm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
 .res-val { color: var(--text); font-family: var(--font-mono); font-size: var(--text-xs); font-weight: var(--weight-medium); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .res-dim { color: var(--text-3); }
+
+/* Motion: each feed entry rises in as it arrives, so a live task visibly moves on a projector. */
+@keyframes rise { from { opacity: 0; transform: translateY(0.375rem); } to { opacity: 1; transform: none; } }
+.step-card { animation: rise 0.32s var(--ease) both; }
+.waiting > * { animation: rise 0.45s var(--ease) both; }
+.waiting > :nth-child(2) { animation-delay: 80ms; }
+.waiting > :nth-child(3) { animation-delay: 160ms; }

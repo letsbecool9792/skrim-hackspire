@@ -174,3 +174,14 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 @media (prefers-reduced-motion: reduce) {
   .bar::after, .redact::after, .letter, .letter .stamp { animation: none; }
 }
+
+/* Scroll reveal: data-reveal rises into place as it enters the view, staggered
+   by --d. Hidden only once the script has added .reveal to <html> (App.tsx). */
+html.reveal [data-reveal] { opacity: 0; transform: translateY(1.25rem); transition: opacity 0.6s var(--ease), transform 0.6s var(--ease); transition-delay: calc(var(--d, 0) * 80ms); }
+html.reveal [data-reveal].is-in { opacity: 1; transform: none; }
+/* A table's top rule draws in from the left as it arrives. */
+html.reveal .table-wrap[data-reveal] .ledger thead th { background-image: linear-gradient(var(--text), var(--text)); background-repeat: no-repeat; background-position: left bottom; background-size: 0 2px; border-bottom-color: transparent; transition: background-size 0.7s var(--ease) 0.15s; }
+html.reveal .table-wrap[data-reveal].is-in .ledger thead th { background-size: 100% 2px; }
+@media (prefers-reduced-motion: reduce) {
+  html.reveal [data-reveal] { opacity: 1; transform: none; transition: none; }
+}

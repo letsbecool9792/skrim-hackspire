@@ -46,6 +46,8 @@ interface StepView {
   site?: string;
   /** Redactions observed at this step (from the preceding "observed" event). */
   redactions?: RedactionCounts;
+  /** The page the step was planned on (origin and path), to show what was hidden once per page. */
+  page?: string;
 }
 
 /** A question from the data guard, open until the user answers it or the task ends. */
@@ -152,7 +154,7 @@ function applyEvent(task: TaskItem, event: AgentEvent): TaskItem {
     case "planned":
       if (event.action.type === "done") return { ...task, auditLog };
       // TASK_06: attach the current redaction snapshot to the step being added.
-      return { ...task, auditLog, phase: "acting", steps: [...task.steps, { step: event.step, action: event.action, targetLabel: event.targetLabel, latencyMs: event.latencyMs, site: hostOf(task.page), redactions: task.redactions }] };
+      return { ...task, auditLog, phase: "acting", steps: [...task.steps, { step: event.step, action: event.action, targetLabel: event.targetLabel, latencyMs: event.latencyMs, site: hostOf(task.page), redactions: task.redactions, ...(task.page ? { page: task.page } : {}) }] };
     case "acted":
       return { ...task, auditLog, phase: "reading", steps: task.steps.map((s) => (s.step === event.step ? { ...s, verified: event.verified, message: event.message } : s)) };
     case "warning":
@@ -459,13 +461,12 @@ function ResultBlock({ finished, answerValues, steps, onAudit }: { finished: Fin
 function TaskView({ task, onAudit }: { task: TaskItem; onAudit: () => void }) {
   const { finished } = task;
   const showRedactedGoal = task.redactedGoal && task.redactedGoal !== task.goal;
-  // TASK_06: what was hidden on the page, shown on a step only when it changed since the step before.
-  let previous = "";
-  const hidAt = task.steps.map((step) => {
-    const now = step.redactions ? describeCounts(step.redactions) : "";
-    const changed = now !== previous;
-    previous = now;
-    return changed && now ? now : undefined;
+  // TASK_06: what was hidden on a page, shown once, on the first step taken there. Later
+  // steps on the same page count the values just typed again, so their counts only grow.
+  const hidAt = task.steps.map((step, i) => {
+    if (i > 0 && task.steps[i - 1]!.page === step.page) return undefined;
+    const counts = step.redactions ? describeCounts(step.redactions) : "";
+    return counts || undefined;
   });
   return (
     <section className="turn">

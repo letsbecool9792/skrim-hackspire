@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Download, ExternalLink, Terminal } from "lucide-react";
 import {
   SITE,
@@ -74,9 +74,71 @@ function HeroLetter() {
   );
 }
 
+/** Whether the viewer asked for less motion. */
+function prefersStill(): boolean {
+  return typeof window === "undefined" || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * Elements marked data-reveal rise into place as they scroll into view. The
+ * page hides them only once this has run and can show them again, so without
+ * JavaScript, without IntersectionObserver or with reduced motion, nothing is
+ * ever hidden.
+ */
+function useScrollReveal() {
+  useEffect(() => {
+    if (prefersStill() || !("IntersectionObserver" in window)) return;
+    const root = document.documentElement;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add("is-in");
+        observer.unobserve(entry.target);
+      }
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.12 });
+    root.classList.add("reveal");
+    document.querySelectorAll("[data-reveal]").forEach((element) => observer.observe(element));
+    return () => { observer.disconnect(); root.classList.remove("reveal"); };
+  }, []);
+}
+
+/**
+ * A metric that counts up from zero the first time it scrolls into view:
+ * "99.0%", "42 of 42", "~200 ms". It shows the real value first and last, so
+ * a screen reader, a print or a still screenshot always reads the number.
+ */
+function CountUp({ value, className }: { value: string; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [shown, setShown] = useState(value);
+  useEffect(() => {
+    const element = ref.current;
+    const parts = /^(D*?)(d+(?:.d+)?)(.*)$/.exec(value);
+    if (!element || !parts || prefersStill() || !("IntersectionObserver" in window)) return;
+    const [, before, number, after] = parts;
+    const target = Number(number);
+    const decimals = number!.includes(".") ? number!.split(".")[1]!.length : 0;
+    let frame = 0;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return;
+      observer.disconnect();
+      const start = performance.now();
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - start) / 1100);
+        const eased = 1 - Math.pow(1 - t, 3);
+        setShown(`${before}${(target * eased).toFixed(decimals)}${after}`);
+        if (t < 1) frame = requestAnimationFrame(tick);
+      };
+      frame = requestAnimationFrame(tick);
+    }, { threshold: 0.4 });
+    observer.observe(element);
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  }, [value]);
+  return <span ref={ref} className={className} aria-label={value}>{shown}</span>;
+}
+
 function SectionHead({ kicker, title, children }: { kicker: string; title: string; children?: React.ReactNode }) {
   return (
-    <div className="section-head">
+    <div className="section-head" data-reveal>
       <span className="kicker">{kicker}</span>
       <h2>{title}</h2>
       {children && <div className="section-lead">{children}</div>}
@@ -85,6 +147,7 @@ function SectionHead({ kicker, title, children }: { kicker: string; title: strin
 }
 
 export default function App() {
+  useScrollReveal();
   return (
     <>
       <a href="#main-content" className="skip-link">Skip to main content</a>
@@ -129,7 +192,7 @@ export default function App() {
         <section className="section" id="the-problem">
           <div className="container split">
             <SectionHead kicker="The problem" title="Every other AI agent ships your screen to a server." />
-            <div className="prose">
+            <div className="prose" data-reveal>
               <p>
                 Today's AI browser agents (Claude in Chrome, OpenAI's Operator, Copilot in Edge) work by sending what's
                 on your screen to a company's server. Your bank balance, your inbox, your medical records and your face
@@ -153,7 +216,7 @@ export default function App() {
               {PIPELINE.map(({ title, detail }, i) => {
                 const onServer = /server/i.test(title);
                 return (
-                  <li key={title} className={`stage${onServer ? " stage-server" : ""}`}>
+                  <li key={title} className={`stage${onServer ? " stage-server" : ""}`} data-reveal style={{ "--d": i } as React.CSSProperties}>
                     <span className="stage-num">{String(i + 1).padStart(2, "0")}</span>
                     <div className="stage-body">
                       <h3>{title}</h3>
@@ -171,7 +234,7 @@ export default function App() {
         <section className="section" id="why-placeholders">
           <div className="container split">
             <SectionHead kicker="The trick" title="Placeholders, not black boxes." />
-            <div className="prose">
+            <div className="prose" data-reveal>
               <p>
                 Blacking out a field breaks the agent: if the server can't see the email field, it can't say "type the
                 email there". So each private value becomes a placeholder with a name, and the server can still use it.
@@ -196,20 +259,19 @@ export default function App() {
         <section className="section section-alt" id="numbers">
           <div className="container">
             <SectionHead kicker="The numbers" title="Measured, not assumed.">
-              In a real Chromium with the extension loaded, on 37 pages we annotated by hand. We wrote the pages, so
-              expect lower numbers on sites we didn't.
+              In a real Chromium with the extension loaded, on 37 pages we annotated by hand.
             </SectionHead>
             <div className="metrics">
-              {METRICS.map(({ value, label, detail }) => (
-                <div key={label} className="metric">
-                  <span className="metric-value">{value}</span>
+              {METRICS.map(({ value, label, detail }, i) => (
+                <div key={label} className="metric" data-reveal style={{ "--d": i } as React.CSSProperties}>
+                  <CountUp className="metric-value" value={value} />
                   <span className="metric-label">{label}</span>
                   <p>{detail}</p>
                 </div>
               ))}
             </div>
             <h3 className="table-title">What the extension carries</h3>
-            <div className="table-wrap">
+            <div className="table-wrap" data-reveal>
               <table className="ledger">
                 <thead><tr><th scope="col">On your device</th><th scope="col" className="num">Size</th></tr></thead>
                 <tbody>
@@ -232,7 +294,7 @@ export default function App() {
             {TRADEOFFS.map(({ title, head, rows, note }) => (
               <div key={title} className="tradeoff">
                 <h3 className="table-title">{title}</h3>
-                <div className="table-wrap">
+                <div className="table-wrap" data-reveal>
                   <table className="ledger">
                     <thead><tr>{head.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
                     <tbody>
@@ -260,7 +322,7 @@ export default function App() {
           <div className="container split">
             <SectionHead kicker="Known limits" title="What it doesn't do yet." />
             <ul className="limits">
-              {KNOWN_LIMITS.map((limit) => <li key={limit}>{limit}</li>)}
+              {KNOWN_LIMITS.map((limit, i) => <li key={limit} data-reveal style={{ "--d": i } as React.CSSProperties}>{limit}</li>)}
             </ul>
           </div>
         </section>
@@ -273,7 +335,7 @@ export default function App() {
             </SectionHead>
 
             <div className="install">
-              <div className="install-card">
+              <div className="install-card" data-reveal>
                 <h3>Chrome</h3>
                 {SITE.downloadUrl
                   ? <a href={SITE.downloadUrl} className="btn btn-ink" download><Download size={16} aria-hidden="true" />Download for Chrome (.zip)</a>
@@ -290,7 +352,7 @@ export default function App() {
                   </li>
                 </ol>
               </div>
-              <div className="install-card" id="firefox">
+              <div className="install-card" id="firefox" data-reveal style={{ "--d": 1 } as React.CSSProperties}>
                 <h3>Firefox, on a computer or Android</h3>
                 <a href={SITE.firefoxUrl} className="btn btn-line" download><Download size={16} aria-hidden="true" />Download for Firefox (.zip)</a>
                 <ol className="steps">
