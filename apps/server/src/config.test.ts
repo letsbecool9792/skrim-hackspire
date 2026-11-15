@@ -45,9 +45,26 @@ describe('getConfig', () => {
     assert.throws(() => getConfig(), /NVIDIA_API_KEY is required when FALLBACK_PROVIDER=nvidia/);
   });
 
-  test('refuses a fallback that is the main provider', () => {
+  test('refuses a fallback that is the main provider and model', () => {
     set({ GROQ_API_KEY: 'test-key', FALLBACK_PROVIDER: 'groq' });
-    assert.throws(() => getConfig(), /names MODEL_PROVIDER/);
+    assert.throws(() => getConfig(), /twice, or as MODEL_PROVIDER/);
+    set({ GROQ_API_KEY: 'test-key', FALLBACK_PROVIDER: 'groq:qwen/qwen3.8-27b' });
+    assert.throws(() => getConfig(), /twice, or as MODEL_PROVIDER/);
+  });
+
+  test("a fallback can be another of Groq's models, with the reasoning switch that model takes", () => {
+    set({ GROQ_API_KEY: 'k', NVIDIA_API_KEY: 'k', FALLBACK_PROVIDER: 'groq:openai/gpt-oss-120b, nvidia' });
+    const config = getConfig();
+    assert.deepEqual(config.providerConfig.extraBody, { reasoning_effort: 'none' });
+    const [oss, nvidia] = config.fallbackConfigs;
+    assert.equal(oss?.provider, 'groq');
+    assert.equal(oss?.model, 'openai/gpt-oss-120b');
+    assert.deepEqual(oss?.extraBody, { reasoning_effort: 'low' });
+    // The compact prompt cost it tasks; the main Qwen keeps it.
+    assert.equal(oss?.promptStyle, 'full');
+    assert.equal(config.providerConfig.promptStyle, 'compact');
+    assert.equal(oss?.maxRateLimitWaitMs, 5_000);
+    assert.equal(nvidia?.model, 'nvidia/nemotron-3.5-lightning-30b-a3b');
   });
 
   test('takes a list of fallbacks, in order; each but the last hands a long pause to the next', () => {

@@ -38,10 +38,15 @@ export interface ProviderConfig {
  */
 const PROMPT_BUDGET: Record<ProviderName, number> = { groq: 5_500, cerebras: 12_000, nvidia: 16_000, ollama: 10_000 };
 
-function promptStyle(provider: ProviderName): PromptStyle {
+/**
+ * Groq's gpt-oss-120b on the compact prompt clicked a toggle open and shut
+ * until the loop stopped it, and answered "what is my PAN" without the PAN;
+ * on the full one it did neither (2026-11-15).
+ */
+function promptStyle(provider: ProviderName, model: string): PromptStyle {
   const set = process.env.PROMPT_STYLE;
   if (set === 'full' || set === 'compact') return set;
-  return provider === 'ollama' ? 'full' : 'compact';
+  return provider === 'ollama' || /gpt-oss/i.test(model) ? 'full' : 'compact';
 }
 
 function promptBudget(provider: ProviderName): number {
@@ -55,7 +60,7 @@ export interface ServerConfig {
   /**
    * Plan a step, in order, when the one before says to come back later: free
    * tiers cap tokens a minute and a day, and each provider's caps are its
-   * own. FALLBACK_PROVIDER is a comma list ("cerebras,nvidia"). Same adapter,
+   * own. FALLBACK_PROVIDER is a comma list ("groq:openai/gpt-oss-120b,nvidia"). Same adapter,
    * other settings. Empty: such a step fails with the rate-limit message.
    */
   fallbackConfigs: ProviderConfig[];
@@ -78,8 +83,29 @@ function requireKey(name: string, setting: string, provider: ProviderName): stri
   return key;
 }
 
-/** `apiKey` given: use it instead of the one in the environment (a model override). */
-function profile(provider: ProviderName, setting: string, apiKey?: string): ProviderConfig {
+/**
+ * Groq's switch for thinking before answering, which its free tier counts
+ * against 8,000 tokens a minute. Qwen turns it off with "none"; gpt-oss cannot,
+ * and "low" is its least (what it did 42 of 42 with in the provider study).
+ * Other models reject the field.
+ */
+function groqReasoning(model: string): string | undefined {
+  if (process.env.GROQ_REASONING_EFFORT) return process.env.GROQ_REASONING_EFFORT;
+  if (/qwen/i.test(model)) return 'none';
+  if (/gpt-oss/i.test(model)) return 'low';
+  return undefined;
+}
+
+/**
+ * `apiKey` given: use it instead of the one in the environment (a model
+ * override). `model` given: that model instead of the profile's default.
+ */
+function profile(provider: ProviderName, setting: string, apiKey?: string, model?: string): ProviderConfig {
+  const config = providerProfile(provider, setting, apiKey, model);
+  return { ...config, promptStyle: promptStyle(provider, config.model) };
+}
+
+function providerProfile(provider: ProviderName, setting: string, apiKey?: string, model?: string): Omit<ProviderConfig, 'promptStyle'> {
   if (provider === 'nvidia') {
     return {
       provider,
@@ -89,7 +115,7 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       // Nemotron 3 Super answered 404 for a free account by 2026-11-15, though
       // still listed. Of those that answered, Lightning did 6 of 8 agent tasks
       // (median 10.7 s a step) and Ultra 6 of 8 (it clicked a counter 25 times).
-      model: process.env.NVIDIA_MODEL || 'nvidia/nemotron-3.5-lightning-30b-a3b',
+      model: model || process.env.NVIDIA_MODEL || 'nvidia/nemotron-3.5-lightning-30b-a3b',
       apiKey: apiKey ?? requireKey('NVIDIA_API_KEY', setting, provider),
       // Nemotron thinks before it answers. NVIDIA_THINKING=off sends the switch
       // that stops it (chat_template_kwargs; a "/no_think" line does nothing):
@@ -97,22 +123,19 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       // circles on every page (0 of 5 before hitting NVIDIA's 40 a minute).
       ...(process.env.NVIDIA_THINKING === 'off' ? { extraBody: { chat_template_kwargs: { enable_thinking: false } } } : {}),
       promptBudgetTokens: promptBudget(provider),
-      promptStyle: promptStyle(provider),
     };
   }
   if (provider === 'groq') {
+    // Must match .env.example. Open-weight Qwen, free without a card.
+    const groqModel = model || process.env.GROQ_MODEL || 'qwen/qwen3.8-27b';
+    const reasoning = groqReasoning(groqModel);
     return {
       provider,
       baseURL: process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1',
-      // Must match .env.example. Open-weight Qwen, free without a card.
-      model: process.env.GROQ_MODEL || 'qwen/qwen3.8-27b',
+      model: groqModel,
       apiKey: apiKey ?? requireKey('GROQ_API_KEY', setting, provider),
-      // Qwen 3.x thinks before answering unless told not to. The planner wants
-      // one JSON action, and the free tier counts thinking against its
-      // 8,000 tokens a minute.
-      extraBody: { reasoning_effort: process.env.GROQ_REASONING_EFFORT || 'none' },
+      ...(reasoning ? { extraBody: { reasoning_effort: reasoning } } : {}),
       promptBudgetTokens: promptBudget(provider),
-      promptStyle: promptStyle(provider),
     };
   }
   if (provider === 'cerebras') {
@@ -121,11 +144,10 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       baseURL: process.env.CEREBRAS_BASE_URL || 'https://api.cerebras.ai/v1',
       // Must match .env.example. The same Qwen 3.8 27B as Groq's, with its own
       // allowance. It needs a card (a payment method before any request), so it is not used.
-      model: process.env.CEREBRAS_MODEL || 'qwen-3.8-27b',
+      model: model || process.env.CEREBRAS_MODEL || 'qwen-3.8-27b',
       apiKey: apiKey ?? requireKey('CEREBRAS_API_KEY', setting, provider),
       ...(process.env.CEREBRAS_REASONING_EFFORT ? { extraBody: { reasoning_effort: process.env.CEREBRAS_REASONING_EFFORT } } : {}),
       promptBudgetTokens: promptBudget(provider),
-      promptStyle: promptStyle(provider),
     };
   }
   if (provider === 'ollama') {
@@ -137,9 +159,8 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       // at Ollama's default 4k a real page's request is cut from the front. An
       // instruct build: a thinking build is 10-80x slower a step, and cannot be
       // told not to think through the OpenAI-compatible API.
-      model: process.env.OLLAMA_MODEL || 'skrim-planner',
+      model: model || process.env.OLLAMA_MODEL || 'skrim-planner',
       promptBudgetTokens: promptBudget(provider),
-      promptStyle: promptStyle(provider),
     };
   }
   throw new Error(`Unsupported ${setting}: ${String(provider)}. Use ${PROVIDERS.join(', ')}.`);
@@ -162,9 +183,17 @@ export function overrideConfig(modelOverride: string, userKey: string | undefine
   const setting = KEY_SETTINGS[provider];
   const apiKey = userKey || (setting ? process.env[setting] : undefined);
   if (setting && !apiKey) return undefined;
-  // "Don't think first" is a Qwen switch; Groq rejects it for other models.
-  const { extraBody, ...base } = profile(provider, 'model override', apiKey);
-  return { ...base, model, ...(extraBody && /qwen/i.test(model) ? { extraBody } : {}) };
+  const config = profile(provider, 'model override', apiKey, model);
+  // Groq's profile picks its switch per model. NVIDIA's thinking switch is a
+  // Nemotron one, and Cerebras's a Qwen one: drop them for other models.
+  if (provider === 'groq' || !config.extraBody || /qwen|nemotron/i.test(model)) return config;
+  const { extraBody: _dropped, ...rest } = config;
+  return rest;
+}
+
+/** One provider and model: what a rate limit applies to, on Groq at least. */
+export function providerKey(config: Pick<ProviderConfig, 'provider' | 'model'>): string {
+  return `${config.provider}:${config.model}`;
 }
 
 export function getConfig(): ServerConfig {
@@ -174,11 +203,23 @@ export function getConfig(): ServerConfig {
   const provider = (process.env.MODEL_PROVIDER || 'groq') as ProviderName;
   const providerConfig = profile(provider, 'MODEL_PROVIDER');
 
-  const names = (process.env.FALLBACK_PROVIDER ?? '').split(',').map((name) => name.trim()).filter(Boolean);
-  if (names.includes(provider)) {
-    throw new Error(`FALLBACK_PROVIDER names MODEL_PROVIDER (${provider}) again. Name other providers, or leave it empty.`);
+  // Each entry is a provider ("nvidia") or a provider and model
+  // ("groq:openai/gpt-oss-120b"): Groq's limits are per model, so another
+  // model there is another day's allowance on the same key.
+  const entries = (process.env.FALLBACK_PROVIDER ?? '').split(',').map((entry) => entry.trim()).filter(Boolean);
+  const fallbackConfigs = entries.map((entry) => {
+    const at = entry.indexOf(':');
+    const name = (at < 0 ? entry : entry.slice(0, at)).trim() as ProviderName;
+    const model = at < 0 ? undefined : entry.slice(at + 1).trim() || undefined;
+    return profile(name, 'FALLBACK_PROVIDER', undefined, model);
+  });
+  const seen = new Set([providerKey(providerConfig)]);
+  for (const config of fallbackConfigs) {
+    if (seen.has(providerKey(config))) {
+      throw new Error(`FALLBACK_PROVIDER names ${config.provider} ${config.model} twice, or as MODEL_PROVIDER. Each must be another provider or model.`);
+    }
+    seen.add(providerKey(config));
   }
-  const fallbackConfigs = names.map((name) => profile(name as ProviderName, 'FALLBACK_PROVIDER'));
   // Each provider with another after it hands over a long pause instead of sitting it out.
   const chain = [providerConfig, ...fallbackConfigs];
   for (const config of chain.slice(0, -1)) config.maxRateLimitWaitMs = HAND_OVER_AFTER_MS;

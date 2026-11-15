@@ -331,6 +331,21 @@ describe("runAgentTask", () => {
     assert.doesNotMatch(JSON.stringify(requests), /ABCDE1234F/);
   });
 
+  test("a summary that leaves out the value it extracted gets it added, as a token", async () => {
+    await page(`<h1>Your digital ID</h1><canvas aria-label="ID card" width="420" height="200"></canvas>`);
+    const readPixels: PixelReader = async (targets) => ({ faces: 0, lines: targets.map((target) => ({ targetId: target.id, bbox: [20, 120, 200, 24], text: "PAN ABCDE1234F", confidence: 0.9 })) });
+    const { planner } = scripted((request, step) => {
+      const line = request.graph.elements.find((e) => e.source === "vision");
+      return step === 0 ? { type: "extract", target: line!.id, as: "pan" } : { type: "done", success: true, summary: "Extracted PAN number" };
+    });
+    const events: AgentEvent[] = [];
+
+    await runAgentTask({ goal: "What is my PAN?", planner, link, signal: new AbortController().signal, onEvent: (e) => events.push(e), readPixels });
+
+    const finished = events.at(-1) as Extract<AgentEvent, { type: "finished" }>;
+    assert.equal(finished.summary, "Extracted PAN number · PAN <PII:GOV_ID:1>");
+  });
+
   test("tells the planner a line read from pixels can be read, not clicked", async () => {
     await page(`<canvas aria-label="ID card" width="420" height="200"></canvas>`);
     const readPixels: PixelReader = async (targets) => ({ faces: 0, lines: targets.map((target) => ({ targetId: target.id, bbox: [20, 120, 200, 24], text: "Verify now", confidence: 0.9 })) });

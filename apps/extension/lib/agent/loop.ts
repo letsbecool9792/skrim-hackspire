@@ -318,7 +318,7 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
 
       if (action.type === "done") {
         return finish(action.success
-          ? { outcome: "completed", summary: action.summary }
+          ? { outcome: "completed", summary: withAnswers(action.summary, extracted) }
           : { outcome: "failed", errorCode: "GOAL_NOT_ACHIEVED", summary: action.summary });
       }
 
@@ -687,4 +687,19 @@ async function act(link: PageLink, taskId: string, step: number, action: Action,
   } finally {
     watch.stop();
   }
+}
+
+/**
+ * The summary, with any extracted personal value it leaves out. A planner
+ * may answer "what is my PAN" with "Extracted the PAN number" (gpt-oss did),
+ * and the user then never sees it. The value is already a token, so adding
+ * it here sends nothing anywhere: the result card shows it as a bar, clicked
+ * to reveal.
+ */
+export function withAnswers(summary: string, extracted: Record<string, string>): string {
+  const missing = Object.values(extracted).filter((value) => {
+    const tokens = findPiiTokens(value);
+    return tokens.length > 0 && !tokens.some((token) => summary.includes(token));
+  });
+  return missing.length === 0 ? summary : [summary.trim(), ...missing].filter(Boolean).join(" · ");
 }

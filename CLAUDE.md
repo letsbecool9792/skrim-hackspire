@@ -62,8 +62,9 @@ documented so we know where to go if those stop being sufficient — do not add 
 | `nvidia` | **wired** | no daily cap. Default model `nvidia/nemotron-3.5-lightning-30b-a3b` (2026-11-15): Nemotron 3 Super (37 of 42 in the provider study) now answers 404 for a free account. Lightning did 6 of 8 agent tasks at about 11 s a step, thinking; `NVIDIA_THINKING=off` makes it ~25x faster but it then loops on every page | free, no card, ~40 RPM, no daily cap |
 | `cloudflare` | not wired | also hosts `qwen3.8-27b` | free, no card, 10k neurons/day |
 
-`FALLBACK_PROVIDER` is a comma list (`nvidia,ollama`): each plans a step when the one before
-cannot. A provider with another after it sits out only pauses up to 5 s; a provider that said to
+`FALLBACK_PROVIDER` is a comma list (`groq:openai/gpt-oss-120b,nvidia`): each plans a step when
+the one before cannot. An entry may name a model (`provider:model`), and providers rest per
+model, since Groq limits each model apart: gpt-oss-120b on the same Groq key is a second day. A provider with another after it sits out only pauses up to 5 s; a provider that said to
 come back later is skipped until then; a fallback that fails for its own reasons (a 404) passes the
 step on; and when all fail, a short pause is sat out after all (`apps/server/src/planner/chain.ts`).
 | `openrouter` | not wired | last resort | **50 req/day** without credits — unusable as a daily driver |
@@ -385,10 +386,11 @@ add to it whenever a change needs a manual check, and tick items off when report
       rebuild the extension and reload Skrim):
   - [ ] a form task: the side panel shows several steps at 0.0 s (planned in one request), and the
     server log says "(+N more)"; a Gmail reply on Groq gets through without "rate limit"
-  - [ ] `FALLBACK_PROVIDER=nvidia`, with `NVIDIA_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b`
-    (your NVIDIA key works; Nemotron 3 Super answers 404 for it now; Cerebras needs a card, so it
-    is out). The server prints the fallback at start; when Groq pauses for over 5 s, the log says
-    "this step goes to nvidia"
+  - [ ] `FALLBACK_PROVIDER=groq:openai/gpt-oss-120b,nvidia`, with
+    `NVIDIA_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b` (your NVIDIA key works; Nemotron 3 Super
+    answers 404 for it now; Cerebras needs a card, so it is out). The server prints both fallbacks at
+    start; when Groq's Qwen pauses for over 5 s, the log says "this step goes to groq
+    (openai/gpt-oss-120b)"
   - [ ] the local planner: install Ollama, `ollama pull qwen3:4b-instruct-2507-q4_K_M`,
     `pnpm ollama:setup`, then `pnpm study -- ollama:skrim-planner`. To compare with the old model:
     `ollama pull qwen3-vl:4b-instruct`, `pnpm ollama:setup:vl`, `pnpm study -- ollama:skrim-planner-vl`,
@@ -522,9 +524,15 @@ back later, `FALLBACK_PROVIDER` (`ollama`, or `nvidia` with Nemotron 3 Super) pl
 step and the task carries on; unset, the step fails. Groq's day is **200,000 tokens per model**, and it runs out mid-task: on 2026-10-03 the demo
 form stopped at step 6, after a day of agent test runs on the same key. On a demo day, run no
 `pnpm test:agent` or `pnpm study` on the demo key, and set `FALLBACK_PROVIDER`. Still open:
-- The fallback is tried again from Groq on every step: a long cap costs one quick 429 a step.
-- Groq's `openai/gpt-oss-120b` also did 42 of 42, on its own quota, which would double the
-  day. Whether OpenAI's open-weight model is acceptable on the slides is a team call.
+- **Groq's `openai/gpt-oss-120b` is the first fallback** (Suparno, 2026-11-15): it did 42 of 42 in
+  the study, on its own quota, so the same key gets a second day. It runs on the full prompt with
+  `reasoning_effort: low`. In `pnpm test:agent` (2026-11-15), on the compact prompt it did 6 of 8
+  quick tasks: it clicked the show-panel toggle open and shut, and answered "what is my PAN"
+  without the PAN (the loop now adds an extracted value a summary leaves out). On the full prompt
+  both passed. **It does not finish the Google Form**: on the full prompt it scrolled up and down
+  without typing; with `medium` reasoning it filled every field but kept scrolling and hit the
+  5-minute limit, never pressing Submit. So it keeps simple tasks going when Qwen's day runs out;
+  the form needs Qwen. About 2,000 tokens a step on the full prompt, so 4 steps a minute.
 - Cloudflare Workers AI hosts Qwen 3.8 too, if Groq's limits ever bite.
 
 **Which names are private is a rule; where it must trade, privacy wins.** GLiNER cannot tell

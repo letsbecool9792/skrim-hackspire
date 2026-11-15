@@ -32,6 +32,23 @@ describe('planning with a list of providers', () => {
     assert.deepEqual(asked, ['groq', 'cerebras', 'cerebras']);
   });
 
+  test("another model on the same provider is not rested with it: Groq limits each model apart", async () => {
+    const qwen = { ...provider('groq'), model: 'qwen' };
+    const oss = { ...provider('groq', false), model: 'oss' };
+    const resting = new Map<string, number>();
+    const asked: string[] = [];
+    const planOne = async (p: ProviderConfig) => { asked.push(p.model); if (p.model === 'qwen') throw limited(30_000); return plan(p.model); };
+    assert.equal((await planWithChain([qwen, oss], request, planOne, resting)).model, 'oss');
+    assert.equal((await planWithChain([qwen, oss], request, planOne, resting)).model, 'oss');
+    assert.deepEqual(asked, ['qwen', 'oss', 'oss']);
+  });
+
+  test("when all fail, the rate limit is the error reported, not a broken provider's", async () => {
+    await assert.rejects(planWithChain([provider('ollama'), provider('groq', false)], request, async (p) => {
+      throw p.provider === 'ollama' ? gone() : limited(120_000);
+    }, new Map()), (error: unknown) => error instanceof ProviderError && error.kind === 'rate_limited');
+  });
+
   test('a fallback that fails for its own reasons is passed over', async () => {
     const result = await planWithChain([provider('groq'), provider('nvidia'), provider('cerebras', false)], request, async (p) => {
       if (p.provider === 'groq') throw limited(30_000);
@@ -55,7 +72,7 @@ describe('planning with a list of providers', () => {
   });
 
   test('when the providers still awake fail, the rested one due back soon plans, waiting if it must', async () => {
-    const resting = new Map([['groq', Date.now() + 10_000]]);
+    const resting = new Map([['groq:groq-model', Date.now() + 10_000]]);
     const asked: Array<[string, number | undefined]> = [];
     const result = await planWithChain([provider('groq'), provider('nvidia', false)], request, async (p) => {
       asked.push([p.provider, p.maxRateLimitWaitMs]);

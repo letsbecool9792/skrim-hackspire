@@ -90,7 +90,8 @@ One `.env` at the **repo root**, loaded via `--env-file-if-exists=../../.env`. S
 [`/.env.example`](../../.env.example). `groq` (the default), `ollama` and `nvidia` are wired;
 pick one with `MODEL_PROVIDER`. `FALLBACK_PROVIDER` names another to plan a step when the
 first says to come back later (Groq's daily cap); short waits the server sits out itself.
-It is a comma list, tried in order (`src/planner/chain.ts`): a provider with another after it
+It is a comma list, tried in order (`src/planner/chain.ts`); an entry may name a model
+(`groq:openai/gpt-oss-120b`), and rest times are kept per provider and model: a provider with another after it
 hands over any pause over 5 s, one that said to come back later is skipped until then, a fallback
 that fails for its own reasons passes the step on, and when all fail a short pause is sat out.
 The rest times are about providers, not users, kept per server instance. `cerebras` is wired (the
