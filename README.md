@@ -8,13 +8,14 @@ model that does the thinking only ever sees a scrubbed description of the page, 
 private value swapped for a placeholder like `<PII:EMAIL:1>`. The extension swaps the real value
 back in only at the moment it types it.
 
-Built by team **Chipotle**. Runs in Chrome, in Firefox on a computer, and **on Android phones**
+Built by team **Chipotle** for HackSpire ([Devfolio project page](https://devfolio.co/projects/skrim-df18)). Runs in Chrome, in Firefox on a computer, and **on Android phones**
 in Firefox, where Skrim opens as a tab that works on the tab you came from
 ([`docs/phones.md`](docs/phones.md)). All MV3, one codebase.
 
 | | |
 |---|---|
 | Landing page | https://skrim-hackspire.vercel.app |
+| Devfolio | https://devfolio.co/projects/skrim-df18 |
 | Extension for Chrome | [skrim-chrome.zip](https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-chrome.zip), the latest [release](https://github.com/letsbecool9792/skrim-hackspire/releases) |
 | Extension for Firefox | [skrim-firefox.zip](https://github.com/letsbecool9792/skrim-hackspire/releases/latest/download/skrim-firefox.zip) (unsigned, a temporary add-on); on Android see [`docs/phones.md`](docs/phones.md) |
 | Live dashboard (what the server receives) | https://skrim-dashboard.vercel.app |
