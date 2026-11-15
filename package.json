@@ -6,6 +6,7 @@
   "scripts": {
     "models:fetch": "node scripts/fetch-models.mjs",
     "ollama:setup": "ollama create skrim-planner -f scripts/ollama/Modelfile",
+    "ollama:setup:vl": "ollama create skrim-planner-vl -f scripts/ollama/Modelfile.vl",
     "dev:extension": "pnpm --filter @skrim/extension dev",
     "dev:server": "pnpm --filter @skrim/server dev",
     "dev:dashboard": "pnpm --filter @skrim/dashboard dev",

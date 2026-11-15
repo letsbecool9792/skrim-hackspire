@@ -248,7 +248,7 @@ const KNOWN_MODELS: { label: string; value: string; provider: string; needsKey: 
   { label: "Nemotron-3 120B  ·  NVIDIA", value: "nvidia:nvidia/nemotron-3-super-120b-a12b", provider: "nvidia", needsKey: true },
   // ── Ollama (local, no key) ───────────────────────────────────────
   { label: "skrim-planner  ·  Ollama (local)", value: "ollama:skrim-planner", provider: "ollama", needsKey: false },
-  { label: "Qwen3-VL 4B  ·  Ollama (local)", value: "ollama:qwen3-vl:4b-instruct", provider: "ollama", needsKey: false },
+  { label: "Qwen3-VL 4B (previous)  ·  Ollama (local)", value: "ollama:skrim-planner-vl", provider: "ollama", needsKey: false },
   { label: "Llama 3.2 3B  ·  Ollama (local)", value: "ollama:llama3.2:3b", provider: "ollama", needsKey: false },
 ];
 
