@@ -34,6 +34,7 @@ export class ProviderError extends Error {
 const TIMEOUT_MS: Record<ProviderConfig['provider'], number> = {
   nvidia: 40_000,
   groq: 40_000,
+  cerebras: 40_000,
   ollama: 120_000,
 };
 
@@ -87,7 +88,7 @@ export async function createChatCompletion(config: ProviderConfig, messages: Cha
     } catch (error) {
       if (!(error instanceof ProviderError) || error.kind !== 'rate_limited' || error.retryAfterMs === undefined) throw error;
       const wait = error.retryAfterMs + 250;
-      if (error.retryAfterMs > MAX_RATE_LIMIT_WAIT_MS || waited + wait > MAX_RATE_LIMIT_WAITING_MS) throw error;
+      if (error.retryAfterMs > (config.maxRateLimitWaitMs ?? MAX_RATE_LIMIT_WAIT_MS) || waited + wait > MAX_RATE_LIMIT_WAITING_MS) throw error;
       console.warn(`[plan] ${config.provider} rate limit; waiting ${(wait / 1000).toFixed(1)} s as it asked`);
       await new Promise((resolve) => setTimeout(resolve, wait));
       waited += wait;

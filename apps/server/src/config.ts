@@ -1,4 +1,6 @@
-export type ProviderName = 'nvidia' | 'groq' | 'ollama';
+export type ProviderName = 'nvidia' | 'groq' | 'ollama' | 'cerebras';
+
+const PROVIDERS: readonly ProviderName[] = ['groq', 'cerebras', 'nvidia', 'ollama'];
 
 export interface ProviderConfig {
   provider: ProviderName;
@@ -12,6 +14,12 @@ export interface ProviderConfig {
    * fit (prompts/fit.ts). PROMPT_BUDGET_TOKENS overrides it for every provider.
    */
   promptBudgetTokens: number;
+  /**
+   * The longest rate-limit pause to sit out before giving the step to the
+   * next provider. Unset: the adapter's own limit (providers/index.ts), for
+   * a provider with nothing after it.
+   */
+  maxRateLimitWaitMs?: number;
 }
 
 /**
@@ -20,7 +28,7 @@ export interface ProviderConfig {
  * being off and for the answer. NVIDIA counts requests, not tokens; the cap is
  * there for speed. Ollama's skrim-planner reads 16k tokens and must answer too.
  */
-const PROMPT_BUDGET: Record<ProviderName, number> = { groq: 5_500, nvidia: 16_000, ollama: 13_000 };
+const PROMPT_BUDGET: Record<ProviderName, number> = { groq: 5_500, cerebras: 12_000, nvidia: 16_000, ollama: 13_000 };
 
 function promptBudget(provider: ProviderName): number {
   const set = Number(process.env.PROMPT_BUDGET_TOKENS);
@@ -31,12 +39,22 @@ export interface ServerConfig {
   port: number;
   providerConfig: ProviderConfig;
   /**
-   * Plans a step when the main provider says to come back later: Groq's free
-   * tier has a daily cap, and a day of testing reaches it. Same adapter, other
-   * settings. Unset: such a step fails with the rate-limit message.
+   * Plan a step, in order, when the one before says to come back later: free
+   * tiers cap tokens a minute and a day, and each provider's caps are its
+   * own. FALLBACK_PROVIDER is a comma list ("cerebras,nvidia"). Same adapter,
+   * other settings. Empty: such a step fails with the rate-limit message.
    */
+  fallbackConfigs: ProviderConfig[];
+  /** The first of fallbackConfigs, for what the server reports about itself. */
   fallbackConfig?: ProviderConfig;
 }
+
+/**
+ * With another provider to go to, a pause longer than this goes there instead
+ * of being sat out: Groq's per-minute refill can be 40 s, and Cerebras or
+ * NVIDIA answer now. Groq's usual 2-3 s pauses are still waited out.
+ */
+const HAND_OVER_AFTER_MS = 5_000;
 
 function requireKey(name: string, setting: string, provider: ProviderName): string {
   const key = process.env[name];
@@ -73,6 +91,18 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       promptBudgetTokens: promptBudget(provider),
     };
   }
+  if (provider === 'cerebras') {
+    return {
+      provider,
+      baseURL: process.env.CEREBRAS_BASE_URL || 'https://api.cerebras.ai/v1',
+      // Must match .env.example. The same Qwen 3.8 27B as Groq's, with its own
+      // free allowance (about 1M tokens a day), so it shares the load.
+      model: process.env.CEREBRAS_MODEL || 'qwen-3.8-27b',
+      apiKey: apiKey ?? requireKey('CEREBRAS_API_KEY', setting, provider),
+      ...(process.env.CEREBRAS_REASONING_EFFORT ? { extraBody: { reasoning_effort: process.env.CEREBRAS_REASONING_EFFORT } } : {}),
+      promptBudgetTokens: promptBudget(provider),
+    };
+  }
   if (provider === 'ollama') {
     return {
       provider,
@@ -86,10 +116,10 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       promptBudgetTokens: promptBudget(provider),
     };
   }
-  throw new Error(`Unsupported ${setting}: ${String(provider)}. Use groq, ollama or nvidia.`);
+  throw new Error(`Unsupported ${setting}: ${String(provider)}. Use ${PROVIDERS.join(', ')}.`);
 }
 
-const KEY_SETTINGS: Record<ProviderName, string | undefined> = { groq: 'GROQ_API_KEY', nvidia: 'NVIDIA_API_KEY', ollama: undefined };
+const KEY_SETTINGS: Record<ProviderName, string | undefined> = { groq: 'GROQ_API_KEY', cerebras: 'CEREBRAS_API_KEY', nvidia: 'NVIDIA_API_KEY', ollama: undefined };
 
 /**
  * A model picked in the side panel for one request: "provider:model" (the
@@ -118,10 +148,13 @@ export function getConfig(): ServerConfig {
   const provider = (process.env.MODEL_PROVIDER || 'groq') as ProviderName;
   const providerConfig = profile(provider, 'MODEL_PROVIDER');
 
-  const fallback = process.env.FALLBACK_PROVIDER?.trim();
-  if (!fallback) return { port, providerConfig };
-  if (fallback === provider) {
-    throw new Error(`FALLBACK_PROVIDER is the same as MODEL_PROVIDER (${provider}). Name another provider, or leave it empty.`);
+  const names = (process.env.FALLBACK_PROVIDER ?? '').split(',').map((name) => name.trim()).filter(Boolean);
+  if (names.includes(provider)) {
+    throw new Error(`FALLBACK_PROVIDER names MODEL_PROVIDER (${provider}) again. Name other providers, or leave it empty.`);
   }
-  return { port, providerConfig, fallbackConfig: profile(fallback as ProviderName, 'FALLBACK_PROVIDER') };
+  const fallbackConfigs = names.map((name) => profile(name as ProviderName, 'FALLBACK_PROVIDER'));
+  // Each provider with another after it hands over a long pause instead of sitting it out.
+  const chain = [providerConfig, ...fallbackConfigs];
+  for (const config of chain.slice(0, -1)) config.maxRateLimitWaitMs = HAND_OVER_AFTER_MS;
+  return { port, providerConfig, fallbackConfigs, ...(fallbackConfigs[0] ? { fallbackConfig: fallbackConfigs[0] } : {}) };
 }

@@ -25,22 +25,41 @@ app.get('/', (c) => {
 });
 
 /**
+ * When each provider in the list may next be asked: a provider that said to
+ * come back later is skipped until then, instead of costing every step a
+ * refused request. About providers, not users: nothing about a request is
+ * kept. Per server instance, so on Vercel each instance learns it again.
+ */
+const resting = new Map<string, number>();
+/** How long to rest a provider that said to come back later without saying when. */
+const DEFAULT_REST_MS = 60_000;
+
+/**
  * The main provider plans the step. When it says to come back later (the
- * server already waited out the short pauses), the fallback plans this one.
- * Each step is planned from scratch, so the task carries on.
+ * server already waited out the short pauses), the next in FALLBACK_PROVIDER
+ * plans this one, and so on. Each step is planned from scratch, so the task
+ * carries on whichever provider plans it.
  */
 async function plan(request: PlanRequest, userKey: string | undefined) {
   // A model picked in the side panel, with the user's key from a header.
   const override = request.modelOverride ? overrideConfig(request.modelOverride, userKey) : undefined;
   if (override) return planAction(override, request);
-  try {
-    return await planAction(config.providerConfig, request);
-  } catch (error) {
-    const { fallbackConfig } = config;
-    if (!fallbackConfig || !(error instanceof ProviderError) || error.kind !== 'rate_limited') throw error;
-    console.warn(`[plan] ${config.providerConfig.provider} says to come back later; this step goes to ${fallbackConfig.provider} (${fallbackConfig.model})`);
-    return planAction(fallbackConfig, request);
+  const chain = [config.providerConfig, ...config.fallbackConfigs];
+  const now = Date.now();
+  const awake = chain.filter((provider) => (resting.get(provider.provider) ?? 0) <= now);
+  // All resting: try them all anyway, the main one first.
+  const order = awake.length > 0 ? awake : chain;
+  for (const [index, provider] of order.entries()) {
+    try {
+      return await planAction(provider, request);
+    } catch (error) {
+      const next = order[index + 1];
+      if (!next || !(error instanceof ProviderError) || error.kind !== 'rate_limited') throw error;
+      resting.set(provider.provider, Date.now() + (error.retryAfterMs ?? DEFAULT_REST_MS));
+      console.warn(`[plan] ${provider.provider} says to come back later; this step goes to ${next.provider} (${next.model})`);
+    }
   }
+  throw new Error('No provider to plan with');
 }
 
 app.post('/plan', async (c) => {

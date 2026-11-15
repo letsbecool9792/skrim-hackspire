@@ -7,7 +7,7 @@ const server = serve({
 }, (info) => {
   console.log(`Skrim server on http://localhost:${info.port}`);
   console.log(`Provider: ${config.providerConfig.provider}, model: ${config.providerConfig.model}`);
-  if (config.fallbackConfig) console.log(`When it says to come back later: ${config.fallbackConfig.provider}, model: ${config.fallbackConfig.model}`);
+  for (const fallback of config.fallbackConfigs) console.log(`When the one before says to come back later: ${fallback.provider}, model: ${fallback.model}`);
   console.log('Each /plan request logs one line here (counts only, never content).');
 });
 
