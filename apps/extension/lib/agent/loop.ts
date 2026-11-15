@@ -221,6 +221,10 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     let previousGraph: ScreenGraph | undefined;
     /** The last step carried out, and the page it was carried out on. */
     let lastTaken: { state: string; key: string } | undefined;
+    /** Follow-ups from the last plan still to carry out, and the page they were planned on. */
+    let queue: FollowUp[] = [];
+    let queuePage = "";
+    let lastModel = "";
 
     for (step = 0; step < maxSteps; step++) {
       const reading = await readPage(link, taskId, signal, names, vault, step, options.readPixels);
@@ -267,30 +271,50 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
         }
       }
 
-      const request: PlanRequest = {
-        goal,
-        graph: page.graph,
-        history: history.slice(-MAX_HISTORY),
-        ...(Object.keys(extracted).length > 0 ? { extracted: { ...extracted } } : {}),
-        ...(customInstructions ? { customInstructions } : {}),
-        ...(options.permissions?.modelOverride ? { modelOverride: options.permissions.modelOverride } : {}),
-      };
-      let plan: PlanResponse;
-      try {
-        plan = await planner(request, signal);
-      } catch (error) {
-        if (signal.aborted) throw error;
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.startsWith("Outbound payload contains unredacted PII")) {
-          return finish({ outcome: "failed", errorCode: "PII_TRIPWIRE", message: "Stopped before sending: the request still contained personal data the detectors missed. Nothing was sent." });
+      // The plan's next follow-up (PlanResponse.then), without asking the
+      // server, if it still fits this view: same page, and its target found
+      // again by role and name, since ids belong to one view.
+      const queued = queue.length > 0 && queuePage === pageKey(page.graph) ? queue.shift() : undefined;
+      const fromQueue = queued ? retarget(queued, page.graph) : undefined;
+      if (!fromQueue && queue.length + (queued ? 1 : 0) > 0) {
+        log.info("agent.queueDropped", { taskId, step, left: queue.length + (queued ? 1 : 0) });
+        queue = [];
+      }
+      let action: Action;
+      let latencyMs = 0;
+      if (fromQueue) {
+        action = fromQueue;
+        log.info("agent.followUp", { taskId, step, action: action.type, left: queue.length });
+      } else {
+        const request: PlanRequest = {
+          goal,
+          graph: page.graph,
+          history: history.slice(-MAX_HISTORY),
+          ...(Object.keys(extracted).length > 0 ? { extracted: { ...extracted } } : {}),
+          ...(customInstructions ? { customInstructions } : {}),
+          ...(options.permissions?.modelOverride ? { modelOverride: options.permissions.modelOverride } : {}),
+        };
+        let plan: PlanResponse;
+        try {
+          plan = await planner(request, signal);
+        } catch (error) {
+          if (signal.aborted) throw error;
+          const message = error instanceof Error ? error.message : String(error);
+          if (message.startsWith("Outbound payload contains unredacted PII")) {
+            return finish({ outcome: "failed", errorCode: "PII_TRIPWIRE", message: "Stopped before sending: the request still contained personal data the detectors missed. Nothing was sent." });
+          }
+          return finish({ outcome: "failed", errorCode: "PLANNER_ERROR", message });
         }
-        return finish({ outcome: "failed", errorCode: "PLANNER_ERROR", message });
+        action = plan.action;
+        latencyMs = plan.latencyMs;
+        lastModel = plan.model;
+        queue = followUpsFrom(plan.then, page.graph);
+        queuePage = pageKey(page.graph);
+        log.info("agent.planned", { taskId, step, elements: page.graph.elements.length, action: action.type, latencyMs: plan.latencyMs, repairs: plan.repairs, followUps: queue.length });
       }
 
-      const { action } = plan;
       const target = "target" in action && action.target ? page.graph.elements.find((element) => element.id === action.target) : undefined;
-      onEvent({ type: "planned", step, action, targetLabel: target?.label ?? target?.value, model: plan.model, latencyMs: plan.latencyMs });
-      log.info("agent.planned", { taskId, step, elements: page.graph.elements.length, action: action.type, latencyMs: plan.latencyMs, repairs: plan.repairs });
+      onEvent({ type: "planned", step, action, targetLabel: target?.label ?? target?.value, model: lastModel, latencyMs });
 
       if (action.type === "done") {
         return finish(action.success
@@ -344,6 +368,11 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
         guard.sawPage(site, findPiiTokens(extracted[action.as]!));
       }
 
+      // A follow-up runs only if the step before it worked.
+      if (!outcome.verified && queue.length > 0) {
+        log.info("agent.queueDropped", { taskId, step, left: queue.length });
+        queue = [];
+      }
       unverifiedInARow = outcome.verified ? 0 : unverifiedInARow + 1;
       if (unverifiedInARow >= MAX_CONSECUTIVE_UNVERIFIED) {
         step += 1;
@@ -361,6 +390,52 @@ export async function runAgentTask(options: AgentOptions): Promise<void> {
     // The vault is the only place real values live. It dies with the task.
     vault.clear();
   }
+}
+
+/** A follow-up action, with the role and name of its target as planned, to find it again in a later view. */
+interface FollowUp {
+  action: Action;
+  target?: { role: string; name: string };
+}
+
+function nameOf(element: { label?: string; value?: string }): string {
+  return element.label ?? element.value ?? "";
+}
+
+function pageKey(graph: ScreenGraph): string {
+  return `${graph.url.origin}${graph.url.pathTemplate}`;
+}
+
+/**
+ * The plan's follow-ups, each with its target's role and name from the view
+ * it was planned on. One whose target is not on that view, or a "done", ends
+ * the list: the planner sees the page again before deciding those.
+ */
+function followUpsFrom(then: readonly Action[] | undefined, graph: ScreenGraph): FollowUp[] {
+  const followUps: FollowUp[] = [];
+  for (const action of then ?? []) {
+    if (action.type === "done") break;
+    if (!("target" in action) || !action.target) {
+      followUps.push({ action });
+      continue;
+    }
+    const element = graph.elements.find((candidate) => candidate.id === action.target);
+    if (!element) break;
+    followUps.push({ action, target: { role: element.role, name: nameOf(element) } });
+  }
+  return followUps;
+}
+
+/**
+ * A follow-up's action in this view: its target is the one element with the
+ * same role and name. None or several: undefined, and the planner decides.
+ */
+function retarget(followUp: FollowUp, graph: ScreenGraph): Action | undefined {
+  const { action, target } = followUp;
+  if (!target) return action;
+  const matches = graph.elements.filter((element) => element.role === target.role && nameOf(element) === target.name);
+  if (matches.length !== 1) return undefined;
+  return { ...action, target: matches[0]!.id } as Action;
 }
 
 /** An action without its reason, the same however the model ordered its fields. */

@@ -197,3 +197,18 @@ describe("outbound tripwire", () => {
     assert.throws(() => assertOutboundSafe(leaky), /unredacted PII/);
   });
 });
+
+describe("plan responses with several actions", () => {
+  const base = { action: { type: "type", target: "e1", value: "<PII:NAME:1>" }, model: "m", latencyMs: 1 };
+
+  test("a plan may carry follow-up actions", () => {
+    const parsed = PlanResponseSchema.parse({ ...base, then: [{ type: "type", target: "e2", value: "<PII:EMAIL:1>" }, { type: "click", target: "e3" }] });
+    assert.equal(parsed.then?.length, 2);
+  });
+
+  test("a plan without them is still valid, and too many are refused", () => {
+    assert.equal(PlanResponseSchema.parse(base).then, undefined);
+    const many = Array.from({ length: 7 }, (_, i) => ({ type: "click", target: `e${i + 2}` }));
+    assert.equal(PlanResponseSchema.safeParse({ ...base, then: many }).success, false);
+  });
+});

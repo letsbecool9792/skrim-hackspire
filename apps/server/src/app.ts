@@ -75,7 +75,8 @@ app.post('/plan', async (c) => {
     const latencyMs = Math.round(performance.now() - start);
     const target = 'target' in result.action && result.action.target ? ` ${result.action.target}` : '';
     const tokens = result.usage ? `, ${result.usage.promptTokens}+${result.usage.completionTokens} tokens` : '';
-    console.log(`[plan] ${shape} -> ${result.action.type}${target} in ${latencyMs} ms, ${result.repairs} repairs${tokens}`);
+    const more = result.then ? ` (+${result.then.length} more)` : '';
+    console.log(`[plan] ${shape} -> ${result.action.type}${target}${more} in ${latencyMs} ms, ${result.repairs} repairs${tokens}`);
     return c.json({ ...result, latencyMs });
   } catch (err) {
     const latencyMs = Math.round(performance.now() - start);

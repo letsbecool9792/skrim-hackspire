@@ -1,4 +1,4 @@
-import { ActionSchema } from '@skrim/schema';
+import { ActionSchema, MAX_THEN_ACTIONS } from '@skrim/schema';
 import type { Action, PlanRequest, PlanResponse } from '@skrim/schema';
 import { createChatCompletion, ProviderError, type ChatMessage } from '../providers/index.js';
 import { buildFittedPrompt } from '../prompts/builder.js';
@@ -29,8 +29,43 @@ function extractJson(text: string): string {
 }
 
 export type ParsedOutput =
-  | { ok: true; action: Action }
+  | { ok: true; action: Action; then: Action[] }
   | { ok: false; repairPrompt: string };
+
+/**
+ * The first action and the ones meant to follow it. Models write the list as
+ * the prompt asks ("then" on the action), or as a bare list, or as
+ * {"actions": [...]}; all three mean the same.
+ */
+function splitPlan(parsed: unknown): { first: unknown; rest: unknown[] } {
+  if (Array.isArray(parsed)) return { first: parsed[0], rest: parsed.slice(1) };
+  if (parsed && typeof parsed === 'object') {
+    const object = parsed as Record<string, unknown>;
+    if (Array.isArray(object.actions)) return { first: object.actions[0], rest: object.actions.slice(1) };
+    if (Array.isArray(object.then)) {
+      const { then, ...one } = object;
+      return { first: one, rest: then as unknown[] };
+    }
+  }
+  return { first: parsed, rest: [] };
+}
+
+/**
+ * The follow-ups worth keeping: valid ones in order, up to the first that is
+ * not, at most MAX_THEN_ACTIONS, and never "done" (the planner sees the page
+ * again before a task ends). A bad follow-up is dropped, not repaired: the
+ * first action alone is a fine answer.
+ */
+function followUps(first: Action, rest: unknown[]): Action[] {
+  if (first.type === 'done') return [];
+  const then: Action[] = [];
+  for (const item of rest) {
+    const validation = ActionSchema.safeParse(item);
+    if (!validation.success || validation.data.type === 'done' || then.length >= MAX_THEN_ACTIONS) break;
+    then.push(validation.data);
+  }
+  return then;
+}
 
 /** Turns raw model text into an action, or says what to ask the model to fix. */
 export function parseModelOutput(raw: string): ParsedOutput {
@@ -46,8 +81,9 @@ export function parseModelOutput(raw: string): ParsedOutput {
     }
   }
 
-  const validation = ActionSchema.safeParse(parsed);
-  if (validation.success) return { ok: true, action: validation.data };
+  const { first, rest } = splitPlan(parsed);
+  const validation = ActionSchema.safeParse(first);
+  if (validation.success) return { ok: true, action: validation.data, then: followUps(validation.data, rest) };
   return {
     ok: false,
     repairPrompt: `That JSON is not a valid action: ${validation.error.message}. Reply with only a corrected JSON object.`,
@@ -99,7 +135,7 @@ export async function planAction(config: ProviderConfig, request: PlanRequest): 
     }
     const result = parseModelOutput(completion.text);
     if (result.ok) {
-      return { action: result.action, model: config.model, repairs, ...(usage ? { usage } : {}) };
+      return { action: result.action, ...(result.then.length > 0 ? { then: result.then } : {}), model: config.model, repairs, ...(usage ? { usage } : {}) };
     }
     messages.push({ role: 'assistant', content: completion.text });
     messages.push({ role: 'user', content: result.repairPrompt });

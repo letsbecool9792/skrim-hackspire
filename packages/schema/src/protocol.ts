@@ -47,8 +47,19 @@ export const PlanRequestSchema = z.object({
 });
 export type PlanRequest = z.infer<typeof PlanRequestSchema>;
 
+/** At most this many actions follow the first in one plan. */
+export const MAX_THEN_ACTIONS = 6;
+
 export const PlanResponseSchema = z.object({
   action: ActionSchema,
+  /**
+   * More actions to carry out after `action`, in order, each only if the one
+   * before it succeeded and its target is still on the page. One request can
+   * fill a whole form: free tiers count requests and tokens, and a small
+   * local model loops less with fewer decisions to make. Never "done": the
+   * planner sees the page again before it ends a task.
+   */
+  then: z.array(ActionSchema).max(MAX_THEN_ACTIONS).optional(),
   /** Which model produced this, for the tradeoff-curve slide (brief 9.6). */
   model: z.string(),
   /** Server-side round trip in ms, excluding network. Feeds the resource panel. */
