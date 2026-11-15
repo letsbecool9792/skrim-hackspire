@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { getConfig, overrideConfig } from './config.js';
+import { COMPACT_SYSTEM_PROMPT, SYSTEM_PROMPT } from './prompts/system.js';
 
-const SETTINGS = ['MODEL_PROVIDER', 'FALLBACK_PROVIDER', 'GROQ_API_KEY', 'NVIDIA_API_KEY', 'NVIDIA_MODEL', 'CEREBRAS_API_KEY'];
+const SETTINGS = ['PROMPT_STYLE', 'MODEL_PROVIDER', 'FALLBACK_PROVIDER', 'GROQ_API_KEY', 'NVIDIA_API_KEY', 'NVIDIA_MODEL', 'CEREBRAS_API_KEY'];
 const saved = Object.fromEntries(SETTINGS.map((name) => [name, process.env[name]]));
 
 function set(values: Record<string, string | undefined>): void {
@@ -77,5 +78,23 @@ describe('overrideConfig: a model picked in the side panel', () => {
     // "Do not think first" is for Qwen; Groq rejects it for other models.
     assert.equal(config?.extraBody, undefined);
     assert.equal(overrideConfig('nope:model', 'k'), undefined);
+  });
+});
+
+describe('the system prompt per provider', () => {
+  test('hosted models get the compact prompt, the local one the full prompt, and PROMPT_STYLE overrides both', () => {
+    set({ GROQ_API_KEY: 'k', FALLBACK_PROVIDER: 'ollama' });
+    const config = getConfig();
+    assert.equal(config.providerConfig.promptStyle, 'compact');
+    assert.equal(config.fallbackConfigs[0]?.promptStyle, 'full');
+    set({ GROQ_API_KEY: 'k', PROMPT_STYLE: 'full' });
+    assert.equal(getConfig().providerConfig.promptStyle, 'full');
+  });
+
+  test('the compact prompt is a third the size and still teaches every action and "then"', () => {
+    assert.ok(COMPACT_SYSTEM_PROMPT.length < SYSTEM_PROMPT.length * 0.45, `${COMPACT_SYSTEM_PROMPT.length} vs ${SYSTEM_PROMPT.length}`);
+    for (const type of ['click', 'type', 'select', 'scroll', 'navigate', 'extract', 'wait', 'done']) assert.match(COMPACT_SYSTEM_PROMPT, new RegExp(`"type": "${type}"`));
+    assert.match(COMPACT_SYSTEM_PROMPT, /"then"/);
+    assert.match(COMPACT_SYSTEM_PROMPT, /<PII:EMAIL:1>/);
   });
 });

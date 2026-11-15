@@ -97,7 +97,7 @@ const MAX_REPAIRS = 2;
  * big. Logs what was cut, as counts.
  */
 function promptFor(config: ProviderConfig, request: PlanRequest, budget: number): ChatMessage[] {
-  const { messages, report, estimatedTokens } = buildFittedPrompt(request, budget);
+  const { messages, report, estimatedTokens } = buildFittedPrompt(request, budget, config.promptStyle);
   if (report) {
     console.log(`[plan] page too big for ${config.provider}: fitted to about ${estimatedTokens} tokens (budget ${budget}); ${report.shortened} texts shortened, ${report.leftOut} elements left out, ${report.notesDropped} old notes dropped`);
   }

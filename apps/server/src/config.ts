@@ -1,3 +1,5 @@
+import type { PromptStyle } from './prompts/builder.js';
+
 export type ProviderName = 'nvidia' | 'groq' | 'ollama' | 'cerebras';
 
 const PROVIDERS: readonly ProviderName[] = ['groq', 'cerebras', 'nvidia', 'ollama'];
@@ -20,6 +22,12 @@ export interface ProviderConfig {
    * a provider with nothing after it.
    */
   maxRateLimitWaitMs?: number;
+  /**
+   * The system prompt: "compact" for big hosted models (a third of the
+   * tokens, sent with every step), "full" for the small local one, which
+   * needs its worked examples. PROMPT_STYLE overrides it for every provider.
+   */
+  promptStyle: PromptStyle;
 }
 
 /**
@@ -29,6 +37,12 @@ export interface ProviderConfig {
  * there for speed. Ollama's skrim-planner reads 16k tokens and must answer too.
  */
 const PROMPT_BUDGET: Record<ProviderName, number> = { groq: 5_500, cerebras: 12_000, nvidia: 16_000, ollama: 13_000 };
+
+function promptStyle(provider: ProviderName): PromptStyle {
+  const set = process.env.PROMPT_STYLE;
+  if (set === 'full' || set === 'compact') return set;
+  return provider === 'ollama' ? 'full' : 'compact';
+}
 
 function promptBudget(provider: ProviderName): number {
   const set = Number(process.env.PROMPT_BUDGET_TOKENS);
@@ -75,6 +89,7 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       model: process.env.NVIDIA_MODEL || 'nvidia/nemotron-3-super-120b-a12b',
       apiKey: apiKey ?? requireKey('NVIDIA_API_KEY', setting, provider),
       promptBudgetTokens: promptBudget(provider),
+      promptStyle: promptStyle(provider),
     };
   }
   if (provider === 'groq') {
@@ -89,6 +104,7 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       // 8,000 tokens a minute.
       extraBody: { reasoning_effort: process.env.GROQ_REASONING_EFFORT || 'none' },
       promptBudgetTokens: promptBudget(provider),
+      promptStyle: promptStyle(provider),
     };
   }
   if (provider === 'cerebras') {
@@ -101,6 +117,7 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       apiKey: apiKey ?? requireKey('CEREBRAS_API_KEY', setting, provider),
       ...(process.env.CEREBRAS_REASONING_EFFORT ? { extraBody: { reasoning_effort: process.env.CEREBRAS_REASONING_EFFORT } } : {}),
       promptBudgetTokens: promptBudget(provider),
+      promptStyle: promptStyle(provider),
     };
   }
   if (provider === 'ollama') {
@@ -114,6 +131,7 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       // a step, and it cannot be told not to think through the OpenAI-compatible API.
       model: process.env.OLLAMA_MODEL || 'skrim-planner',
       promptBudgetTokens: promptBudget(provider),
+      promptStyle: promptStyle(provider),
     };
   }
   throw new Error(`Unsupported ${setting}: ${String(provider)}. Use ${PROVIDERS.join(', ')}.`);

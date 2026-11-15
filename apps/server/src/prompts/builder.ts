@@ -1,7 +1,10 @@
 import type { Action, PlanRequest, ScreenElement } from '@skrim/schema';
 import type { ChatMessage } from '../providers/index.js';
 import { estimateTokens, fitRequest, type FitReport } from './fit.js';
-import { SYSTEM_PROMPT } from './system.js';
+import { COMPACT_SYSTEM_PROMPT, SYSTEM_PROMPT } from './system.js';
+
+/** Which system prompt: the full one with worked examples, or the compact one for big hosted models. */
+export type PromptStyle = 'full' | 'compact';
 
 /**
  * The request is rendered as compact text rather than pretty-printed JSON: one
@@ -19,15 +22,16 @@ import { SYSTEM_PROMPT } from './system.js';
  * of typing into it (0 of 3). Measure before trimming this format again.
  */
 /** The system prompt, then the user's own rules from the side panel (redacted there, like the goal). */
-function systemPrompt(request: PlanRequest): string {
+function systemPrompt(request: PlanRequest, style: PromptStyle): string {
+  const base = style === 'compact' ? COMPACT_SYSTEM_PROMPT : SYSTEM_PROMPT;
   return request.customInstructions
-    ? `${SYSTEM_PROMPT}\n\nUSER-SPECIFIC INSTRUCTIONS:\n${request.customInstructions}`
-    : SYSTEM_PROMPT;
+    ? `${base}\n\nUSER-SPECIFIC INSTRUCTIONS:\n${request.customInstructions}`
+    : base;
 }
 
-export function buildPrompt(request: PlanRequest): ChatMessage[] {
+export function buildPrompt(request: PlanRequest, style: PromptStyle = 'full'): ChatMessage[] {
   return [
-    { role: 'system', content: systemPrompt(request) },
+    { role: 'system', content: systemPrompt(request, style) },
     { role: 'user', content: renderRequest(request) }
   ];
 }
@@ -36,14 +40,14 @@ export function buildPrompt(request: PlanRequest): ChatMessage[] {
  * The prompt, shortened to `budgetTokens` when the page is too big for it
  * (prompts/fit.ts). A request that fits is the same as buildPrompt's.
  */
-export function buildFittedPrompt(request: PlanRequest, budgetTokens: number): { messages: ChatMessage[]; report: FitReport | null; estimatedTokens: number } {
+export function buildFittedPrompt(request: PlanRequest, budgetTokens: number, style: PromptStyle = 'full'): { messages: ChatMessage[]; report: FitReport | null; estimatedTokens: number } {
   const measure = (candidate: PlanRequest, shortened: boolean) =>
-    estimateTokens(systemPrompt(request).length, renderRequest(candidate, { shortened }).length);
+    estimateTokens(systemPrompt(request, style).length, renderRequest(candidate, { shortened }).length);
   const { request: fitted, report } = fitRequest(request, budgetTokens, (candidate) => measure(candidate, candidate !== request));
   const shortened = report !== null;
   return {
     messages: [
-      { role: 'system', content: systemPrompt(request) },
+      { role: 'system', content: systemPrompt(request, style) },
       { role: 'user', content: renderRequest(fitted, { shortened }) },
     ],
     report,
