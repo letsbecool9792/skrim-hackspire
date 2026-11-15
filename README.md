@@ -13,7 +13,7 @@ back in only at the moment it types it.
 *Left, the dashboard: what the server received for each step. Right, Skrim's side panel. The goal
 was "fill the form with my PAN ABCDE1234F"; the server saw `<PII:GOV_ID:1>`.*
 
-Built by team **Chipotle**: [Suparno Saha](https://suparno.me), [Aritra](https://github.com/AM2004legend), [Ayushi Chakraborty](https://github.com/aeryxii) and [Dhruba](https://github.com/DhrubaIsha2006), for HackSpire ([Devfolio project page](https://devfolio.co/projects/skrim-df18)). Runs in Chrome, in Firefox on a computer, and **on Android phones**
+Built by team **Chipotle**: [Suparno](https://suparno.me), [Aritra](https://github.com/AM2004legend), [Ayushi](https://github.com/aeryxii) and [Dhrubaparna](https://github.com/DhrubaIsha2006), for HackSpire ([Devfolio project page](https://devfolio.co/projects/skrim-df18)). Runs in Chrome, in Firefox on a computer, and **on Android phones**
 in Firefox, where Skrim opens as a tab that works on the tab you came from
 ([`docs/phones.md`](docs/phones.md)). All MV3, one codebase.
 
