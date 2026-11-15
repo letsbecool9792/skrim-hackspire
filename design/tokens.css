@@ -1,24 +1,29 @@
 /*
- * Skrim's design language: one file, imported by the side panel, the dashboard
- * and, later, the landing page. Change a value here and all of them follow.
+ * Skrim's design language, "Redline": one file, imported by the side panel,
+ * the dashboard and the landing page. Change a value here and all of them follow.
  *
- * The idea: calm and exact, like a security tool you trust. Cool neutral
- * greys, one green for "Skrim did this", and one violet kept for a single
- * job: the placeholders that stand in for private data. Violet means
- * "this is hidden" everywhere, so a reader learns it once.
+ * The idea: a redacted document. Paper and ink, and one red pen for proof
+ * (the numbers, a stamp, a link). A private value is drawn as what it is, a
+ * redaction bar: ink with the placeholder's name in paper ("name 1"), in
+ * light and dark alike. A reader learns it once and sees it everywhere.
+ *
+ * Light and dark: the system setting decides, and data-theme="light" or
+ * "dark" on <html> overrides it (the landing page and the dashboard have a
+ * switch; the extension follows the system, since it may store nothing).
  *
  * Fonts are bundled (@fontsource-variable), never fetched: a privacy product
  * does not ask a font server who is looking, and the offline demo needs them.
- * Each app imports "@fontsource-variable/inter" and
- * "@fontsource-variable/jetbrains-mono" itself.
+ * Each app imports "@fontsource-variable/sora", "@fontsource-variable/dm-sans"
+ * and "@fontsource-variable/jetbrains-mono" itself.
  *
  * Sizes are in rem so a surface scales by setting its root size: the side
  * panel reads at 14px, the dashboard on a projector at 16px.
  */
 
 :root {
-  /* Type */
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Type: Sora for headings, DM Sans for text, JetBrains Mono for placeholders, steps and numbers. */
+  --font-display: "Sora Variable", "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", Consolas, monospace;
   --text-xs: 0.75rem;   /* labels, timings */
   --text-sm: 0.8125rem; /* secondary text */
@@ -30,11 +35,12 @@
   --text-3xl: 2.25rem;
   --text-4xl: 3rem;
   --text-5xl: 3.75rem;
-  --leading-tight: 1.25;
-  --leading-body: 1.5;
+  --leading-tight: 1.2;
+  --leading-body: 1.55;
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
+  --weight-bold: 700;
 
   /* Space: a 4px grid. Use these and nothing in between. */
   --space-1: 0.25rem;
@@ -51,10 +57,10 @@
   --space-20: 5rem;
   --space-24: 6rem;
 
-  /* Shape */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  /* Shape: paper is square-ish. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
   --radius-full: 999px;
   --border-width: 1px;
 
@@ -62,91 +68,90 @@
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --duration: 140ms;
 
-  /* Colour: light */
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --sunken: #e9ecf0;
-  --border: #e1e5ea;
-  --border-strong: #c9d0d8;
-  --text: #11161c;
-  --text-2: #46525e;
-  --text-3: #6f7b87;
+  /* Colour: light (paper) */
+  --bg: #f7f5ef;
+  --surface: #fffefb;
+  --surface-2: #f1eee6;
+  --sunken: #ebe7dc;
+  --border: #e2ddd0;
+  --border-strong: #cbc4b3;
+  --text: #17161a;
+  --text-2: #4b4852;
+  --text-3: #77737d;
 
-  --accent: #0a7f6f;
-  --accent-hover: #086b5d;
-  --accent-soft: #dff3ee;
-  --accent-border: #b6e2d8;
-  --on-accent: #ffffff;
+  /* Accent is ink: primary buttons, the send button, focus. */
+  --accent: #17161a;
+  --accent-hover: #34313a;
+  --accent-soft: #ebe7dc;
+  --accent-border: #cbc4b3;
+  --on-accent: #f7f5ef;
 
-  --private: #4b3bb0;
-  --private-soft: #ece9fb;
-  --private-border: #d6cff5;
+  /* The red pen: proof, emphasis, links. Used sparingly. */
+  --pen: #c41f2e;
+  --pen-soft: #fae3e3;
 
-  --ok: #15803d;
-  --ok-soft: #e3f4e9;
-  --warn: #a8530a;
-  --warn-soft: #fcefd9;
-  --bad: #be2a32;
-  --bad-soft: #fbe6e7;
+  /* A redaction bar: the placeholder for a private value. */
+  --bar: #17161a;
+  --on-bar: #f7f5ef;
 
-  --code-bg: #0f151b;
-  --code-text: #d7dee5;
-  --code-muted: #7d8a96;
-  /* A placeholder on a code block, which is dark in both themes. */
-  --code-private: #d4ccff;
-  --code-private-soft: rgb(139 120 255 / 0.18);
-  --code-private-border: rgb(139 120 255 / 0.45);
+  /* "Private" surfaces around placeholders (the Privacy note). */
+  --private: #17161a;
+  --private-soft: #ebe7dc;
+  --private-border: #cbc4b3;
 
-  --shadow-sm: 0 1px 2px rgb(17 22 28 / 0.06);
-  --shadow-md: 0 4px 16px rgb(17 22 28 / 0.08);
-  --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  --ok: #1b7446;
+  --ok-soft: #e1f0e6;
+  --warn: #9a520b;
+  --warn-soft: #f7ebd5;
+  --bad: #b01d2b;
+  --bad-soft: #f9e1e1;
+
+  --code-bg: #17161a;
+  --code-text: #ece9df;
+  --code-muted: #8d8880;
+  /* A placeholder on a code block, which is dark in both themes: a paper bar. */
+  --code-private: #17161a;
+  --code-private-soft: #ece9df;
+  --code-private-border: #ece9df;
+
+  --shadow-sm: 0 1px 2px rgb(23 22 26 / 0.06);
+  --shadow-md: 0 6px 20px rgb(23 22 26 / 0.08);
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--pen);
 
   color-scheme: light;
 }
 
+/* Dark (ink). The same values twice: once for the system setting, once for the switch. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0f13;
-    --surface: #12181e;
-    --surface-2: #181f26;
-    --sunken: #0e1318;
-    --border: #232c35;
-    --border-strong: #33404c;
-    --text: #e9edf1;
-    --text-2: #a4afba;
-    --text-3: #727f8b;
-
-    --accent: #3ccfb4;
-    --accent-hover: #62dcc5;
-    --accent-soft: #0f2d28;
-    --accent-border: #1c5047;
-    --on-accent: #04201b;
-
-    --private: #c8bfff;
-    --private-soft: #241f47;
-    --private-border: #3b3373;
-
-    --ok: #4ade80;
-    --ok-soft: #10301d;
-    --warn: #fbbf24;
-    --warn-soft: #36290f;
-    --bad: #f87b82;
-    --bad-soft: #3a1b1e;
-
-    --code-bg: #090d11;
-    --code-text: #d7dee5;
-    --code-muted: #6e7b87;
-
-    --shadow-sm: none;
-    --shadow-md: 0 4px 20px rgb(0 0 0 / 0.4);
-    --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
-
+  :root:not([data-theme="light"]) {
+    --bg: #121114; --surface: #19181c; --surface-2: #211f24; --sunken: #0d0c0f;
+    --border: #2c2a30; --border-strong: #403d45;
+    --text: #ece9df; --text-2: #b0aca3; --text-3: #7f7b74;
+    --accent: #ece9df; --accent-hover: #ffffff; --accent-soft: #29272c; --accent-border: #403d45; --on-accent: #121114;
+    --pen: #ff6370; --pen-soft: #3a1a1f;
+    --bar: #ece9df; --on-bar: #121114;
+    --private: #ece9df; --private-soft: #29272c; --private-border: #403d45;
+    --ok: #4cc386; --ok-soft: #12301f; --warn: #f0b443; --warn-soft: #33280f; --bad: #ff6b75; --bad-soft: #3a1a1f;
+    --code-bg: #0b0a0d; --code-text: #ece9df; --code-muted: #7f7b74;
+    --shadow-sm: none; --shadow-md: 0 6px 24px rgb(0 0 0 / 0.45);
     color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #121114; --surface: #19181c; --surface-2: #211f24; --sunken: #0d0c0f;
+  --border: #2c2a30; --border-strong: #403d45;
+  --text: #ece9df; --text-2: #b0aca3; --text-3: #7f7b74;
+  --accent: #ece9df; --accent-hover: #ffffff; --accent-soft: #29272c; --accent-border: #403d45; --on-accent: #121114;
+  --pen: #ff6370; --pen-soft: #3a1a1f;
+  --bar: #ece9df; --on-bar: #121114;
+  --private: #ece9df; --private-soft: #29272c; --private-border: #403d45;
+  --ok: #4cc386; --ok-soft: #12301f; --warn: #f0b443; --warn-soft: #33280f; --bad: #ff6b75; --bad-soft: #3a1a1f;
+  --code-bg: #0b0a0d; --code-text: #ece9df; --code-muted: #7f7b74;
+  --shadow-sm: none; --shadow-md: 0 6px 24px rgb(0 0 0 / 0.45);
+  color-scheme: dark;
+}
 
-/* Shared base: the same reset and the same hairline focus ring everywhere. */
+/* Shared base: the same reset and the same focus ring everywhere. */
 *, *::before, *::after { box-sizing: border-box; }
 body {
   margin: 0;
@@ -156,31 +161,33 @@ body {
   font-size: var(--text-base);
   font-weight: var(--weight-regular);
   line-height: var(--leading-body);
-  font-feature-settings: "cv11", "ss03";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-button, input, textarea { font: inherit; color: inherit; }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.02em; }
+button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: 0.45; }
 :focus-visible { outline: none; box-shadow: var(--focus); }
 code, pre, kbd { font-family: var(--font-mono); }
 
-/* The placeholder for a private value. One look, on every surface. */
+/* The placeholder for a private value: a redaction bar with its name on it. One look, on every surface. */
 .token {
   display: inline-flex;
   align-items: center;
-  padding: 0 var(--space-2);
-  border: var(--border-width) solid var(--private-border);
-  border-radius: var(--radius-sm);
-  background: var(--private-soft);
-  color: var(--private);
-  font-family: var(--font-sans);
-  font-size: 0.92em;
+  padding: 0 0.45em;
+  border-radius: 2px;
+  background: var(--bar);
+  color: var(--on-bar);
+  font-family: var(--font-mono);
+  font-size: 0.86em;
   font-weight: var(--weight-medium);
-  line-height: 1.5;
+  letter-spacing: -0.01em;
+  line-height: 1.55;
   white-space: nowrap;
 }
+/* On a dark code block in light mode, the bar turns paper. */
+pre .token, .code .token { background: var(--code-text); color: var(--code-bg); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

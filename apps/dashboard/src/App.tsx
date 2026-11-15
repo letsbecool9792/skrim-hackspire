@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
-import { AlertTriangle, Brain, Check, CircleAlert, Eye, Hourglass, Play, ShieldCheck, Square, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Brain, Check, CircleAlert, Eye, Hourglass, Play, Square, X, type LucideIcon } from "lucide-react";
+import { ThemeSwitch } from "./ThemeSwitch.tsx";
 import {
   DashboardMessageSchema,
   type DashboardMessage,
@@ -366,7 +367,7 @@ export default function App() {
       {/* ── Header ── */}
       <header className="dash-header">
         <div className="dash-brand">
-          <span className="dash-mark" aria-hidden="true"><ShieldCheck className="icon" size={18} strokeWidth={2.25} /></span>
+          <svg className="dash-mark" width="30" height="30" viewBox="0 0 48 48" aria-hidden="true"><circle cx="11" cy="24" r="7" fill="currentColor" /><rect x="22" y="18" width="23" height="12" rx="6" fill="var(--pen)" /></svg>
           Skrim
           <span className="dash-sub">Privacy dashboard</span>
         </div>
@@ -376,6 +377,7 @@ export default function App() {
             <TokenText text={display.redactedGoal} />
           </div>
         )}
+        <ThemeSwitch />
         {parseError && <div className="parse-warn"><AlertTriangle className="icon" size={16} aria-hidden="true" /> {parseError}</div>}
       </header>
 

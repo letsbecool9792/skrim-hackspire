@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { Action, PiiCategory, PiiToken } from "@skrim/schema";
-import { AlertTriangle, ArrowDownUp, ArrowRight, ArrowUp, ChevronsUpDown, CircleCheck, Clock, Download, Eraser, Eye, EyeOff, Keyboard, MousePointer2, ScanText, Settings, ShieldAlert, ShieldCheck, Square, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowDownUp, ArrowRight, ArrowUp, Check, ChevronsUpDown, CircleAlert, CircleCheck, Clock, Download, Eraser, Eye, EyeOff, Keyboard, MousePointer2, ScanText, Settings, ShieldCheck, Square, type LucideIcon } from "lucide-react";
 import type { ErrorCode } from "@/lib/errors.ts";
 import { runAgentTask, type AgentEvent, type DataUseQuestion, type TaskPermissions } from "@/lib/agent/loop.ts";
 import { categoryOf, type Concern } from "@/lib/agent/data-guard.ts";
@@ -13,7 +13,8 @@ import { panelTargetFromUrl } from "@/lib/agent/panel-target.ts";
 import { tabPixelReader } from "@/lib/vision/read-pixels.ts";
 import { SERVER_URL } from "./config.ts";
 import { feed } from "./feed-instance.ts";
-import "@fontsource-variable/inter";
+import "@fontsource-variable/sora";
+import "@fontsource-variable/dm-sans";
 import "@fontsource-variable/jetbrains-mono";
 
 /** Set when the panel is a tab of its own (Firefox for Android): the tab it works on. */
@@ -303,12 +304,22 @@ function Tokenised({ text, values }: { text: string; values?: ReadonlyMap<string
 
 // ─── Pieces ────────────────────────────────────────────────────────────────
 
+/** Skrim's mark, "dot, dash": you, and the placeholder that goes in your place. */
+function Mark({ size = 18 }: { size?: number }) {
+  return (
+    <svg className="mark" width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+      <circle cx="11" cy="24" r="7" fill="currentColor" />
+      <rect x="22" y="18" width="23" height="12" rx="6" fill="var(--pen)" />
+    </svg>
+  );
+}
+
 function ServerChip({ info, onRetry }: { info: ServerInfo | null | "checking"; onRetry: () => void }) {
-  if (info === "checking") return <span className="chip"><span className="chip-label">Connecting…</span></span>;
+  if (info === "checking") return <span className="chip"><span className="chip-label">connecting…</span></span>;
   if (!info) {
     return (
       <button className="chip chip-bad" type="button" onClick={onRetry} title={`No planning server at ${SERVER_URL}. Start it with: pnpm dev:server`}>
-        <span className="dot" /> <span className="chip-label">Server offline · retry</span>
+        <span className="dot" /> <span className="chip-label">server offline · retry</span>
       </button>
     );
   }
@@ -319,25 +330,19 @@ function ServerChip({ info, onRetry }: { info: ServerInfo | null | "checking"; o
   );
 }
 
-function StepRow({ step }: { step: StepView }) {
-  const ActionIcon = ACTION_ICONS[step.action.type];
+/** One step as a log line: status, what it did, how long the planner took. */
+function StepLine({ step, hid }: { step: StepView; hid?: string }) {
   const status = step.verified === undefined ? "pending" : step.verified ? "ok" : "warn";
   const reason = "reason" in step.action ? step.action.reason : undefined;
-  // TASK_06: show redaction count for this step if anything was hidden.
-  const redactionSummary = step.redactions ? describeCounts(step.redactions) : undefined;
   return (
-    <li className={`step step-${status}`}>
-      <span className="step-icon" aria-hidden="true"><ActionIcon className="icon" size={ICON_SIZE} /></span>
-      <div className="step-body">
-        <div className="step-title"><Tokenised text={describeAction(step.action, step.targetLabel)} /></div>
-        {reason && <div className="step-reason"><Tokenised text={reason} /></div>}
-        {step.verified === false && <div className="step-note"><Tokenised text={step.message ?? "Not confirmed."} /></div>}
-        {redactionSummary && <div className="step-redactions"><ShieldCheck className="icon" size={12} aria-hidden="true" />{redactionSummary} hidden</div>}
-      </div>
-      <span className="step-meta">
-        {step.verified === undefined ? <span className="spinner" aria-label="Working" /> : step.verified ? <CircleCheck className="icon" size={ICON_SIZE} aria-label="Done" /> : <AlertTriangle className="icon" size={ICON_SIZE} aria-label="Not confirmed" />}
-        <small>{(step.latencyMs / 1000).toFixed(1)} s</small>
+    <li className={`line line-${status}`} title={reason}>
+      <span className="glyph" aria-label={status === "pending" ? "Working" : status === "ok" ? "Done" : "Not confirmed"}>
+        {status === "pending" ? <span className="spinner" /> : status === "ok" ? <Check className="icon" size={12} strokeWidth={3} /> : <CircleAlert className="icon" size={12} strokeWidth={2.5} />}
       </span>
+      <span className="line-text"><Tokenised text={describeAction(step.action, step.targetLabel)} /></span>
+      <span className="line-time">{(step.latencyMs / 1000).toFixed(1)}s</span>
+      {step.verified === false && <span className="line-sub line-sub-warn"><Tokenised text={step.message ?? "Not confirmed."} /></span>}
+      {hid && <span className="line-sub">hid {hid}</span>}
     </li>
   );
 }
@@ -358,25 +363,36 @@ const CONCERN_WORDS: Record<Concern, (word: string) => string> = {
 };
 
 /**
- * The data guard's question (lib/agent/data-guard.ts): may this step type
- * these values here? A placeholder can be clicked to show its real value, on
- * this device only. The task waits for the answer.
+ * The data guard's question (lib/agent/data-guard.ts), as a prompt in the
+ * log: may this step type these values here? A placeholder can be clicked to
+ * show its real value, on this device only. A and D answer from the keyboard.
+ * The task waits for the answer.
  */
-function AskCard({ open }: { open: OpenQuestion }) {
+function AskPrompt({ open }: { open: OpenQuestion }) {
   const { question, values, answer } = open;
   const words = [...new Set(question.asks.map(({ token }) => wordFor(token)))];
   const reasons = [...new Set(question.asks.map(({ token, concern }) => CONCERN_WORDS[concern](wordFor(token))))];
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select") || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key === "a" || event.key === "A") { event.preventDefault(); answer(true); }
+      if (event.key === "d" || event.key === "D") { event.preventDefault(); answer(false); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [answer]);
   return (
     <div className="ask" role="group" aria-label="Skrim needs your permission">
-      <div className="ask-title"><ShieldAlert className="icon" size={ICON_SIZE} aria-hidden="true" /> Use your {words.join(" and ")} here?</div>
+      <div className="ask-title"><span className="ask-q" aria-hidden="true">?</span> Use your {words.join(" and ")} here?</div>
       <p>
-        The planner wants to type <Tokenised text={question.asks.map(({ token }) => token).join(" and ")} values={values} /> into{" "}
+        Type <Tokenised text={question.asks.map(({ token }) => token).join(" and ")} values={values} /> into{" "}
         <Tokenised text={quote(question.field) ?? "a field"} /> on {hostOf(question.site) ?? question.site}.
       </p>
       {reasons.map((reason) => <p key={reason} className="ask-why">{reason}</p>)}
       <div className="ask-actions">
-        <button type="button" className="ask-allow" onClick={() => answer(true)}>Allow</button>
-        <button type="button" className="ask-deny" onClick={() => answer(false)}>Don't allow</button>
+        <button type="button" className="ask-allow" onClick={() => answer(true)}><kbd>A</kbd> Allow</button>
+        <button type="button" className="ask-deny" onClick={() => answer(false)}><kbd>D</kbd> Don't allow</button>
       </div>
     </div>
   );
@@ -390,69 +406,78 @@ function typedSteps(steps: StepView[]): Array<StepView & { action: Extract<Actio
     step.action.type === "type" && step.verified === true && ONE_TOKEN.test(step.action.value));
 }
 
-/** How the task ended, with what stayed on the device one click away rather than under every answer. */
-function ResultCard({ finished, answerValues, steps }: { finished: Finished; answerValues?: ReadonlyMap<string, string>; steps: StepView[] }) {
+/** How the task ended: one closing log line, the answer, and what stayed on the device one click away. */
+function ResultBlock({ finished, answerValues, steps, onAudit }: { finished: Finished; answerValues?: ReadonlyMap<string, string>; steps: StepView[]; onAudit: () => void }) {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const kept = describeCounts(finished.tokens);
   const typed = typedSteps(steps);
+  const title = finished.outcome === "completed" ? "Done"
+    : finished.outcome === "cancelled" ? "Stopped"
+    : (ERROR_TITLES[finished.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? "Something went wrong");
   return (
     <div className={`result result-${finished.outcome}`}>
-      {finished.outcome === "completed" && <div className="result-title"><CircleCheck className="icon" size={ICON_SIZE} aria-hidden="true" /> Done</div>}
-      {finished.outcome === "cancelled" && <div className="result-title"><Square className="icon" size={ICON_SIZE} aria-hidden="true" /> Stopped</div>}
-      {finished.outcome === "failed" && <div className="result-title"><AlertTriangle className="icon" size={ICON_SIZE} aria-hidden="true" /> {ERROR_TITLES[finished.errorCode ?? "CONTENT_SCRIPT_ERROR"] ?? "Something went wrong"}</div>}
-      {finished.summary && <p><Tokenised text={finished.summary} values={answerValues} /></p>}
-      {finished.message && <p>{finished.message}</p>}
+      <div className="result-line">
+        <span className="glyph" aria-hidden="true">{finished.outcome === "completed" ? <Square className="icon" size={10} fill="currentColor" /> : finished.outcome === "cancelled" ? <Square className="icon" size={10} /> : <AlertTriangle className="icon" size={12} />}</span>
+        <span className="result-title">{title}</span>
+        <span className="line-time" title={finished.errorCode}>{finished.steps} step{finished.steps === 1 ? "" : "s"}</span>
+      </div>
+      {finished.summary && <p className="result-text"><Tokenised text={finished.summary} values={answerValues} /></p>}
+      {finished.message && <p className="result-text">{finished.message}</p>}
       <div className="result-foot">
-        <small title={finished.errorCode}>
-          {finished.steps} step{finished.steps === 1 ? "" : "s"}
-        </small>
-        <button className="info-button" type="button" onClick={() => setShowPrivacy((shown) => !shown)} aria-expanded={showPrivacy} title="What stayed on this device">
-          <ShieldCheck className="icon" size={14} aria-hidden="true" /> Privacy
+        <button className="text-button" type="button" onClick={() => setShowPrivacy((shown) => !shown)} aria-expanded={showPrivacy} title="What stayed on this device">
+          <ShieldCheck className="icon" size={12} aria-hidden="true" /> Privacy
+        </button>
+        <button className="text-button" type="button" onClick={onAudit} title="Download every step of this task as JSON (placeholders only)">
+          <Download className="icon" size={12} aria-hidden="true" /> Audit log
         </button>
       </div>
       {showPrivacy && (
         <div className="privacy-detail">
-          <ShieldCheck className="icon" size={ICON_SIZE} aria-hidden="true" />
-          <div>
-            <p>{kept ? `Kept on this device: ${kept}. The server only saw placeholders.` : "No personal data found on these pages."}</p>
-            {typed.length > 0 && (
-              <>
-                <p>Typed into pages, by this device:</p>
-                <ul>
-                  {typed.map((step) => (
-                    <li key={step.step}>
-                      <Tokenised text={step.action.value.match(new RegExp(ONE_TOKEN, "g"))!.join(", ")} /> into <Tokenised text={quote(step.targetLabel) ?? "a field"} />
-                      {step.site ? ` on ${step.site}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
+          <p>{kept ? `Kept on this device: ${kept}. The server only saw placeholders.` : "No personal data found on these pages."}</p>
+          {typed.length > 0 && (
+            <>
+              <p>Typed into pages, by this device:</p>
+              <ul>
+                {typed.map((step) => (
+                  <li key={step.step}>
+                    <Tokenised text={step.action.value.match(new RegExp(ONE_TOKEN, "g"))!.join(", ")} /> into <Tokenised text={quote(step.targetLabel) ?? "a field"} />
+                    {step.site ? ` on ${step.site}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function TaskView({ task }: { task: TaskItem }) {
+/** A task as one log: what you asked, what the server saw, each step, then how it ended. */
+function TaskView({ task, onAudit }: { task: TaskItem; onAudit: () => void }) {
   const { finished } = task;
   const showRedactedGoal = task.redactedGoal && task.redactedGoal !== task.goal;
+  // TASK_06: what was hidden on the page, shown on a step only when it changed since the step before.
+  let previous = "";
+  const hidAt = task.steps.map((step) => {
+    const now = step.redactions ? describeCounts(step.redactions) : "";
+    const changed = now !== previous;
+    previous = now;
+    return changed && now ? now : undefined;
+  });
   return (
     <section className="turn">
-      <div className="bubble-user">{task.goal}</div>
-      <div className="agent">
-        {showRedactedGoal && (
-          <p className="sent-as">Sent to the server as: <Tokenised text={task.redactedGoal!} /></p>
-        )}
-        {task.warnings.map((warning) => <p key={warning} className="note note-error">{warning}</p>)}
-        {task.steps.length > 0 && <ol className="steps">{task.steps.map((step) => <StepRow key={step.step} step={step} />)}</ol>}
-        {task.question && <AskCard open={task.question} />}
-        {task.phase !== "done" && !task.question && (
-          <div className="working"><span className="spinner" aria-hidden="true" /> {PHASE_WORDS[task.phase]}…</div>
-        )}
-        {finished && <ResultCard finished={finished} answerValues={task.answerValues} steps={task.steps} />}
-      </div>
+      <div className="goal"><span className="prompt" aria-hidden="true">›</span><span>{task.goal}</span></div>
+      {showRedactedGoal && (
+        <p className="sent-as"><span className="sent-label">server saw</span> <Tokenised text={task.redactedGoal!} /></p>
+      )}
+      {task.warnings.map((warning) => <p key={warning} className="note note-error">{warning}</p>)}
+      {task.steps.length > 0 && <ol className="log">{task.steps.map((step, i) => <StepLine key={step.step} step={step} hid={hidAt[i]} />)}</ol>}
+      {task.question && <AskPrompt open={task.question} />}
+      {task.phase !== "done" && !task.question && (
+        <div className="working"><span className="caret" aria-hidden="true" />{PHASE_WORDS[task.phase]}…</div>
+      )}
+      {finished && <ResultBlock finished={finished} answerValues={task.answerValues} steps={task.steps} onAudit={onAudit} />}
     </section>
   );
 }
@@ -622,7 +647,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand"><span className="mark" aria-hidden="true"><ShieldCheck className="icon" size={16} strokeWidth={2.25} /></span>Skrim</div>
+        <div className="brand"><Mark size={20} />Skrim</div>
         <ServerChip info={server} onRetry={() => void checkServer()} />
         <div className="topbar-actions">
           {/* TASK_02 + TASK_03: Settings panel toggle */}
@@ -691,33 +716,24 @@ export default function App() {
         )}
         {items.length === 0 && !goalError && (
           <div className="empty">
-            <div className="empty-mark" aria-hidden="true"><ShieldCheck className="icon" size={24} /></div>
+            <Mark size={40} />
             <h1>What should I do on this page?</h1>
-            <p>Skrim reads the page on your device, swaps personal details for placeholders, and asks the planning server for one step at a time.</p>
+            <p>Skrim reads the page on your device and blacks out your personal details. The planner gets the page with <span className="token">name 1</span> where your name was, and plans one step at a time.</p>
             {PANEL_TARGET !== undefined && <p>It works on the tab you opened it from. Switch back to that tab to watch, and here to see each step.</p>}
             <div className="examples">
               {EXAMPLES.map((example) => (
-                <button key={example} type="button" onClick={() => { setDraft(example); inputRef.current?.focus(); }}>{example}<ArrowRight className="icon" size={14} aria-hidden="true" /></button>
+                <button key={example} type="button" onClick={() => { setDraft(example); inputRef.current?.focus(); }}><span className="prompt" aria-hidden="true">›</span>{example}<ArrowRight className="icon" size={14} aria-hidden="true" /></button>
               ))}
             </div>
-            <p className="fine">Nothing is saved. Closing this panel stops the task and clears the chat.</p>
+            <p className="fine">Nothing is saved. Closing this panel stops the task and clears it.</p>
           </div>
         )}
-        {items.map((item) => (
-          <div key={item.id} className="task-wrapper">
-            <TaskView task={item} />
-            {/* TASK_07: download audit log once the task is done */}
-            {item.phase === "done" && (
-              <button className="audit-download" type="button" onClick={() => downloadAuditLog(item)} title="Download full audit log for this task">
-                <Download className="icon" size={12} aria-hidden="true" /> Audit log
-              </button>
-            )}
-          </div>
-        ))}
+        {items.map((item) => <TaskView key={item.id} task={item} onAudit={() => downloadAuditLog(item)} />)}
         <div ref={endRef} />
       </main>
 
       <footer className="composer">
+        <span className="prompt" aria-hidden="true">›</span>
         <textarea
           ref={inputRef}
           value={draft}

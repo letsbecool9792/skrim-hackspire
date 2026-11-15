@@ -1,13 +1,5 @@
-import {
-  Brain,
-  Download,
-  ExternalLink,
-  Eye,
-  MousePointerClick,
-  ScanText,
-  ShieldCheck,
-  Terminal,
-} from "lucide-react";
+import { useState } from "react";
+import { ArrowRight, Download, ExternalLink, Terminal } from "lucide-react";
 import {
   SITE,
   HERO_ROWS,
@@ -19,479 +11,333 @@ import {
   BUILD_STEPS,
   LICENCES,
 } from "./content";
+import { ThemeSwitch } from "./ThemeSwitch";
 
-// ─── Icon map (only the icons we actually use) ─────────────────────────────────
+/*
+ * The landing page as a redacted document ("Redline", design/tokens.css):
+ * paper and ink, private values drawn as redaction bars with their
+ * placeholder's name on them, and a red pen for the proof.
+ */
 
-const ICON_MAP = {
-  Eye,
-  ScanText,
-  ShieldCheck,
-  Brain,
-  MousePointerClick,
-} as const;
-
-type IconName = keyof typeof ICON_MAP;
-
-function Icon({ name, size = 20, className = "" }: { name: IconName; size?: number; className?: string }) {
-  const Component = ICON_MAP[name];
-  return <Component size={size} className={className} aria-hidden="true" />;
+/** Skrim's mark, "dot, dash": you, and the placeholder that goes in your place. */
+function Mark({ size = 22 }: { size?: number }) {
+  return (
+    <svg className="mark" width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+      <circle cx="11" cy="24" r="7" fill="currentColor" />
+      <rect x="22" y="18" width="23" height="12" rx="6" fill="var(--pen)" />
+    </svg>
+  );
 }
-
-// ─── Token pill ────────────────────────────────────────────────────────────────
 
 function Token({ label }: { label: string }) {
   return <span className="token">{label}</span>;
 }
 
-// ─── Hero visual ───────────────────────────────────────────────────────────────
-
-/**
- * The same page lines twice, side by side: what the user sees, and what the
- * server gets. Both at once, so the point lands without waiting for a swap.
- */
-function HeroVisual() {
-  return (
-    <div className="hero-visual">
-      <HeroPanel title="What you see" redacted={false} />
-      <HeroPanel title="What the server gets" redacted />
-    </div>
-  );
+function External({ href, children, className = "text-link" }: { href: string; children: React.ReactNode; className?: string }) {
+  return <a href={href} className={className} target="_blank" rel="noopener noreferrer">{children}</a>;
 }
 
-function HeroPanel({ title, redacted }: { title: string; redacted: boolean }) {
+/**
+ * The hero's document: a page of someone's details. Flip it to see what the
+ * planning server gets: the same page, each private value a placeholder.
+ */
+function HeroDocument() {
+  const [serverView, setServerView] = useState(true);
   return (
-    <figure className="hero-figure">
-      <figcaption className="hero-panel-label">{title}</figcaption>
-      <div className={`hero-panel${redacted ? " hero-panel--redacted" : ""}`}>
-        <table className="hero-table">
-          <tbody>
-            {HERO_ROWS.map(({ label, value, tokenLabel }) => (
-              <tr key={label}>
-                <th scope="row" className="hero-cell-label">{label}</th>
-                <td className="hero-cell-value">
-                  {redacted && tokenLabel !== null ? <Token label={tokenLabel} /> : value}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <figure className="doc-figure">
+      <div className="doc-switch" role="group" aria-label="Whose view">
+        <button type="button" aria-pressed={!serverView} onClick={() => setServerView(false)}>What you see</button>
+        <button type="button" aria-pressed={serverView} onClick={() => setServerView(true)}>What the server gets</button>
+      </div>
+      <div className="doc">
+        <div className="doc-head">
+          <span className="doc-kind">Order confirmation</span>
+          <span className="doc-ref">checkout · step 3 of 3</span>
+        </div>
+        <dl className="doc-rows">
+          {HERO_ROWS.map(({ label, value, tokenLabel }) => (
+            <div key={label} className="doc-row">
+              <dt>{label}</dt>
+              <dd>{serverView && tokenLabel !== null ? <Token label={tokenLabel} /> : value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="doc-note">
+          {serverView
+            ? <>The planner reads this and answers <code>type <Token label="email 1" /> into e17</code>. Your device types the real address.</>
+            : <>This is the page in your browser. None of the values marked as private leave it.</>}
+        </p>
+        <span className="stamp" aria-hidden="true">97 of 98 hidden</span>
       </div>
     </figure>
   );
 }
 
-// ─── Section wrapper ───────────────────────────────────────────────────────────
-
-function Section({
-  id,
-  className = "",
-  children,
-}: {
-  id: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
+function SectionHead({ kicker, title, children }: { kicker: string; title: string; children?: React.ReactNode }) {
   return (
-    <section id={id} className={`section ${className}`}>
-      <div className="container">{children}</div>
-    </section>
+    <div className="section-head">
+      <span className="kicker">{kicker}</span>
+      <h2>{title}</h2>
+      {children && <div className="section-lead">{children}</div>}
+    </div>
   );
 }
-
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return <h2 className="section-heading">{children}</h2>;
-}
-
-// ─── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
   return (
     <>
-      {/* Skip link for keyboard users */}
-      <a href="#main-content" className="skip-link">
-        Skip to main content
-      </a>
+      <a href="#main-content" className="skip-link">Skip to main content</a>
 
-      {/* ── Nav ── */}
-      <header className="site-header" role="banner">
-        <div className="container site-header-inner">
-          <a href={import.meta.env.BASE_URL} className="site-brand" aria-label="Skrim home">
-            <span className="brand-icon" aria-hidden="true">
-              <ShieldCheck size={18} strokeWidth={2.25} />
-            </span>
-            Skrim
-          </a>
+      <header className="site-header">
+        <div className="container header-inner">
+          <a href={import.meta.env.BASE_URL} className="brand" aria-label="Skrim home"><Mark />Skrim</a>
           <nav aria-label="Page sections">
-            <ul className="nav-list">
-              <li><a href="#how-it-works" className="nav-link">How it works</a></li>
-              <li><a href="#numbers" className="nav-link">Numbers</a></li>
-              <li><a href="#try-it" className="nav-link">Try it</a></li>
-              <li>
-                <a
-                  href={SITE.githubUrl}
-                  className="nav-link nav-link--github"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="GitHub repository (opens in new tab)"
-                >
-                  <ExternalLink size={16} aria-hidden="true" />
-                  GitHub
-                </a>
-              </li>
+            <ul className="nav">
+              <li><a href="#how-it-works">How it works</a></li>
+              <li><a href="#numbers">Numbers</a></li>
+              <li><a href="#tradeoffs">Tradeoffs</a></li>
+              <li><a href="#try-it">Try it</a></li>
+              <li><External href={SITE.githubUrl} className="">GitHub</External></li>
             </ul>
           </nav>
+          <ThemeSwitch />
         </div>
       </header>
 
       <main id="main-content">
-        {/* ── 1. Hero ── */}
-        <section id="hero" className="hero-section">
+        {/* ── Hero ── */}
+        <section className="hero">
           <div className="container hero-inner">
             <div className="hero-copy">
-              <h1 className="hero-title">{SITE.title}</h1>
-              <p className="hero-tagline">{SITE.tagline}</p>
+              <span className="kicker">A browser agent · open source · open-weight models</span>
+              <h1>
+                Your agent gets the page. Your <span className="bar" aria-label="name">name</span> stays here.
+              </h1>
+              <p className="hero-lead">{SITE.tagline} Before anything leaves your browser, every personal detail is blacked out and given a placeholder. The real value is typed back only on your device.</p>
               <div className="hero-actions">
-                <a href="#try-it" className="btn btn--primary">
-                  <Download size={16} aria-hidden="true" />
-                  Get it for Chrome
-                </a>
-                <a href="#how-it-works" className="btn btn--ghost">
-                  How it works
-                </a>
-                <a
-                  href={SITE.githubUrl}
-                  className="btn btn--ghost"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink size={16} aria-hidden="true" />
-                  Source
-                </a>
+                <a href="#try-it" className="btn btn-ink"><Download size={16} aria-hidden="true" />Add to Chrome</a>
+                <a href="#firefox" className="btn btn-line">Firefox and Android</a>
+                <a href="#numbers" className="btn btn-pen">Read the numbers <ArrowRight size={16} aria-hidden="true" /></a>
               </div>
             </div>
-            <HeroVisual />
+            <HeroDocument />
           </div>
         </section>
 
-        {/* ── 2. The problem ── */}
-        <Section id="the-problem" className="section--alt">
-          <SectionHeading>The problem with every other AI agent</SectionHeading>
-          <p className="section-body">
-            Today's AI browser agents — Claude in Chrome, OpenAI's Operator, Copilot in Edge — work by shipping your
-            screen to a company's server. That means your bank balance, your medical records, your inbox, and your face
-            are sitting on somebody else's GPU, processed by a model you didn't choose, stored under policies you
-            didn't read.
-          </p>
-          <p className="section-body">
-            Skrim keeps all of that on your machine. The server gets a scrubbed, anonymised description of the
-            screen — enough to reason about, not enough to identify you.
-          </p>
-        </Section>
+        {/* ── The problem ── */}
+        <section className="section" id="the-problem">
+          <div className="container split">
+            <SectionHead kicker="The problem" title="Every other AI agent ships your screen to a server." />
+            <div className="prose">
+              <p>
+                Today's AI browser agents (Claude in Chrome, OpenAI's Operator, Copilot in Edge) work by sending what's
+                on your screen to a company's server. Your bank balance, your inbox, your medical records and your face
+                end up on somebody else's GPU, read by a model you didn't choose.
+              </p>
+              <p>
+                Skrim keeps all of that on your machine. The server gets a description of the page with every private
+                value swapped out: enough to plan the next click, not enough to know who you are.
+              </p>
+            </div>
+          </div>
+        </section>
 
-        {/* ── 3. How it works ── */}
-        <Section id="how-it-works">
-          <SectionHeading>How it works</SectionHeading>
-          <p className="section-body section-body--lead">
-            Five stages. Four run on your device. The server only plans, from what stage three left of the page.
-          </p>
-          <ol className="pipeline" aria-label="Processing pipeline">
-            {PIPELINE.map(({ icon, title, detail }, i) => (
-              <li key={title} className="pipeline-step">
-                <div className="pipeline-step-header">
-                  <span className="pipeline-number" aria-hidden="true">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <span className="pipeline-icon" aria-hidden="true">
-                    <Icon name={icon as IconName} size={18} />
-                  </span>
-                  <span className="pipeline-title">{title}</span>
-                </div>
-                <p className="pipeline-detail">{detail}</p>
-              </li>
-            ))}
-          </ol>
-        </Section>
+        {/* ── How it works ── */}
+        <section className="section section-alt" id="how-it-works">
+          <div className="container">
+            <SectionHead kicker="How it works" title="Five stages. Four of them never leave your device.">
+              The server only plans, from what stage three left of the page.
+            </SectionHead>
+            <ol className="stages">
+              {PIPELINE.map(({ title, detail }, i) => {
+                const onServer = /server/i.test(title);
+                return (
+                  <li key={title} className={`stage${onServer ? " stage-server" : ""}`}>
+                    <span className="stage-num">{String(i + 1).padStart(2, "0")}</span>
+                    <div className="stage-body">
+                      <h3>{title}</h3>
+                      <p>{detail}</p>
+                    </div>
+                    <span className="stage-where">{onServer ? "server" : "your device"}</span>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        </section>
 
-        {/* ── 4. Why placeholders, not black boxes ── */}
-        <Section id="why-placeholders" className="section--alt">
-          <SectionHeading>Why placeholders, not black boxes</SectionHeading>
-          <p className="section-body">
-            Blacking out a field is simpler but it breaks the agent. If the server can't see an email field, it can't
-            say "type the email there." The task fails.
-          </p>
-          <p className="section-body">
-            Skrim uses <strong>referential redaction</strong>. Every private value becomes a typed token:
-          </p>
-          <div className="code-block" role="region" aria-label="Redaction example">
-            <pre>
-              <code>
-                <span className="code-comment">{"// Real screen"}</span>{"\n"}
+        {/* ── Why placeholders ── */}
+        <section className="section" id="why-placeholders">
+          <div className="container split">
+            <SectionHead kicker="The trick" title="Placeholders, not black boxes." />
+            <div className="prose">
+              <p>
+                Blacking out a field breaks the agent: if the server can't see the email field, it can't say "type the
+                email there". So each private value becomes a placeholder with a name, and the server can still use it.
+              </p>
+              <pre className="code" aria-label="Redaction example"><code>
+                <span className="code-c">{"// on your screen"}</span>{"\n"}
                 {"Email: priya@example.com"}{"\n\n"}
-                <span className="code-comment">{"// Sent to server"}</span>{"\n"}
-                {"{ id: \"e17\", role: \"textbox\", label: \"Email\","}{"\n"}
-                {"  value: \""}<Token label="PII:EMAIL:1" />{"\" }"}{"\n\n"}
-                <span className="code-comment">{"// Server returns"}</span>{"\n"}
-                {"{ type: \"type\", target: \"e17\","}{"\n"}
-                {"  value: \""}<Token label="PII:EMAIL:1" />{"\" }"}
-              </code>
-            </pre>
-          </div>
-          <p className="section-body">
-            A lookup table in memory on your machine maps <Token label="PII:EMAIL:1" /> back to the real address.
-            When the extension types it into the real field, that lookup happens locally, at typing time only. The
-            real value never crosses the network.
-          </p>
-        </Section>
-
-        {/* ── 5. Numbers ── */}
-        <Section id="numbers">
-          <SectionHeading>The numbers</SectionHeading>
-          <p className="section-body section-body--lead">
-            Measured in a real Chromium with the extension loaded, on 37 pages we annotated by hand. Not assumed.
-          </p>
-
-          <div className="metrics-grid">
-            {METRICS.map(({ value, label, detail }) => (
-              <div key={label} className="metric-card">
-                <div className="metric-value">{value}</div>
-                <div className="metric-label">{label}</div>
-                <p className="metric-detail">{detail}</p>
-              </div>
-            ))}
-          </div>
-
-          <h3 className="subsection-heading">On-device footprint breakdown</h3>
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th scope="col">Asset</th>
-                  <th scope="col" className="col-size">Size</th>
-                </tr>
-              </thead>
-              <tbody>
-                {FOOTPRINT_ROWS.map(({ asset, size }) => (
-                  <tr key={asset}>
-                    <td>{asset}</td>
-                    <td className="col-size mono">{size}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="section-note">
-            The OmniParser icon detector (81 MB) is exported but not used yet, so releases leave it out.
-          </p>
-        </Section>
-
-        {/* ── 5b. Tradeoffs ── */}
-        <Section id="tradeoffs" className="section--alt">
-          <SectionHeading>What we traded, and why</SectionHeading>
-          <p className="section-body">
-            Where a bigger or looser model buys something and costs something, we measured both sides
-            on the same pages and picked. The highlighted row is what Skrim ships.
-          </p>
-          {TRADEOFFS.map(({ title, head, rows, note }) => (
-            <div key={title}>
-              <h3 className="subsection-heading">{title}</h3>
-              <div className="table-wrapper">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      {head.map((h) => <th key={h} scope="col">{h}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(({ cells, shipped }) => (
-                      <tr key={cells[0]} className={shipped ? "row-shipped" : undefined}>
-                        {cells.map((cell, i) => (i === 0 ? <th key={i} scope="row">{cell}</th> : <td key={i}>{cell}</td>))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="section-note">{note}</p>
+                <span className="code-c">{"// what the server reads"}</span>{"\n"}
+                {"[e17] textbox \"Email\" = "}<Token label="email 1" />{"\n\n"}
+                <span className="code-c">{"// what the server answers"}</span>{"\n"}
+                {"type "}<Token label="email 1" />{" into e17"}
+              </code></pre>
+              <p>
+                A lookup table in your browser's memory maps <Token label="email 1" /> back to the real address. It's
+                used at the moment of typing, on your device, and erased when the task ends.
+              </p>
             </div>
-          ))}
-          <p className="section-note">
-            Method and every run:{" "}
-            <a href={`${SITE.githubUrl}/blob/main/docs/tradeoffs.md`} className="text-link" target="_blank" rel="noopener noreferrer">
-              docs/tradeoffs.md
-            </a>
-            .
-          </p>
-        </Section>
-
-        {/* ── 6. Known limits ── */}
-        <Section id="known-limits">
-          <SectionHeading>Known limits</SectionHeading>
-          <p className="section-body">
-            What Skrim does not do yet, or cannot do by design, said plainly.
-          </p>
-          <ul className="limits-list">
-            {KNOWN_LIMITS.map((limit) => (
-              <li key={limit} className="limit-item">
-                {limit}
-              </li>
-            ))}
-          </ul>
-        </Section>
-
-        {/* ── 7. Try it ── */}
-        <Section id="try-it" className="section--alt">
-          <SectionHeading>Try it</SectionHeading>
-          <p className="section-body">
-            Chrome, and Firefox on a computer or an Android phone. Not in the browsers' add-on stores yet: you
-            load it yourself, in a minute.
-          </p>
-
-          {/* Download or Releases link */}
-          <div className="download-row">
-            {SITE.downloadUrl ? (
-              <a
-                href={SITE.downloadUrl}
-                className="btn btn--primary btn--download"
-                download
-                aria-label="Download Skrim extension zip"
-              >
-                <Download size={18} aria-hidden="true" />
-                Download for Chrome (.zip)
-              </a>
-            ) : (
-              <a
-                href={SITE.releasesUrl}
-                className="btn btn--ghost"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink size={16} aria-hidden="true" />
-                GitHub Releases
-              </a>
-            )}
-            <span className="download-note">
-              {SITE.downloadUrl
-                ? "Download → unzip → chrome://extensions → Load unpacked"
-                : "No release yet — build from source below, or watch releases for the first zip"}
-            </span>
           </div>
+        </section>
 
-          {/* Install after download */}
-          {SITE.downloadUrl && (
-            <div className="install-steps">
-              <div className="install-step">
-                <span className="install-num" aria-hidden="true">1</span>
-                <span>Unzip the downloaded file.</span>
+        {/* ── Numbers ── */}
+        <section className="section section-alt" id="numbers">
+          <div className="container">
+            <SectionHead kicker="The numbers" title="Measured, not assumed.">
+              In a real Chromium with the extension loaded, on 37 pages we annotated by hand. We wrote the pages, so
+              expect lower numbers on sites we didn't.
+            </SectionHead>
+            <div className="metrics">
+              {METRICS.map(({ value, label, detail }) => (
+                <div key={label} className="metric">
+                  <span className="metric-value">{value}</span>
+                  <span className="metric-label">{label}</span>
+                  <p>{detail}</p>
+                </div>
+              ))}
+            </div>
+            <h3 className="table-title">What the extension carries</h3>
+            <div className="table-wrap">
+              <table className="ledger">
+                <thead><tr><th scope="col">On your device</th><th scope="col" className="num">Size</th></tr></thead>
+                <tbody>
+                  {FOOTPRINT_ROWS.map(({ asset, size }) => (
+                    <tr key={asset}><td>{asset}</td><td className="num">{size}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Tradeoffs ── */}
+        <section className="section" id="tradeoffs">
+          <div className="container">
+            <SectionHead kicker="Tradeoffs" title="What we traded, and why.">
+              Where a bigger or looser model buys something and costs something, we measured both on the same pages
+              and picked. The row marked <span className="shipped-tag">shipped</span> is what Skrim uses.
+            </SectionHead>
+            {TRADEOFFS.map(({ title, head, rows, note }) => (
+              <div key={title} className="tradeoff">
+                <h3 className="table-title">{title}</h3>
+                <div className="table-wrap">
+                  <table className="ledger">
+                    <thead><tr>{head.map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
+                    <tbody>
+                      {rows.map(({ cells, shipped }) => (
+                        <tr key={cells[0]} className={shipped ? "row-shipped" : undefined}>
+                          {cells.map((cell, i) => (i === 0
+                            ? <th key={i} scope="row">{cell}{shipped && <span className="shipped-tag">shipped</span>}</th>
+                            : <td key={i}>{cell}</td>))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="note">{note}</p>
               </div>
-              <div className="install-step">
-                <span className="install-num" aria-hidden="true">2</span>
-                <span>Open <code className="inline-code">chrome://extensions</code> in Chrome.</span>
+            ))}
+            <p className="note">
+              Method and every run: <External href={`${SITE.githubUrl}/blob/main/docs/tradeoffs.md`}>docs/tradeoffs.md</External>.
+            </p>
+          </div>
+        </section>
+
+        {/* ── Known limits ── */}
+        <section className="section section-alt" id="known-limits">
+          <div className="container split">
+            <SectionHead kicker="Known limits" title="What it doesn't do yet." />
+            <ul className="limits">
+              {KNOWN_LIMITS.map((limit) => <li key={limit}>{limit}</li>)}
+            </ul>
+          </div>
+        </section>
+
+        {/* ── Try it ── */}
+        <section className="section" id="try-it">
+          <div className="container">
+            <SectionHead kicker="Try it" title="Load it yourself, in a minute.">
+              Chrome, and Firefox on a computer or an Android phone. It's not in the add-on stores yet.
+            </SectionHead>
+
+            <div className="install">
+              <div className="install-card">
+                <h3>Chrome</h3>
+                {SITE.downloadUrl
+                  ? <a href={SITE.downloadUrl} className="btn btn-ink" download><Download size={16} aria-hidden="true" />Download for Chrome (.zip)</a>
+                  : <External href={SITE.releasesUrl} className="btn btn-line">GitHub Releases</External>}
+                <ol className="steps">
+                  <li>Unzip the downloaded file.</li>
+                  <li>Open <code>chrome://extensions</code>.</li>
+                  <li>Turn on <strong>Developer mode</strong>, top right.</li>
+                  <li>Click <strong>Load unpacked</strong> and pick the unzipped folder.</li>
+                  <li>
+                    Open any page and click Skrim's toolbar button. It plans with our hosted server, on a free tier
+                    shared by everyone: a few steps a minute. To watch what the server receives, open{" "}
+                    <External href={SITE.dashboardUrl}>the live dashboard</External> in the same browser.
+                  </li>
+                </ol>
               </div>
-              <div className="install-step">
-                <span className="install-num" aria-hidden="true">3</span>
-                <span>Enable <strong>Developer mode</strong> (toggle, top-right).</span>
-              </div>
-              <div className="install-step">
-                <span className="install-num" aria-hidden="true">4</span>
-                <span>Click <strong>Load unpacked</strong> and select the unzipped folder.</span>
-              </div>
-              <div className="install-step">
-                <span className="install-num" aria-hidden="true">5</span>
-                <span>
-                  Open any page and click Skrim's toolbar button. It plans with our hosted server, which is on a
-                  free tier shared by everyone trying it: a few steps a minute. To watch what the server receives,
-                  open{" "}
-                  <a href={SITE.dashboardUrl} className="text-link" target="_blank" rel="noopener noreferrer">
-                    the live dashboard
-                  </a>{" "}
-                  in the same browser while the side panel is open.
-                </span>
+              <div className="install-card" id="firefox">
+                <h3>Firefox, on a computer or Android</h3>
+                <a href={SITE.firefoxUrl} className="btn btn-line" download><Download size={16} aria-hidden="true" />Download for Firefox (.zip)</a>
+                <ol className="steps">
+                  <li>Open <code>about:debugging</code> → This Firefox.</li>
+                  <li>Click <strong>Load Temporary Add-on</strong> and pick the zip. It lasts until Firefox closes.</li>
+                  <li>
+                    On Android, Firefox has no sidebar, so Skrim opens as a tab that works on the tab you opened it
+                    from. Installing it there takes a Mozilla-signed build or a USB cable:{" "}
+                    <External href={SITE.phonesUrl}>how Skrim runs on a phone</External>.
+                  </li>
+                </ol>
               </div>
             </div>
-          )}
 
-          <h3 className="subsection-heading">Firefox, on a computer or an Android phone</h3>
-          <div className="download-row">
-            <a href={SITE.firefoxUrl} className="btn btn--ghost" download aria-label="Download Skrim for Firefox, zip">
-              <Download size={18} aria-hidden="true" />
-              Download for Firefox (.zip)
-            </a>
-            <span className="download-note">
-              about:debugging → This Firefox → Load Temporary Add-on → pick the zip
-            </span>
+            <h3 className="table-title">Build from source</h3>
+            <ol className="build">
+              {BUILD_STEPS.map(({ step, code }) => (
+                <li key={step}>
+                  <span className="build-label">{step}</span>
+                  <code className="build-code"><Terminal size={13} aria-hidden="true" />{code}</code>
+                </li>
+              ))}
+            </ol>
+            <p className="note">
+              You'll need a free <External href="https://console.groq.com">Groq API key</External> (no card). To plan on
+              your own machine instead, install Ollama, run <code>ollama pull qwen3-vl:4b-instruct</code> and{" "}
+              <code>pnpm ollama:setup</code>, then start the server with <code>MODEL_PROVIDER=ollama</code>.
+            </p>
           </div>
-          <p className="section-body">
-            On a computer it opens in Firefox's sidebar and lasts until Firefox closes. On an Android phone, where
-            Firefox has no sidebar, Skrim opens as a tab of its own that works on the tab you opened it from;
-            installing it there takes a Mozilla-signed build or a USB cable:{" "}
-            <a href={SITE.phonesUrl} className="text-link" target="_blank" rel="noopener noreferrer">
-              how Skrim runs on a phone
-            </a>
-            .
-          </p>
-
-          {/* Build from source (always shown as secondary path) */}
-          <h3 className="subsection-heading">Build from source</h3>
-          <div className="build-steps">
-            {BUILD_STEPS.map(({ step, code }, i) => (
-              <div key={step} className="build-step">
-                <div className="build-step-header">
-                  <span className="build-step-num" aria-hidden="true">{i + 1}</span>
-                  <span className="build-step-label">{step}</span>
-                </div>
-                <div className="build-code-wrapper">
-                  <Terminal size={14} className="build-code-icon" aria-hidden="true" />
-                  <code className="build-code">{code}</code>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="section-note">
-            You'll need a free{" "}
-            <a
-              href="https://console.groq.com"
-              className="text-link"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Groq API key
-            </a>{" "}
-            (no credit card). To plan on your own machine instead, install Ollama, run{" "}
-            <code className="inline-code">ollama pull qwen3-vl:4b-instruct</code> and{" "}
-            <code className="inline-code">pnpm ollama:setup</code>, then start the server with{" "}
-            <code className="inline-code">MODEL_PROVIDER=ollama</code>.
-          </p>
-        </Section>
+        </section>
       </main>
 
-      {/* ── Footer ── */}
-      <footer className="site-footer" role="contentinfo">
+      <footer className="site-footer">
         <div className="container footer-inner">
           <div className="footer-brand">
-            <span className="brand-icon brand-icon--sm" aria-hidden="true">
-              <ShieldCheck size={14} strokeWidth={2.25} />
-            </span>
-            <span className="footer-name">Skrim</span>
-            <span className="footer-team">by {SITE.team}</span>
+            <span className="brand"><Mark size={20} />Skrim</span>
+            <span className="footer-team">by team {SITE.team}</span>
+            <div className="footer-links">
+              <External href={SITE.githubUrl}><ExternalLink size={13} aria-hidden="true" /> Source</External>
+              <External href={SITE.devfolioUrl}><ExternalLink size={13} aria-hidden="true" /> Devfolio</External>
+              <External href={SITE.dashboardUrl}><ExternalLink size={13} aria-hidden="true" /> Live dashboard</External>
+            </div>
           </div>
-          <div className="footer-licences">
+          <dl className="licences">
             {LICENCES.map(({ name, notes }) => (
-              <div key={name} className="footer-licence-row">
-                <span className="footer-licence-name">{name}</span>
-                <span className="footer-licence-notes">{notes}</span>
-              </div>
+              <div key={name}><dt>{name}</dt><dd>{notes}</dd></div>
             ))}
-          </div>
-          <div className="footer-links">
-            <a
-              href={SITE.githubUrl}
-              className="footer-link"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink size={14} aria-hidden="true" />
-              Source on GitHub
-            </a>
-          </div>
+          </dl>
         </div>
       </footer>
     </>

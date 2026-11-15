@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#0a7f6f"/>
-  <path d="M16 4 L26 8 L26 16 C26 21.5 21.5 26.5 16 28 C10.5 26.5 6 21.5 6 16 L6 8 Z" stroke="white" stroke-width="2" stroke-linejoin="round" fill="none"/>
-  <polyline points="12,16 15,19 21,13" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Skrim app icon: the mark in paper and red on an ink tile, readable on light and dark toolbars. -->
+  <rect width="48" height="48" rx="11" fill="#17161a"/>
+  <circle cx="15.5" cy="24" r="5.5" fill="#f7f5ef"/>
+  <rect x="24.5" y="19.5" width="15" height="9" rx="4.5" fill="#ff4a5a"/>
 </svg>

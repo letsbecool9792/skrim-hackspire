@@ -24,6 +24,8 @@ export const SITE = {
   dashboardUrl: "https://skrim-dashboard.vercel.app",
   /** Link to the GitHub Releases page (always shown). */
   releasesUrl: "https://github.com/letsbecool9792/skrim-hackspire/releases",
+  /** The hackathon entry. */
+  devfolioUrl: "https://devfolio.co/projects/skrim-df18",
 } as const;
 
 // ─── Hero visual — fictional data from fixtures/pages/checkout.html ────────────

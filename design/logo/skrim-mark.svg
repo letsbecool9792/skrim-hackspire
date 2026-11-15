@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Skrim, "dot, dash": you (the dot) and the placeholder that goes in your place (the dash). -->
+  <circle cx="11" cy="24" r="7" fill="#17161a"/>
+  <rect x="22" y="18" width="23" height="12" rx="6" fill="#c41f2e"/>
+</svg>

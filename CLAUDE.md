@@ -247,8 +247,14 @@ Built, by workstream:
 | Ayushi (WS3) | Her six detection PRs are merged (OCR leaks, false positives, names in URLs, faces counted, and PR 24: labelled ids, names in email addresses, a face makes a page personal), which took recall to 99.0%. Next: not assigned yet | `pnpm eval`; Groq when needed |
 | Dhruba (WS2) | Fixtures and the icon detector are merged. Next: run the icon detector in the pixel reader and fuse it with the DOM, and a click at a position for what it finds | `pnpm eval`; Groq when needed |
 
-**The look is one language, in `design/tokens.css`.** The side panel and the dashboard use it
-(approved by Suparno, 2026-10-03). Use its tokens,
+**The look is one language, in `design/tokens.css`: "Redline"** (picked by Suparno, 2026-11-15,
+from the look book). A redacted document: paper and ink, a red pen for proof, and every
+placeholder drawn as a redaction bar with its name on it. Sora for headings, DM Sans for text,
+JetBrains Mono for placeholders and steps. Light and dark: the system decides, and
+`data-theme` on `<html>` overrides it (the landing page and dashboard have a switch; the
+extension follows the system, since it may store nothing). The logo is "dot, dash" (you, and
+the placeholder in your place): `design/logo/`. The side panel is a log: one mono line per step.
+The landing page, dashboard and side panel all use it. Use its tokens,
 not new hex values or pixel sizes; icons are lucide, never emoji; fonts are bundled
 (`@fontsource-variable`), never fetched. Ask Suparno before changing the side panel's layout.
 Face detection and the icon detector can plug into `lib/agent/read-page.ts` now.
@@ -357,6 +363,16 @@ add to it whenever a change needs a manual check, and tick items off when report
       server) and closes when a task starts. A model picked there plans the steps (the server's
       log names it); its key is not in the dashboard's request view; a name or email typed in
       Rules reaches the server as a placeholder; turning off Type makes a form task skip typing
+- [ ] **The new look, Redline** (on `main`, 2026-11-15): rebuild the extension and reload Skrim,
+      restart `pnpm dev:dashboard`, and `pnpm --filter @skrim/web dev` for the landing page. Check
+      each in light and dark (the switch on the landing page and dashboard; Windows colour mode
+      for the extension):
+  - side panel: the new icon in Chrome's toolbar; the empty state; a form task as a log (one
+    line per step, the question with A and D working from the keyboard, the closing line,
+    Privacy and Audit log); placeholders as black bars (light) and paper bars (dark)
+  - landing page: the hero document's two views, the stamp, the numbers in red, the tables at
+    phone width; the switch cycles system, light, dark and survives a reload
+  - dashboard: the mark, the switch, placeholders in the request view readable from the back
 - [ ] **Click to reveal**: on `canvas-card.html`, `what is my pan number` ends with an "ID number 1"
       pill; clicking it shows the real PAN in the side panel, clicking again hides it. The dashboard
       still shows only the placeholder
