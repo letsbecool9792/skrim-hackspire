@@ -37,7 +37,9 @@ Settled in the setup session. Do not reopen without a reason.
 | **Groq** (`qwen/qwen3.8-27b`) as the default provider | Free, no credit card, OpenAI-compatible. Did all 42 runs of the provider study, fastest and in the fewest steps. Its cost is the free tier: 4–5 steps a minute (the server waits these out) and a daily cap; when the day runs out, `FALLBACK_PROVIDER` (Ollama, or NVIDIA) plans the steps. NVIDIA stays wired: no daily cap |
 | **MV3 on both browsers** | Firefox MV3 event pages keep DOM access, so we get the offscreen-free path *and* "MV3 everywhere" on the slide. WXT defaults Firefox to MV2 — override it |
 | **Eval runs in a real browser** via Playwright | The rubric scores precision/recall on the shipped path. Node-side numbers would measure different code than we demo |
-| Ollama `skrim-planner` (`qwen3-vl:4b-instruct` with a 16k context) for air-gap | 6 GB VRAM ceiling. See "Hardware reality". The instruct build, not the plain tag, which is the much slower thinking build |
+| Ollama `skrim-planner` (Qwen3 4B Instruct 2507, text only, 12k context) for air-gap | 6 GB VRAM ceiling. See "Hardware reality". The planner is only sent text, so a text model, not Qwen3-VL 4B (kept as `skrim-planner-vl` to compare). An instruct build, not a thinking one. Chosen 2026-11-15 without a study run (Ollama was not installed): measure with `pnpm study` |
+| **The planner may plan several steps per request** (`PlanResponse.then`) | Each step was a request with the whole page: three steps a minute on Groq, ten decisions for a small model to get wrong. Follow-ups run without asking again, each only if the one before verified and its target is found again by role and name; every guard runs on each |
+| **Hosted models get a compact system prompt; Ollama keeps the full one** | The prompt is sent with every step and was most of a small page's tokens. 27B models follow the short one (Groq: 9 of 9 tasks); the 4B has lost tasks to every rewording |
 | **WS1 exposes registration hooks instead of owning perception/privacy/planning** | WS2 registers the graph provider (content script) and WS4 the planner (side panel); this prevents duplicate extractors and keeps browser execution independent. Token resolution needs no hook: the loop owns one vault per task |
 | **On a phone, the panel is a tab** (Firefox for Android) | Firefox for Android has no sidebar, and Chrome on phones runs no extensions. The toolbar button opens `sidepanel.html?tab=<id>`, which works on the tab it was opened from; everything else is the same add-on ([`docs/phones.md`](docs/phones.md)) |
 | **The data guard decides where a personal value may be typed, and asks the user otherwise** (`lib/agent/data-guard.ts`) | The planner never holds a value but can point at one, and a planner tricked by text on a page could type the phone number into the wrong field. Typing is the only way a value leaves the vault, so one on-device check covers every route, whatever the model or prompt: the goal asked for that kind of data (or holds the value), the site is the value's own, and an ID, card or account number always asks. A judge asked for guardrails beyond the system prompt (2026-10-03); Suparno chose asking over refusing |
@@ -56,8 +58,14 @@ documented so we know where to go if those stop being sufficient — do not add 
 |---|---|---|---|
 | `groq` | **wired, default** | hosted Qwen (`qwen/qwen3.8-27b`), 42 of 42 in the provider study | free, no card, per model: 1,000 requests/day, **200,000 tokens/day** (about 80 steps of a real page; a `pnpm test:agent` quick run uses about 45,000), 8,000 tokens/min (7,000 input; about 4–5 steps); the server waits out short 429s |
 | `ollama` | **wired** | air-gap demo, offline dev, and the fallback when Groq's day runs out (`FALLBACK_PROVIDER=ollama`) | free, local |
-| `nvidia` | **wired** | no daily cap. Its default model is now `nvidia/nemotron-3-super-120b-a12b` (37 of 42 in the provider study); Llama 3.2 11B, the old default, did 0 of 42 | free, no card, ~40 RPM, no daily cap |
+| `cerebras` | **wired** (2026-11-15) | the same Qwen 3.8 27B (`qwen-3.8-27b`) on its own allowance: the first fallback to set | free trial, reportedly about 1M tokens/day and 5 requests/min; whether it needs a card is unclear |
+| `nvidia` | **wired** | no daily cap. Its default model is `nvidia/nemotron-3-super-120b-a12b` (37 of 42 in the provider study), but on 2026-11-15 Suparno's account answered 404 for it: pick a model the account can call (`pnpm smoke:server`) | free, no card, ~40 RPM, no daily cap |
 | `cloudflare` | not wired | also hosts `qwen3.8-27b` | free, no card, 10k neurons/day |
+
+`FALLBACK_PROVIDER` is a comma list (`cerebras,nvidia`): each plans a step when the one before
+cannot. A provider with another after it sits out only pauses up to 5 s; a provider that said to
+come back later is skipped until then; a fallback that fails for its own reasons (a 404) passes the
+step on; and when all fail, a short pause is sat out after all (`apps/server/src/planner/chain.ts`).
 | `openrouter` | not wired | last resort | **50 req/day** without credits — unusable as a daily driver |
 
 Each teammate needs **their own** Groq key (and NVIDIA key, if they use it). The limits are
@@ -179,7 +187,7 @@ Foundations:
 - [x] **`packages/schema`, the contract.** ScreenGraph, the 8 actions, PiiToken,
       RedactionManifest, SanitizedUrl, PlanRequest/PlanResponse, outbound PII tripwire. 20 tests.
 - [x] `packages/shared`: ID-only logger that throws on PII in dev, timing instrumentation
-- [x] Guardrails: `pnpm verify` (261 tests), 5 invariant rules, CI on every PR, PR template,
+- [x] Guardrails: `pnpm verify` (278 tests), 5 invariant rules, CI on every PR, PR template,
       nested `CLAUDE.md`s
 - [x] `scripts/fetch-models.mjs`: GLiNER, BlazeFace, Tesseract, MediaPipe. **68.3 MB on disk**,
       without the OmniParser detector (+77 MB once exported: the built extension is
@@ -373,6 +381,18 @@ add to it whenever a change needs a manual check, and tick items off when report
   - landing page: the hero document's two views, the stamp, the numbers in red, the tables at
     phone width; the switch cycles system, light, dark and survives a reload
   - dashboard: the mark, the switch, placeholders in the request view readable from the back
+- [ ] **Fewer requests, a better local model** (branch `feat/fewer-requests`; restart `pnpm dev:server`,
+      rebuild the extension and reload Skrim):
+  - [ ] a form task: the side panel shows several steps at 0.0 s (planned in one request), and the
+    server log says "(+N more)"; a Gmail reply on Groq gets through without "rate limit"
+  - [ ] a Cerebras key (`CEREBRAS_API_KEY`, https://cloud.cerebras.ai) and
+    `FALLBACK_PROVIDER=cerebras` (add `,nvidia` once NVIDIA has a model your account can call: it
+    answers 404 for Nemotron 3 Super now). The server prints each fallback at start; when Groq
+    pauses, the log says "this step goes to cerebras"
+  - [ ] the local planner: install Ollama, `ollama pull qwen3:4b-instruct-2507-q4_K_M`,
+    `pnpm ollama:setup`, then `pnpm study -- ollama:skrim-planner`. To compare with the old model:
+    `ollama pull qwen3-vl:4b-instruct`, `pnpm ollama:setup:vl`, `pnpm study -- ollama:skrim-planner-vl`,
+    then `pnpm study:report`. Then the form fixture and your Google Form with `MODEL_PROVIDER=ollama`
 - [ ] **Click to reveal**: on `canvas-card.html`, `what is my pan number` ends with an "ID number 1"
       pill; clicking it shows the real PAN in the side panel, clicking again hides it. The dashboard
       still shows only the placeholder
