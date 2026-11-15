@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { getConfig, overrideConfig } from './config.js';
 
-const SETTINGS = ['MODEL_PROVIDER', 'FALLBACK_PROVIDER', 'GROQ_API_KEY', 'NVIDIA_API_KEY', 'NVIDIA_MODEL'];
+const SETTINGS = ['MODEL_PROVIDER', 'FALLBACK_PROVIDER', 'GROQ_API_KEY', 'NVIDIA_API_KEY', 'NVIDIA_MODEL', 'CEREBRAS_API_KEY'];
 const saved = Object.fromEntries(SETTINGS.map((name) => [name, process.env[name]]));
 
 function set(values: Record<string, string | undefined>): void {
@@ -38,7 +38,24 @@ describe('getConfig', () => {
 
   test('refuses a fallback that is the main provider', () => {
     set({ GROQ_API_KEY: 'test-key', FALLBACK_PROVIDER: 'groq' });
-    assert.throws(() => getConfig(), /same as MODEL_PROVIDER/);
+    assert.throws(() => getConfig(), /names MODEL_PROVIDER/);
+  });
+
+  test('takes a list of fallbacks, in order; each but the last hands a long pause to the next', () => {
+    set({ GROQ_API_KEY: 'k', CEREBRAS_API_KEY: 'k', FALLBACK_PROVIDER: 'cerebras, ollama' });
+    const config = getConfig();
+    assert.deepEqual(config.fallbackConfigs.map((c) => c.provider), ['cerebras', 'ollama']);
+    assert.equal(config.fallbackConfig?.provider, 'cerebras');
+    assert.equal(config.fallbackConfigs[0]?.model, 'qwen-3.8-27b');
+    assert.equal(config.providerConfig.maxRateLimitWaitMs, 5_000);
+    assert.equal(config.fallbackConfigs[0]?.maxRateLimitWaitMs, 5_000);
+    // The last waits as long as the adapter allows: there is nowhere else to go.
+    assert.equal(config.fallbackConfigs[1]?.maxRateLimitWaitMs, undefined);
+  });
+
+  test('Cerebras needs its own key', () => {
+    set({ GROQ_API_KEY: 'k', FALLBACK_PROVIDER: 'cerebras' });
+    assert.throws(() => getConfig(), /CEREBRAS_API_KEY is required/);
   });
 });
 

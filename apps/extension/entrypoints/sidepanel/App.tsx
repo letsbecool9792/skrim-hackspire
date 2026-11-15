@@ -242,6 +242,8 @@ const KNOWN_MODELS: { label: string; value: string; provider: string; needsKey: 
   { label: "Qwen 3.8-27B  ·  Groq", value: "groq:qwen/qwen3.8-27b", provider: "groq", needsKey: true },
   { label: "Llama 3.3 70B  ·  Groq", value: "groq:llama-3.3-70b-versatile", provider: "groq", needsKey: true },
   { label: "Llama 3.1 8B  ·  Groq", value: "groq:llama-3.1-8b-instant", provider: "groq", needsKey: true },
+  // ── Cerebras (the same Qwen, its own free allowance) ─────────────
+  { label: "Qwen 3.8-27B  ·  Cerebras", value: "cerebras:qwen-3.8-27b", provider: "cerebras", needsKey: true },
   // ── NVIDIA NIM ──────────────────────────────────────────────────
   { label: "Nemotron-3 120B  ·  NVIDIA", value: "nvidia:nvidia/nemotron-3-super-120b-a12b", provider: "nvidia", needsKey: true },
   // ── Ollama (local, no key) ───────────────────────────────────────
