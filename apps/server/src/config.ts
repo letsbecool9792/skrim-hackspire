@@ -86,8 +86,16 @@ function profile(provider: ProviderName, setting: string, apiKey?: string): Prov
       baseURL: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
       // Must match .env.example. NVIDIA hosts no Qwen. Nemotron 3 Super did 37
       // of 42 in the provider study; Llama 3.2 11B, the old default, none.
-      model: process.env.NVIDIA_MODEL || 'nvidia/nemotron-3-super-120b-a12b',
+      // Nemotron 3 Super answered 404 for a free account by 2026-11-15, though
+      // still listed. Of those that answered, Lightning did 6 of 8 agent tasks
+      // (median 10.7 s a step) and Ultra 6 of 8 (it clicked a counter 25 times).
+      model: process.env.NVIDIA_MODEL || 'nvidia/nemotron-3.5-lightning-30b-a3b',
       apiKey: apiKey ?? requireKey('NVIDIA_API_KEY', setting, provider),
+      // Nemotron thinks before it answers. NVIDIA_THINKING=off sends the switch
+      // that stops it (chat_template_kwargs; a "/no_think" line does nothing):
+      // a step drops from ~300 tokens to ~11, but Lightning then went in
+      // circles on every page (0 of 5 before hitting NVIDIA's 40 a minute).
+      ...(process.env.NVIDIA_THINKING === 'off' ? { extraBody: { chat_template_kwargs: { enable_thinking: false } } } : {}),
       promptBudgetTokens: promptBudget(provider),
       promptStyle: promptStyle(provider),
     };

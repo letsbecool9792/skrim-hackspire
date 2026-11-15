@@ -59,7 +59,7 @@ documented so we know where to go if those stop being sufficient — do not add 
 | `groq` | **wired, default** | hosted Qwen (`qwen/qwen3.8-27b`), 42 of 42 in the provider study | free, no card, per model: 1,000 requests/day, **200,000 tokens/day** (about 80 steps of a real page; a `pnpm test:agent` quick run uses about 45,000), 8,000 tokens/min (7,000 input; about 4–5 steps); the server waits out short 429s |
 | `ollama` | **wired** | air-gap demo, offline dev, and the fallback when Groq's day runs out (`FALLBACK_PROVIDER=ollama`) | free, local |
 | `cerebras` | **wired** (2026-11-15) | the same Qwen 3.8 27B (`qwen-3.8-27b`) on its own allowance: the first fallback to set | free trial, reportedly about 1M tokens/day and 5 requests/min; whether it needs a card is unclear |
-| `nvidia` | **wired** | no daily cap. Its default model is `nvidia/nemotron-3-super-120b-a12b` (37 of 42 in the provider study), but on 2026-11-15 Suparno's account answered 404 for it: pick a model the account can call (`pnpm smoke:server`) | free, no card, ~40 RPM, no daily cap |
+| `nvidia` | **wired** | no daily cap. Default model `nvidia/nemotron-3.5-lightning-30b-a3b` (2026-11-15): Nemotron 3 Super (37 of 42 in the provider study) now answers 404 for a free account. Lightning did 6 of 8 agent tasks at about 11 s a step, thinking; `NVIDIA_THINKING=off` makes it ~25x faster but it then loops on every page | free, no card, ~40 RPM, no daily cap |
 | `cloudflare` | not wired | also hosts `qwen3.8-27b` | free, no card, 10k neurons/day |
 
 `FALLBACK_PROVIDER` is a comma list (`cerebras,nvidia`): each plans a step when the one before
@@ -386,8 +386,8 @@ add to it whenever a change needs a manual check, and tick items off when report
   - [ ] a form task: the side panel shows several steps at 0.0 s (planned in one request), and the
     server log says "(+N more)"; a Gmail reply on Groq gets through without "rate limit"
   - [ ] a Cerebras key (`CEREBRAS_API_KEY`, https://cloud.cerebras.ai) and
-    `FALLBACK_PROVIDER=cerebras` (add `,nvidia` once NVIDIA has a model your account can call: it
-    answers 404 for Nemotron 3 Super now). The server prints each fallback at start; when Groq
+    `FALLBACK_PROVIDER=cerebras,nvidia`, with `NVIDIA_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b`
+    (your NVIDIA key works; Nemotron 3 Super answers 404 for it now). The server prints each fallback at start; when Groq
     pauses, the log says "this step goes to cerebras"
   - [ ] the local planner: install Ollama, `ollama pull qwen3:4b-instruct-2507-q4_K_M`,
     `pnpm ollama:setup`, then `pnpm study -- ollama:skrim-planner`. To compare with the old model:

@@ -27,9 +27,17 @@ describe('getConfig', () => {
     assert.equal(getConfig().fallbackConfig?.model, 'skrim-planner');
   });
 
-  test("NVIDIA's default is the model that finished tasks, not Llama 3.2 11B", () => {
+  test("NVIDIA's default is a model a free account can call, and it thinks unless told not to", () => {
     set({ MODEL_PROVIDER: 'nvidia', NVIDIA_API_KEY: 'test-key' });
-    assert.equal(getConfig().providerConfig.model, 'nvidia/nemotron-3-super-120b-a12b');
+    const config = getConfig().providerConfig;
+    assert.equal(config.model, 'nvidia/nemotron-3.5-lightning-30b-a3b');
+    assert.equal(config.extraBody, undefined);
+    process.env.NVIDIA_THINKING = 'off';
+    try {
+      assert.deepEqual(getConfig().providerConfig.extraBody, { chat_template_kwargs: { enable_thinking: false } });
+    } finally {
+      delete process.env.NVIDIA_THINKING;
+    }
   });
 
   test('names the setting that needs a key', () => {
