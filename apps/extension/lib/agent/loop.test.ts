@@ -399,6 +399,50 @@ describe("runAgentTask", () => {
   });
 });
 
+describe("several steps from one plan", () => {
+  function planned(next: (request: PlanRequest, call: number) => PlanResponse): { planner: ActionPlanner; calls: () => number } {
+    let calls = 0;
+    return { planner: async (request) => next(request, calls++), calls: () => calls };
+  }
+  const reply = (action: Action, then?: Action[]): PlanResponse => ({ action, ...(then ? { then } : {}), model: "scripted", latencyMs: 1, repairs: 0 });
+
+  test("carries out a plan's follow-ups without asking the server again", async () => {
+    await page(`<label for="a">First</label><input id="a"><label for="b">Second</label><input id="b"><button id="go">Send</button><p id="out"></p>`);
+    document.querySelector("#go")!.addEventListener("click", () => { document.querySelector("#out")!.textContent = "Sent"; });
+    const { planner, calls } = planned((request, call) => call === 0
+      ? reply({ type: "type", target: idOf(request, "First"), value: "hello" }, [
+        { type: "type", target: idOf(request, "Second"), value: "world" },
+        { type: "click", target: idOf(request, "Send") },
+        { type: "done", success: true, summary: "never run from a plan" },
+      ])
+      : reply({ type: "done", success: true, summary: "Sent" }));
+
+    const { finished, events } = await run("Fill in hello and world, then send", planner);
+
+    assert.equal(finished.outcome, "completed");
+    assert.equal(calls(), 2);
+    assert.equal((document.querySelector("#a") as HTMLInputElement).value, "hello");
+    assert.equal((document.querySelector("#b") as HTMLInputElement).value, "world");
+    assert.equal(document.querySelector("#out")!.textContent, "Sent");
+    // Three steps shown, two of them from the plan (no server time).
+    assert.deepEqual(events.filter((event) => event.type === "planned").map((event) => event.type === "planned" && event.latencyMs), [1, 0, 0, 1]);
+  });
+
+  test("drops the rest of a plan when the page changes under it, and asks again", async () => {
+    await page(`<button id="one">One</button><button id="two">Two</button>`);
+    document.querySelector("#one")!.addEventListener("click", () => document.querySelector("#two")!.remove());
+    const { planner, calls } = planned((request, call) => call === 0
+      ? reply({ type: "click", target: idOf(request, "One") }, [{ type: "click", target: idOf(request, "Two") }])
+      : reply({ type: "done", success: true, summary: "Two is gone" }));
+
+    const { finished } = await run("Click one, then two", planner);
+
+    assert.equal(finished.outcome, "completed");
+    assert.equal(calls(), 2);
+    assert.equal(finished.steps, 1);
+  });
+});
+
 describe("the user's own rules", () => {
   test("custom instructions are redacted like the goal before they are sent", async () => {
     await page(`<button>Send</button>`);
